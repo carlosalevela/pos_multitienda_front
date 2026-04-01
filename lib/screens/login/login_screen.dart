@@ -12,21 +12,22 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _formKey       = GlobalKey<FormState>();
-  final _emailCtrl     = TextEditingController();
-  final _passwordCtrl  = TextEditingController();
-  bool  _obscurePass   = true;
+  final _formKey      = GlobalKey<FormState>();
+  final _emailCtrl    = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+  final _passwordFocus = FocusNode(); // ✅ FocusNode para saltar entre campos
+  bool  _obscurePass  = true;
 
   @override
   void dispose() {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
+    _passwordFocus.dispose(); // ✅ limpiar
     super.dispose();
   }
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
-
     await context.read<AuthProvider>().login(
       _emailCtrl.text.trim(),
       _passwordCtrl.text.trim(),
@@ -35,21 +36,22 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth   = context.watch<AuthProvider>();
-    final size   = MediaQuery.of(context).size;
+    final auth = context.watch<AuthProvider>();
+    final size = MediaQuery.of(context).size;
 
     return Scaffold(
       backgroundColor: const Color(Constants.backgroundColor),
       body: Row(
         children: [
+
           // ── Panel izquierdo (decorativo) ──────────────────
           if (size.width > 800)
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end:   Alignment.bottomRight,
+                    begin:  Alignment.topLeft,
+                    end:    Alignment.bottomRight,
                     colors: [
                       Color(Constants.primaryColor),
                       Color(0xFF0D47A1),
@@ -65,9 +67,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     Text(
                       'POS Multitienda',
                       style: GoogleFonts.poppins(
-                        fontSize: 32,
+                        fontSize:   32,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color:      Colors.white,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -76,7 +78,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       textAlign: TextAlign.center,
                       style: GoogleFonts.poppins(
                         fontSize: 16,
-                        color: Colors.white70,
+                        color:    Colors.white70,
                       ),
                     ),
                   ],
@@ -96,59 +98,67 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+
                         // Título
                         Text(
                           'Bienvenido 👋',
                           style: GoogleFonts.poppins(
-                            fontSize: 28,
+                            fontSize:   28,
                             fontWeight: FontWeight.bold,
-                            color: const Color(0xFF1A1A2E),
+                            color:      const Color(0xFF1A1A2E),
                           ),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Ingresa tus credenciales para continuar',
                           style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            color: Colors.grey,
-                          ),
+                              fontSize: 14, color: Colors.grey),
                         ),
                         const SizedBox(height: 40),
 
-                        // Email
+                        // ── Email ──────────────────────────────
                         Text('Email',
                           style: GoogleFonts.poppins(
                             fontWeight: FontWeight.w600,
-                            color: const Color(0xFF1A1A2E),
+                            color:      const Color(0xFF1A1A2E),
                           ),
                         ),
                         const SizedBox(height: 8),
                         TextFormField(
-                          controller: _emailCtrl,
-                          keyboardType: TextInputType.emailAddress,
+                          controller:      _emailCtrl,
+                          keyboardType:    TextInputType.emailAddress,
+                          autofocus:       true,                    // ✅ foco automático
+                          textInputAction: TextInputAction.next,    // ✅ botón "Siguiente"
+                          onFieldSubmitted: (_) =>                  // ✅ Enter → contraseña
+                              FocusScope.of(context)
+                                  .requestFocus(_passwordFocus),
                           decoration: _inputDecoration(
                             hint: 'correo@ejemplo.com',
                             icon: Icons.email_outlined,
                           ),
                           validator: (v) {
-                            if (v == null || v.isEmpty) return 'Ingresa tu email';
+                            if (v == null || v.isEmpty)
+                              return 'Ingresa tu email';
                             if (!v.contains('@')) return 'Email inválido';
                             return null;
                           },
                         ),
                         const SizedBox(height: 20),
 
-                        // Contraseña
+                        // ── Contraseña ─────────────────────────
                         Text('Contraseña',
                           style: GoogleFonts.poppins(
                             fontWeight: FontWeight.w600,
-                            color: const Color(0xFF1A1A2E),
+                            color:      const Color(0xFF1A1A2E),
                           ),
                         ),
                         const SizedBox(height: 8),
                         TextFormField(
-                          controller:    _passwordCtrl,
-                          obscureText:   _obscurePass,
+                          controller:      _passwordCtrl,
+                          obscureText:     _obscurePass,
+                          focusNode:       _passwordFocus,          // ✅ recibe el foco
+                          textInputAction: TextInputAction.done,    // ✅ botón "Listo"
+                          onFieldSubmitted: (_) => _login(),        // ✅ Enter → login
                           decoration: _inputDecoration(
                             hint: '••••••••',
                             icon: Icons.lock_outline,
@@ -160,52 +170,53 @@ class _LoginScreenState extends State<LoginScreen> {
                                     : Icons.visibility_outlined,
                                 color: Colors.grey,
                               ),
-                              onPressed: () =>
-                                  setState(() => _obscurePass = !_obscurePass),
+                              onPressed: () => setState(
+                                  () => _obscurePass = !_obscurePass),
                             ),
                           ),
                           validator: (v) {
-                            if (v == null || v.isEmpty) return 'Ingresa tu contraseña';
+                            if (v == null || v.isEmpty)
+                              return 'Ingresa tu contraseña';
                             if (v.length < 6) return 'Mínimo 6 caracteres';
                             return null;
                           },
                         ),
                         const SizedBox(height: 12),
 
-                        // Error message
+                        // ── Error message ──────────────────────
                         if (auth.errorMsg.isNotEmpty)
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: const Color(Constants.errorColor).withOpacity(0.1),
+                              color: const Color(Constants.errorColor)
+                                  .withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: const Color(Constants.errorColor).withOpacity(0.3),
-                              ),
+                                color: const Color(Constants.errorColor)
+                                    .withOpacity(0.3)),
                             ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.error_outline,
-                                    color: Color(Constants.errorColor), size: 18),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    auth.errorMsg,
-                                    style: GoogleFonts.poppins(
-                                      color: const Color(Constants.errorColor),
-                                      fontSize: 13,
-                                    ),
+                            child: Row(children: [
+                              const Icon(Icons.error_outline,
+                                  color: Color(Constants.errorColor),
+                                  size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  auth.errorMsg,
+                                  style: GoogleFonts.poppins(
+                                    color:    const Color(Constants.errorColor),
+                                    fontSize: 13,
                                   ),
                                 ),
-                              ],
-                            ),
+                              ),
+                            ]),
                           ),
 
                         const SizedBox(height: 28),
 
-                        // Botón Login
+                        // ── Botón Login ────────────────────────
                         SizedBox(
-                          width: double.infinity,
+                          width:  double.infinity,
                           height: 52,
                           child: ElevatedButton(
                             onPressed: auth.isLoading ? null : _login,
@@ -213,24 +224,19 @@ class _LoginScreenState extends State<LoginScreen> {
                               backgroundColor: const Color(Constants.primaryColor),
                               foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                                  borderRadius: BorderRadius.circular(12)),
                               elevation: 0,
                             ),
                             child: auth.isLoading
                                 ? const SizedBox(
                                     width: 24, height: 24,
                                     child: CircularProgressIndicator(
-                                      color: Colors.white, strokeWidth: 2,
-                                    ),
-                                  )
-                                : Text(
-                                    'Ingresar',
+                                        color: Colors.white, strokeWidth: 2))
+                                : Text('Ingresar',
                                     style: GoogleFonts.poppins(
-                                      fontSize: 16,
+                                      fontSize:   16,
                                       fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
+                                    )),
                           ),
                         ),
                       ],
@@ -246,34 +252,32 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   InputDecoration _inputDecoration({
-    required String hint,
+    required String   hint,
     required IconData icon,
   }) {
     return InputDecoration(
-      hintText:    hint,
-      prefixIcon:  Icon(icon, color: Colors.grey),
-      filled:      true,
-      fillColor:   Colors.white,
-      hintStyle:   GoogleFonts.poppins(color: Colors.grey.shade400),
+      hintText:   hint,
+      prefixIcon: Icon(icon, color: Colors.grey),
+      filled:     true,
+      fillColor:  Colors.white,
+      hintStyle:  GoogleFonts.poppins(color: Colors.grey.shade400),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide:   BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.grey.shade200),
+        borderSide:   BorderSide(color: Colors.grey.shade200),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(
-          color: Color(Constants.primaryColor), width: 2,
-        ),
+        borderSide:   const BorderSide(
+            color: Color(Constants.primaryColor), width: 2),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(
-          color: Color(Constants.errorColor),
-        ),
+        borderSide:   const BorderSide(
+            color: Color(Constants.errorColor)),
       ),
     );
   }

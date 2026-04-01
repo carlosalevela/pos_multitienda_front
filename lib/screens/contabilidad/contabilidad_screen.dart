@@ -291,32 +291,190 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
 // ──────────────────────────────────────────────────────
 // TAB 1 — RESUMEN DEL DÍA
 // ──────────────────────────────────────────────────────
-class _TabResumenDia extends StatelessWidget {
+// ════════════════════════════════════════════════════
+// TAB RESUMEN DÍA — con selector de fecha y recarga
+// ════════════════════════════════════════════════════
+class _TabResumenDia extends StatefulWidget {
   final ContabilidadProvider cont;
   final NumberFormat fmt;
   final int? tiendaId;
-  const _TabResumenDia(
-      {required this.cont, required this.fmt, required this.tiendaId});
+
+  const _TabResumenDia({
+    required this.cont,
+    required this.fmt,
+    required this.tiendaId,
+  });
+
+  @override
+  State<_TabResumenDia> createState() => _TabResumenDiaState();
+}
+
+class _TabResumenDiaState extends State<_TabResumenDia> {
+  DateTime _fechaSeleccionada = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    // Carga automática al abrir el tab
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _cargar();
+    });
+  }
+
+  void _cargar() {
+    widget.cont.cargarResumenDiario(
+      tiendaId: widget.tiendaId,
+      fecha: _fechaSeleccionada,
+    );
+  }
+
+  Future<void> _seleccionarFecha() async {
+    final hoy = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _fechaSeleccionada,
+      firstDate: DateTime(hoy.year - 1),   // hasta 1 año atrás
+      lastDate: hoy,                        // no puede ser futuro
+      locale: const Locale('es', 'CO'),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: ColorScheme.light(
+            primary: const Color(Constants.primaryColor),
+            onPrimary: Colors.white,
+            surface: Colors.white,
+            onSurface: const Color(0xFF1A1A2E),
+          ),
+        ),
+        child: child!,
+      ),
+    );
+
+    if (picked != null && picked != _fechaSeleccionada) {
+      setState(() => _fechaSeleccionada = picked);
+      _cargar();
+    }
+  }
+
+  bool get _esHoy {
+    final hoy = DateTime.now();
+    return _fechaSeleccionada.year  == hoy.year &&
+           _fechaSeleccionada.month == hoy.month &&
+           _fechaSeleccionada.day   == hoy.day;
+  }
+
+  String get _labelFecha {
+    if (_esHoy) return 'Hoy';
+    final ayer = DateTime.now().subtract(const Duration(days: 1));
+    if (_fechaSeleccionada.year  == ayer.year &&
+        _fechaSeleccionada.month == ayer.month &&
+        _fechaSeleccionada.day   == ayer.day) return 'Ayer';
+    return '${_fechaSeleccionada.day.toString().padLeft(2,'0')}/'
+           '${_fechaSeleccionada.month.toString().padLeft(2,'0')}/'
+           '${_fechaSeleccionada.year}';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final cont = widget.cont;
+    final fmt  = widget.fmt;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+
+        // ── Header: selector de fecha + botón recargar ──
+        Row(children: [
+          // Selector de fecha
+          Expanded(
+            child: InkWell(
+              onTap: _seleccionarFecha,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(Constants.primaryColor).withOpacity(0.07),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(Constants.primaryColor).withOpacity(0.2)),
+                ),
+                child: Row(children: [
+                  Icon(Icons.calendar_today_rounded,
+                    size: 16, color: const Color(Constants.primaryColor)),
+                  const SizedBox(width: 8),
+                  Text(_labelFecha,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600, fontSize: 14,
+                      color: const Color(Constants.primaryColor))),
+                  const Spacer(),
+                  Icon(Icons.arrow_drop_down_rounded,
+                    color: const Color(Constants.primaryColor)),
+                ]),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+
+          // Botón recargar
+          Tooltip(
+            message: 'Recargar datos',
+            child: InkWell(
+              onTap: cont.cargando ? null : _cargar,
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.grey.shade300)),
+                child: cont.cargando
+                    ? SizedBox(
+                        width: 18, height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: const Color(Constants.primaryColor)))
+                    : const Icon(Icons.refresh_rounded,
+                        size: 20, color: Colors.grey),
+              ),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 16),
+
+        // ── Contenido ──────────────────────────────────
+        Expanded(
+          child: _buildContenido(cont, fmt),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContenido(ContabilidadProvider cont, NumberFormat fmt) {
+    // Cargando por primera vez
     if (cont.cargando && cont.resumenDiario == null) {
       return const Center(child: CircularProgressIndicator());
     }
+
     final r = cont.resumenDiario;
+
+    // Sin datos
     if (r == null) {
       return Center(child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.today_rounded, size: 64, color: Colors.grey.shade300),
           const SizedBox(height: 12),
-          Text('Sin datos para hoy', style: GoogleFonts.poppins(
+          Text('Sin datos para $_labelFecha',
+            style: GoogleFonts.poppins(
               color: Colors.grey.shade400, fontSize: 16)),
-          const SizedBox(height: 16),
+          const SizedBox(height: 6),
+          Text('No hay ventas registradas este día',
+            style: GoogleFonts.poppins(
+              color: Colors.grey.shade300, fontSize: 13)),
+          const SizedBox(height: 20),
           ElevatedButton.icon(
-            icon:  const Icon(Icons.refresh_rounded),
+            icon: const Icon(Icons.refresh_rounded),
             label: Text('Recargar', style: GoogleFonts.poppins()),
-            onPressed: () => cont.cargarResumenDiario(tiendaId: tiendaId),
+            onPressed: _cargar,
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(Constants.primaryColor),
               foregroundColor: Colors.white,
@@ -333,14 +491,33 @@ class _TabResumenDia extends StatelessWidget {
         ? Colors.green.shade50  : Colors.red.shade50;
 
     return RefreshIndicator(
-      onRefresh: () => cont.cargarResumenDiario(tiendaId: tiendaId),
+      onRefresh: () async => _cargar(),
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Resumen del ${r.fecha}',
-            style: GoogleFonts.poppins(
+          // Indicador de fecha cargada
+          Row(children: [
+            Text('Resumen del ${r.fecha}',
+              style: GoogleFonts.poppins(
                 color: Colors.grey.shade600, fontSize: 13)),
+            if (!_esHoy) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.orange.shade200)),
+                child: Text('Histórico',
+                  style: GoogleFonts.poppins(
+                    fontSize: 10, color: Colors.orange.shade700,
+                    fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ]),
           const SizedBox(height: 16),
+
+          // KPIs
           Row(children: [
             Expanded(child: _kpiCard(
               Icons.trending_up_rounded, 'Ventas totales',
@@ -354,6 +531,8 @@ class _TabResumenDia extends StatelessWidget {
               Colors.orange.shade700, Colors.orange.shade50)),
           ]),
           const SizedBox(height: 12),
+
+          // Utilidad
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -377,6 +556,8 @@ class _TabResumenDia extends StatelessWidget {
               ]),
           ),
           const SizedBox(height: 20),
+
+          // Ventas por método
           if (r.ventasPorMetodo.isNotEmpty) ...[
             Text('Ventas por método de pago',
               style: GoogleFonts.poppins(
@@ -394,6 +575,7 @@ class _TabResumenDia extends StatelessWidget {
     );
   }
 
+  // ── Helpers (igual que antes) ────────────────────────
   Widget _kpiCard(IconData icon, String label, String valor,
       String sub, Color color, Color bg) =>
     Container(
@@ -415,8 +597,8 @@ class _TabResumenDia extends StatelessWidget {
       ]),
     );
 
-  Widget _metodoPago(String metodo, int cantidad,
-      double total, double pct, NumberFormat fmt) =>
+  Widget _metodoPago(String metodo, int cantidad, double total,
+      double pct, NumberFormat fmt) =>
     Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
@@ -440,8 +622,8 @@ class _TabResumenDia extends StatelessWidget {
             child: LinearProgressIndicator(
               value: pct.clamp(0.0, 1.0), minHeight: 6,
               backgroundColor: Colors.grey.shade100,
-              valueColor: AlwaysStoppedAnimation(
-                  const Color(Constants.primaryColor)),
+              valueColor: const AlwaysStoppedAnimation(
+                  Color(Constants.primaryColor)),
             ),
           )),
           const SizedBox(width: 8),
@@ -456,13 +638,12 @@ class _TabResumenDia extends StatelessWidget {
     );
 
   String _labelMetodo(String m) => const {
-    'efectivo': '💵 Efectivo',
-    'tarjeta': '💳 Tarjeta',
+    'efectivo':      '💵 Efectivo',
+    'tarjeta':       '💳 Tarjeta',
     'transferencia': '🏦 Transferencia',
-    'mixto': '🔀 Mixto',
+    'mixto':         '🔀 Mixto',
   }[m] ?? m;
 }
-
 // ──────────────────────────────────────────────────────
 // TAB 2 — RESUMEN MENSUAL
 // ──────────────────────────────────────────────────────
@@ -738,22 +919,75 @@ class _TabGastos extends StatefulWidget {
 }
 
 class _TabGastosState extends State<_TabGastos> {
+  DateTime _fechaSeleccionada = DateTime.now(); // ← nuevo
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      widget.cont.cargarGastos(tiendaId: widget.tiendaId);
+      _cargar(); // ← usa _cargar() en vez de cargarGastos directo
     });
+  }
+
+  // ── Helpers de fecha ────────────────────────────────
+  void _cargar() {
+    final fechaStr =
+        '${_fechaSeleccionada.year}-'
+        '${_fechaSeleccionada.month.toString().padLeft(2, '0')}-'
+        '${_fechaSeleccionada.day.toString().padLeft(2, '0')}';
+    widget.cont.cargarGastos(tiendaId: widget.tiendaId, fecha: fechaStr);
+  }
+
+  Future<void> _seleccionarFecha() async {
+    final hoy = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _fechaSeleccionada,
+      firstDate: DateTime(hoy.year - 1),
+      lastDate: hoy,
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: ColorScheme.light(
+            primary: Colors.orange.shade600,
+            onPrimary: Colors.white,
+            surface: Colors.white,
+            onSurface: const Color(0xFF1A1A2E),
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null && picked != _fechaSeleccionada) {
+      setState(() => _fechaSeleccionada = picked);
+      _cargar();
+    }
+  }
+
+  bool get _esHoy {
+    final hoy = DateTime.now();
+    return _fechaSeleccionada.year  == hoy.year &&
+           _fechaSeleccionada.month == hoy.month &&
+           _fechaSeleccionada.day   == hoy.day;
+  }
+
+  String get _labelFecha {
+    if (_esHoy) return 'Hoy';
+    final ayer = DateTime.now().subtract(const Duration(days: 1));
+    if (_fechaSeleccionada.year  == ayer.year &&
+        _fechaSeleccionada.month == ayer.month &&
+        _fechaSeleccionada.day   == ayer.day) return 'Ayer';
+    return '${_fechaSeleccionada.day.toString().padLeft(2,'0')}/'
+           '${_fechaSeleccionada.month.toString().padLeft(2,'0')}/'
+           '${_fechaSeleccionada.year}';
   }
 
   @override
   Widget build(BuildContext context) {
-    // ✅ FIX REAL: escucha cambios del provider para reconstruir el widget
     final cont = context.watch<ContabilidadProvider>();
 
     return Column(children: [
-      // ── Header fila ─────────────────────────────
+
+      // ── Fila 1: título + botón registrar ────────────
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Gastos',
@@ -778,9 +1012,75 @@ class _TabGastosState extends State<_TabGastos> {
             elevation: 0),
         ),
       ]),
+      const SizedBox(height: 10),
+
+      // ── Fila 2: selector de fecha + recargar ────────
+      Row(children: [
+        Expanded(
+          child: InkWell(
+            onTap: _seleccionarFecha,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.shade200)),
+              child: Row(children: [
+                Icon(Icons.calendar_today_rounded,
+                    size: 16, color: Colors.orange.shade600),
+                const SizedBox(width: 8),
+                Text(_labelFecha,
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600, fontSize: 14,
+                    color: Colors.orange.shade700)),
+                const Spacer(),
+                // Badge "Histórico" si no es hoy
+                if (!_esHoy)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade100,
+                      borderRadius: BorderRadius.circular(20)),
+                    child: Text('Histórico',
+                      style: GoogleFonts.poppins(
+                        fontSize: 10, color: Colors.orange.shade800,
+                        fontWeight: FontWeight.w600)),
+                  ),
+                Icon(Icons.arrow_drop_down_rounded,
+                    color: Colors.orange.shade600),
+              ]),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Botón recargar
+        Tooltip(
+          message: 'Recargar gastos',
+          child: InkWell(
+            onTap: cont.cargando ? null : _cargar,
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.grey.shade300)),
+              child: cont.cargando
+                  ? SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.orange.shade600))
+                  : const Icon(Icons.refresh_rounded,
+                      size: 20, color: Colors.grey),
+            ),
+          ),
+        ),
+      ]),
       const SizedBox(height: 12),
 
-      // ── Lista de gastos — visible para TODOS ────
+      // ── Lista de gastos ──────────────────────────────
       Expanded(
         child: cont.cargando && cont.gastos.isEmpty
             ? const Center(child: CircularProgressIndicator())
@@ -791,18 +1091,28 @@ class _TabGastosState extends State<_TabGastos> {
                       Icon(Icons.receipt_long_rounded, size: 64,
                           color: Colors.grey.shade300),
                       const SizedBox(height: 12),
-                      Text('Sin gastos registrados',
+                      Text('Sin gastos para $_labelFecha',
                         style: GoogleFonts.poppins(
                             color: Colors.grey.shade400, fontSize: 16)),
-                      const SizedBox(height: 8),
-                      Text('Usa el botón para registrar el primero',
+                      const SizedBox(height: 4),
+                      Text('No hay gastos registrados este día',
                         style: GoogleFonts.poppins(
-                            color: Colors.grey.shade400, fontSize: 13)),
+                            color: Colors.grey.shade300, fontSize: 13)),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: Text('Recargar', style: GoogleFonts.poppins()),
+                        onPressed: _cargar,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange.shade600,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10))),
+                      ),
                     ],
                   ))
                 : RefreshIndicator(
-                    onRefresh: () =>
-                        cont.cargarGastos(tiendaId: widget.tiendaId),
+                    onRefresh: () async => _cargar(),
                     child: ListView.builder(
                       physics: const AlwaysScrollableScrollPhysics(),
                       itemCount: cont.gastos.length,
@@ -813,7 +1123,6 @@ class _TabGastosState extends State<_TabGastos> {
     ]);
   }
 
-  // ✅ cont ahora es parámetro (viene del context.watch)
   Widget _gastoItem(ContabilidadProvider cont, Gasto g) => Container(
     margin: const EdgeInsets.only(bottom: 10),
     padding: const EdgeInsets.all(14),
@@ -891,7 +1200,6 @@ class _TabGastosState extends State<_TabGastos> {
       context: ctx,
       builder: (_) => StatefulBuilder(
         builder: (ctx2, setS) {
-          // ✅ cont reactivo también dentro del dialog
           final cont = context.watch<ContabilidadProvider>();
           return AlertDialog(
             shape: RoundedRectangleBorder(
@@ -932,8 +1240,8 @@ class _TabGastosState extends State<_TabGastos> {
                           borderSide: BorderSide(color: Colors.grey.shade300)),
                     ),
                     items: const [
-                      DropdownMenuItem(value: 'efectivo', child: Text('Efectivo')),
-                      DropdownMenuItem(value: 'tarjeta',  child: Text('Tarjeta')),
+                      DropdownMenuItem(value: 'efectivo',      child: Text('Efectivo')),
+                      DropdownMenuItem(value: 'tarjeta',       child: Text('Tarjeta')),
                       DropdownMenuItem(value: 'transferencia', child: Text('Transferencia')),
                     ],
                     onChanged: (v) => setS(() => metodoPago = v ?? 'efectivo'),
@@ -964,7 +1272,11 @@ class _TabGastosState extends State<_TabGastos> {
                     'monto':       monto,
                     'metodo_pago': metodoPago,
                   }, tiendaId: widget.tiendaId);
-                  if (ok && ctx2.mounted) Navigator.pop(ctx2);
+                  // ✅ recarga con la fecha seleccionada tras crear
+                  if (ok && ctx2.mounted) {
+                    Navigator.pop(ctx2);
+                    _cargar();
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.orange.shade600,

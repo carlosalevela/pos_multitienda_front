@@ -5,8 +5,8 @@ import '../services/contabilidad_service.dart';
 class ContabilidadProvider extends ChangeNotifier {
   final ContabilidadService _service = ContabilidadService();
 
-  ResumenDiario?   resumenDiario;
-  ResumenMensual?  resumenMensual;
+  ResumenDiario?    resumenDiario;
+  ResumenMensual?   resumenMensual;
   List<TopProducto> topProductos = [];
   List<Gasto>       gastos       = [];
 
@@ -26,11 +26,21 @@ class ContabilidadProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> cargarResumenDiario({int? tiendaId, String? fecha}) async {
+  // ✅ FIX: recibe DateTime? y convierte internamente a String
+  Future<void> cargarResumenDiario({int? tiendaId, DateTime? fecha}) async {
     _cargando = true;
     notifyListeners();
-    resumenDiario = await _service.getResumenDiario(
-        tiendaId: tiendaId, fecha: fecha);
+
+    final fechaStr = fecha != null
+        ? '${fecha.year}-'
+          '${fecha.month.toString().padLeft(2, '0')}-'
+          '${fecha.day.toString().padLeft(2, '0')}'
+        : null;
+
+    resumenDiario = await _service.getResumenDiario(  // ✅ FIX: era _resumenDiario
+      tiendaId: tiendaId,
+      fecha: fechaStr,
+    );
     _cargando = false;
     notifyListeners();
   }

@@ -9,6 +9,8 @@ import 'providers/inventario_provider.dart';
 import 'providers/reportes_provider.dart';
 import 'providers/caja_provider.dart';
 import 'providers/contabilidad_provider.dart';
+import 'providers/tienda_provider.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() {
   runApp(
@@ -20,6 +22,7 @@ void main() {
         ChangeNotifierProvider(create: (_) => ReportesProvider()),
         ChangeNotifierProvider(create: (_) => CajaProvider()),
         ChangeNotifierProvider(create: (_) => ContabilidadProvider()),
+        ChangeNotifierProvider(create: (_) => TiendaProvider()),
       ],
       child: const MyApp(),
     ),
@@ -34,6 +37,16 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title:        'POS Multitienda',
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('es', 'CO'),
+        Locale('en', 'US'),
+      ],
+      locale: const Locale('es', 'CO'),
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(Constants.primaryColor),
