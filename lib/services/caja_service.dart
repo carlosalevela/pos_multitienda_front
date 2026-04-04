@@ -3,6 +3,7 @@ import '../core/api_client.dart';
 import '../models/sesion_caja.dart';
 import '../models/resumen_cierre.dart';
 
+
 class CajaService {
 
   Future<SesionCaja?> getSesionActiva(int tiendaId) async {
@@ -51,17 +52,33 @@ class CajaService {
     }
   }
 
+  // ✅ NUEVO — usa ApiClient.instance, no _dio
+  Future<AbonosCierre> getAbonosSesion(DateTime fechaApertura) async {
+    try {
+      final fecha = fechaApertura.toLocal().toString().substring(0, 10);
+      final resp  = await ApiClient.instance.get(
+        '/clientes/abonos/',
+        queryParameters: {'fecha': fecha},
+      );
+      final total    = (resp.data['total']     ?? 0).toDouble();
+      final cantidad = (resp.data['abonos'] as List).length;
+      return AbonosCierre(total: total, cantidad: cantidad);
+    } catch (_) {
+      return AbonosCierre.vacio();
+    }
+  }
+
   Future<Map<String, dynamic>> cerrarCaja(
     int sesionId, {
     required double montoFinalReal,
-    String observaciones = '',               // ← nuevo
+    String observaciones = '',
   }) async {
     try {
       final r = await ApiClient.instance.post(
         '/caja/$sesionId/cerrar/',
         data: {
           'monto_final_real': montoFinalReal.toString(),
-          'observaciones':    observaciones,  // ← nuevo
+          'observaciones':    observaciones,
         },
       );
       return {'success': true, 'data': r.data};

@@ -18,6 +18,21 @@ class VentasCierre {
   );
 }
 
+class AbonosCierre {
+  final double total;
+  final int    cantidad;
+
+  AbonosCierre({required this.total, required this.cantidad});
+
+  factory AbonosCierre.fromJson(Map<String, dynamic> j) => AbonosCierre(
+    total:    (j['total']    ?? 0).toDouble(),
+    cantidad: (j['cantidad'] ?? 0),
+  );
+
+  // ✅ vacío por si el backend no lo retorna aún
+  factory AbonosCierre.vacio() => AbonosCierre(total: 0, cantidad: 0);
+}
+
 class GastoDetalle {
   final String categoria, metodoPago;
   final double monto;
@@ -58,12 +73,14 @@ class ResumenCierre {
   final double montoInicial, montoEsperadoCaja;
   final VentasCierre ventas;
   final GastosCierre gastos;
+  final AbonosCierre  abonos;
 
   ResumenCierre({
     required this.sesionId,       required this.tiendaNombre,
     required this.empleadoNombre, required this.fechaApertura,
     required this.montoInicial,   required this.montoEsperadoCaja,
     required this.ventas,         required this.gastos,
+    required this.abonos, 
   });
 
   factory ResumenCierre.fromJson(Map<String, dynamic> j) => ResumenCierre(
@@ -73,6 +90,9 @@ class ResumenCierre {
     fechaApertura:     j['fecha_apertura']       ?? '',
     montoInicial:      (j['monto_inicial']       ?? 0).toDouble(),
     montoEsperadoCaja: (j['monto_esperado_caja'] ?? 0).toDouble(),
+    abonos:  j['abonos'] != null
+    ? AbonosCierre.fromJson(j['abonos'])
+        : AbonosCierre.vacio(),
     ventas:  VentasCierre.fromJson(j['ventas']  ?? {}),
     gastos:  GastosCierre.fromJson(j['gastos']  ?? {}),
   );

@@ -41,20 +41,22 @@ class ContabilidadService {
 
   Future<List<TopProducto>> getTopProductos({
     int? tiendaId, String? fechaIni, String? fechaFin}) async {
-    try {
-      final params = <String, dynamic>{};
-      if (tiendaId != null) params['tienda_id'] = tiendaId;
-      if (fechaIni != null) params['fecha_ini']  = fechaIni;
-      if (fechaFin != null) params['fecha_fin']  = fechaFin;
-      final r = await ApiClient.instance.get(
-        '/contabilidad/reportes/top-productos/', queryParameters: params);
-      return (r.data as List).map((e) => TopProducto.fromJson(e)).toList();
-    } catch (e) {
-      debugPrint('❌ getTopProductos error: $e');
-      return [];
-    }
-  }
+  try {
+    final params = <String, dynamic>{};
+    if (tiendaId != null) params['tienda_id'] = tiendaId;
+    if (fechaIni != null) params['fecha_ini']  = fechaIni;
+    if (fechaFin != null) params['fecha_fin']  = fechaFin;
 
+    final r = await ApiClient.instance.get(
+      '/productos/top-productos/',   // ✅ ruta actualizada
+      queryParameters: params,
+    );
+    return (r.data as List).map((e) => TopProducto.fromJson(e)).toList();
+  } catch (e) {
+    debugPrint('❌ getTopProductos error: $e');
+    return [];
+  }
+}
   Future<List<Gasto>> getGastos({int? tiendaId, String? fecha}) async {
     try {
       final params = <String, dynamic>{};

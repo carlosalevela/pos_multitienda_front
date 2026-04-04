@@ -10,6 +10,7 @@ import '../caja/caja_screen.dart';
 import '../empleados/empleados_screen.dart';
 import '../contabilidad/contabilidad_screen.dart';
 import '../tiendas/tiendas_screen.dart';
+import '../clientes/clientes_screen.dart';
 
 
 class HomeScreen extends StatefulWidget {
@@ -52,6 +53,10 @@ class _HomeScreenState extends State<HomeScreen> {
           icon:  Icons.store_rounded,
           label: 'Tiendas',
           roles: ['admin']), 
+      _MenuItem(
+          icon:  Icons.people_alt_rounded,
+          label: 'Clientes',
+          roles: ['admin', 'supervisor', 'cajero']),
     ];
 
     return items.where((i) => i.roles.contains(rol)).toList();
@@ -66,6 +71,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _Screen(widget: const ReportesScreen(),     roles: ['admin', 'supervisor', 'cajero']),  // ✅ cajero incluido
       _Screen(widget: const EmpleadosScreen(),    roles: ['admin']),
       _Screen(widget: const TiendasScreen(), roles: ['admin']),
+      _Screen(widget: const ClientesScreen(), roles: ['admin', 'supervisor', 'cajero']),
     ];
 
     return all

@@ -8,12 +8,14 @@ import '../../providers/auth_provider.dart';
 import '../../models/resumen_cierre.dart';
 import '../../core/constants.dart';
 
+
 class CajaScreen extends StatefulWidget {
   const CajaScreen({super.key});
 
   @override
   State<CajaScreen> createState() => _CajaScreenState();
 }
+
 
 class _CajaScreenState extends State<CajaScreen> {
   final _saldoCtrl = TextEditingController();
@@ -255,6 +257,7 @@ class _CajaScreenState extends State<CajaScreen> {
     );
 }
 
+
 // ════════════════════════════════════════════════════════
 // DIALOG DE CORTE DE CAJA — 3 pasos
 // ════════════════════════════════════════════════════════
@@ -264,6 +267,7 @@ class _CorteCajaDialog extends StatefulWidget {
   @override
   State<_CorteCajaDialog> createState() => _CorteCajaDialogState();
 }
+
 
 class _CorteCajaDialogState extends State<_CorteCajaDialog> {
   int    _paso           = 1;
@@ -360,11 +364,13 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
     );
   }
 
+
   // ── PASO 1 ───────────────────────────────────────────
   Widget _buildPaso1(ResumenCierre r) => Column(
     key: const ValueKey(1),
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
+      // Tarjeta del empleado
       Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
@@ -389,6 +395,7 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
       ),
       const SizedBox(height: 16),
 
+      // Ventas
       _tituloSeccion('📊 Ventas del turno', Colors.blue.shade700),
       const SizedBox(height: 8),
       Container(
@@ -410,6 +417,7 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
       ),
       const SizedBox(height: 16),
 
+      // Gastos
       _tituloSeccion('📉 Gastos del turno', Colors.red.shade700),
       const SizedBox(height: 8),
       Container(
@@ -430,6 +438,39 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
       ),
       const SizedBox(height: 16),
 
+      // ✅ ABONOS — visible solo si hay abonos en el turno
+      if (r.abonos.total > 0) ...[
+        _tituloSeccion('🔖 Abonos recibidos', Colors.teal.shade700),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.teal.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.teal.shade200)),
+          child: Column(children: [
+            _fila('Total abonos', r.abonos.total, Colors.teal.shade700),
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                '${r.abonos.cantidad} abono${r.abonos.cantidad != 1 ? "s" : ""}',
+                style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade500)),
+            ),
+          ]),
+        ),
+        const SizedBox(height: 8),
+        Row(children: [
+          Icon(Icons.info_outline, size: 13, color: Colors.grey.shade400),
+          const SizedBox(width: 6),
+          Expanded(child: Text(
+            'Los abonos son pagos a créditos existentes, no cuentan en el cuadre de caja.',
+            style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade500))),
+        ]),
+        const SizedBox(height: 16),
+      ],
+
+      // Cálculo caja física
       _tituloSeccion('💵 Cálculo de caja física', Colors.green.shade700),
       const SizedBox(height: 8),
       Container(
@@ -458,6 +499,7 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
       ]),
     ],
   );
+
 
   // ── PASO 2 ───────────────────────────────────────────
   Widget _buildPaso2(ResumenCierre r) => Column(
@@ -526,6 +568,7 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
       ),
     ],
   );
+
 
   // ── PASO 3 ───────────────────────────────────────────
   Widget _buildPaso3(ResumenCierre r) {
@@ -603,6 +646,14 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
             _rFila('Transacciones', '${r.ventas.numTransacciones}'),
             const SizedBox(height: 10),
 
+            // ✅ ABONOS en el ticket — solo si existen
+            if (r.abonos.total > 0) ...[
+              _rSeccion('ABONOS RECIBIDOS'),
+              _rFila('Total abonos', _f(r.abonos.total)),
+              _rFila('Cantidad',     '${r.abonos.cantidad}'),
+              const SizedBox(height: 10),
+            ],
+
             _rSeccion('GASTOS DEL TURNO'),
             if (r.gastos.detalle.isEmpty)
               _rFila('Sin gastos', _f(0))
@@ -644,6 +695,7 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
       ],
     );
   }
+
 
   // ── Acciones ─────────────────────────────────────────
   Widget _buildAcciones(CajaProvider cont, ResumenCierre resumen) =>
@@ -712,6 +764,7 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
         ),
       ]),
     );
+
 
   // ── Helpers generales ────────────────────────────────
   Widget _tituloSeccion(String titulo, Color color) => Padding(

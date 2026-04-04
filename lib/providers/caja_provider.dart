@@ -37,12 +37,34 @@ class CajaProvider extends ChangeNotifier {
 
   // ← nuevo: carga el resumen pre-cierre
   Future<void> cargarResumenCierre() async {
-    if (_sesionActiva == null) return;
-    _resumenCierre = null;
-    notifyListeners();
-    _resumenCierre = await _service.getResumenCierre(_sesionActiva!.id);
-    notifyListeners();
-  }
+  if (_sesionActiva == null) return;
+  _resumenCierre = null;
+  notifyListeners();
+
+  final results = await Future.wait([
+    _service.getResumenCierre(_sesionActiva!.id),
+    _service.getAbonosSesion(_sesionActiva!.fecha_apertura), // ✅ ya es DateTime
+  ]);
+
+  final resumen = results[0] as ResumenCierre?;
+  final abonos  = results[1] as AbonosCierre;
+
+  if (resumen == null) return;
+
+  _resumenCierre = ResumenCierre(
+    sesionId:          resumen.sesionId,
+    tiendaNombre:      resumen.tiendaNombre,
+    empleadoNombre:    resumen.empleadoNombre,
+    fechaApertura:     resumen.fechaApertura,
+    montoInicial:      resumen.montoInicial,
+    montoEsperadoCaja: resumen.montoEsperadoCaja,
+    ventas:            resumen.ventas,
+    gastos:            resumen.gastos,
+    abonos:            abonos,
+  );
+
+  notifyListeners();
+}
 
   Future<bool> abrirCaja({
     required int    tiendaId,

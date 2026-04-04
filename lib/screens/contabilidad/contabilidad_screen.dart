@@ -7,7 +7,8 @@ import '../../providers/contabilidad_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../core/constants.dart';
 import '../../models/contabilidad_models.dart';
-import '../../services/empleado_service.dart'; // ✅ para getTiendas()
+import '../../services/empleado_service.dart';
+import '../../providers/cliente_provider.dart'; 
 
 class ContabilidadScreen extends StatefulWidget {
   const ContabilidadScreen({super.key});
@@ -315,10 +316,7 @@ class _TabResumenDiaState extends State<_TabResumenDia> {
   @override
   void initState() {
     super.initState();
-    // Carga automática al abrir el tab
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _cargar();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _cargar());
   }
 
   void _cargar() {
@@ -329,26 +327,25 @@ class _TabResumenDiaState extends State<_TabResumenDia> {
   }
 
   Future<void> _seleccionarFecha() async {
-    final hoy = DateTime.now();
+    final hoy    = DateTime.now();
     final picked = await showDatePicker(
-      context: context,
+      context:     context,
       initialDate: _fechaSeleccionada,
-      firstDate: DateTime(hoy.year - 1),   // hasta 1 año atrás
-      lastDate: hoy,                        // no puede ser futuro
-      locale: const Locale('es', 'CO'),
+      firstDate:   DateTime(hoy.year - 1),
+      lastDate:    hoy,
+      locale:      const Locale('es', 'CO'),
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
           colorScheme: ColorScheme.light(
-            primary: const Color(Constants.primaryColor),
+            primary:   const Color(Constants.primaryColor),
             onPrimary: Colors.white,
-            surface: Colors.white,
+            surface:   Colors.white,
             onSurface: const Color(0xFF1A1A2E),
           ),
         ),
         child: child!,
       ),
     );
-
     if (picked != null && picked != _fechaSeleccionada) {
       setState(() => _fechaSeleccionada = picked);
       _cargar();
@@ -368,8 +365,8 @@ class _TabResumenDiaState extends State<_TabResumenDia> {
     if (_fechaSeleccionada.year  == ayer.year &&
         _fechaSeleccionada.month == ayer.month &&
         _fechaSeleccionada.day   == ayer.day) return 'Ayer';
-    return '${_fechaSeleccionada.day.toString().padLeft(2,'0')}/'
-           '${_fechaSeleccionada.month.toString().padLeft(2,'0')}/'
+    return '${_fechaSeleccionada.day.toString().padLeft(2, '0')}/'
+           '${_fechaSeleccionada.month.toString().padLeft(2, '0')}/'
            '${_fechaSeleccionada.year}';
   }
 
@@ -378,85 +375,75 @@ class _TabResumenDiaState extends State<_TabResumenDia> {
     final cont = widget.cont;
     final fmt  = widget.fmt;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-        // ── Header: selector de fecha + botón recargar ──
-        Row(children: [
-          // Selector de fecha
-          Expanded(
-            child: InkWell(
-              onTap: _seleccionarFecha,
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: const Color(Constants.primaryColor).withOpacity(0.07),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
+      // ── Selector de fecha + recargar ─────────────────
+      Row(children: [
+        Expanded(
+          child: InkWell(
+            onTap:         _seleccionarFecha,
+            borderRadius:  BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(Constants.primaryColor).withOpacity(0.07),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
                     color: const Color(Constants.primaryColor).withOpacity(0.2)),
-                ),
-                child: Row(children: [
-                  Icon(Icons.calendar_today_rounded,
+              ),
+              child: Row(children: [
+                Icon(Icons.calendar_today_rounded,
                     size: 16, color: const Color(Constants.primaryColor)),
-                  const SizedBox(width: 8),
-                  Text(_labelFecha,
-                    style: GoogleFonts.poppins(
+                const SizedBox(width: 8),
+                Text(_labelFecha,
+                  style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w600, fontSize: 14,
                       color: const Color(Constants.primaryColor))),
-                  const Spacer(),
-                  Icon(Icons.arrow_drop_down_rounded,
+                const Spacer(),
+                Icon(Icons.arrow_drop_down_rounded,
                     color: const Color(Constants.primaryColor)),
-                ]),
-              ),
+              ]),
             ),
           ),
-          const SizedBox(width: 10),
-
-          // Botón recargar
-          Tooltip(
-            message: 'Recargar datos',
-            child: InkWell(
-              onTap: cont.cargando ? null : _cargar,
-              borderRadius: BorderRadius.circular(10),
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.grey.shade300)),
-                child: cont.cargando
-                    ? SizedBox(
-                        width: 18, height: 18,
-                        child: CircularProgressIndicator(
+        ),
+        const SizedBox(width: 10),
+        Tooltip(
+          message: 'Recargar datos',
+          child: InkWell(
+            onTap:        cont.cargando ? null : _cargar,
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color:        Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(10),
+                border:       Border.all(color: Colors.grey.shade300)),
+              child: cont.cargando
+                  ? SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(
                           strokeWidth: 2,
                           color: const Color(Constants.primaryColor)))
-                    : const Icon(Icons.refresh_rounded,
-                        size: 20, color: Colors.grey),
-              ),
+                  : const Icon(Icons.refresh_rounded,
+                      size: 20, color: Colors.grey),
             ),
           ),
-        ]),
-        const SizedBox(height: 16),
-
-        // ── Contenido ──────────────────────────────────
-        Expanded(
-          child: _buildContenido(cont, fmt),
         ),
-      ],
-    );
+      ]),
+
+      const SizedBox(height: 16),
+
+      Expanded(child: _buildContenido(cont, fmt)),
+    ]);
   }
 
   Widget _buildContenido(ContabilidadProvider cont, NumberFormat fmt) {
-    // Cargando por primera vez
     if (cont.cargando && cont.resumenDiario == null) {
       return const Center(child: CircularProgressIndicator());
     }
 
     final r = cont.resumenDiario;
 
-    // Sin datos
     if (r == null) {
       return Center(child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -465,15 +452,15 @@ class _TabResumenDiaState extends State<_TabResumenDia> {
           const SizedBox(height: 12),
           Text('Sin datos para $_labelFecha',
             style: GoogleFonts.poppins(
-              color: Colors.grey.shade400, fontSize: 16)),
+                color: Colors.grey.shade400, fontSize: 16)),
           const SizedBox(height: 6),
           Text('No hay ventas registradas este día',
             style: GoogleFonts.poppins(
-              color: Colors.grey.shade300, fontSize: 13)),
+                color: Colors.grey.shade300, fontSize: 13)),
           const SizedBox(height: 20),
           ElevatedButton.icon(
-            icon: const Icon(Icons.refresh_rounded),
-            label: Text('Recargar', style: GoogleFonts.poppins()),
+            icon:      const Icon(Icons.refresh_rounded),
+            label:     Text('Recargar', style: GoogleFonts.poppins()),
             onPressed: _cargar,
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(Constants.primaryColor),
@@ -485,145 +472,321 @@ class _TabResumenDiaState extends State<_TabResumenDia> {
       ));
     }
 
-    final utilColor = r.utilidadBruta >= 0
-        ? Colors.green.shade700 : Colors.red.shade700;
-    final utilBg    = r.utilidadBruta >= 0
-        ? Colors.green.shade50  : Colors.red.shade50;
+    // Cálculos derivados
+    final ticketPromedio = r.numVentas > 0
+        ? r.totalVentas / r.numVentas : 0.0;
+    final margenPct = r.totalVentas > 0
+        ? (r.utilidadBruta / r.totalVentas) * 100 : 0.0;
+    final gastosPct  = r.totalVentas > 0
+        ? (r.totalGastos / r.totalVentas).clamp(0.0, 1.0) : 0.0;
 
     return RefreshIndicator(
       onRefresh: () async => _cargar(),
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Indicador de fecha cargada
+
+          // Indicador fecha + badge histórico
           Row(children: [
+            Icon(Icons.schedule_rounded,
+                size: 14, color: Colors.grey.shade400),
+            const SizedBox(width: 6),
             Text('Resumen del ${r.fecha}',
               style: GoogleFonts.poppins(
-                color: Colors.grey.shade600, fontSize: 13)),
+                  color: Colors.grey.shade500, fontSize: 12)),
             if (!_esHoy) ...[
               const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
+                  color:        Colors.orange.shade50,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: Colors.orange.shade200)),
                 child: Text('Histórico',
                   style: GoogleFonts.poppins(
-                    fontSize: 10, color: Colors.orange.shade700,
-                    fontWeight: FontWeight.w600)),
+                      fontSize: 10, color: Colors.orange.shade700,
+                      fontWeight: FontWeight.w600)),
               ),
             ],
           ]),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
 
-          // KPIs
+          // ── 3 KPIs en fila ─────────────────────────
           Row(children: [
             Expanded(child: _kpiCard(
-              Icons.trending_up_rounded, 'Ventas totales',
-              '\$${fmt.format(r.totalVentas)}',
-              '${r.numVentas} transacciones',
-              Colors.blue.shade700, Colors.blue.shade50)),
-            const SizedBox(width: 12),
+              icon:  Icons.trending_up_rounded,
+              label: 'Ventas totales',
+              valor: '\$${fmt.format(r.totalVentas)}',
+              sub:   '${r.numVentas} transacción${r.numVentas != 1 ? "es" : ""}',
+              color: Colors.blue.shade700,
+              bg:    Colors.blue.shade50,
+            )),
+            const SizedBox(width: 10),
             Expanded(child: _kpiCard(
-              Icons.money_off_rounded, 'Total gastos',
-              '\$${fmt.format(r.totalGastos)}', '',
-              Colors.orange.shade700, Colors.orange.shade50)),
+              icon:  Icons.receipt_long_rounded,
+              label: 'Total gastos',
+              valor: '\$${fmt.format(r.totalGastos)}',
+              sub:   r.totalVentas > 0
+                  ? '${(gastosPct * 100).toStringAsFixed(1)}% de ventas' : '',
+              color: Colors.orange.shade700,
+              bg:    Colors.orange.shade50,
+            )),
+            const SizedBox(width: 10),
+            Expanded(child: _kpiCard(
+              icon:  Icons.confirmation_number_rounded,
+              label: 'Ticket promedio',
+              valor: '\$${fmt.format(ticketPromedio)}',
+              sub:   r.numVentas > 0 ? 'por venta' : 'sin ventas',
+              color: Colors.purple.shade700,
+              bg:    Colors.purple.shade50,
+            )),
           ]),
           const SizedBox(height: 12),
 
-          // Utilidad
+          // ── Utilidad bruta con gradiente ────────────
           Container(
-            width: double.infinity,
+            width:   double.infinity,
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: utilBg, borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: utilColor.withOpacity(0.2))),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Utilidad bruta',
-                    style: GoogleFonts.poppins(color: utilColor, fontSize: 14)),
-                  Text('\$${fmt.format(r.utilidadBruta)}',
-                    style: GoogleFonts.poppins(
-                      color: utilColor, fontSize: 26,
-                      fontWeight: FontWeight.bold)),
-                ]),
-                Icon(r.utilidadBruta >= 0
-                    ? Icons.trending_up_rounded : Icons.trending_down_rounded,
-                  color: utilColor, size: 40),
+              gradient: LinearGradient(
+                colors: r.utilidadBruta >= 0
+                    ? [Colors.green.shade700, Colors.green.shade500]
+                    : [Colors.red.shade700,   Colors.red.shade500],
+                begin: Alignment.centerLeft,
+                end:   Alignment.centerRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color:        Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(10)),
+                child: Icon(
+                  r.utilidadBruta >= 0
+                      ? Icons.account_balance_wallet_rounded
+                      : Icons.warning_rounded,
+                  color: Colors.white, size: 26),
+              ),
+              const SizedBox(width: 16),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Utilidad bruta del día',
+                  style: GoogleFonts.poppins(
+                      color: Colors.white70, fontSize: 12)),
+                Text('\$${fmt.format(r.utilidadBruta)}',
+                  style: GoogleFonts.poppins(
+                      color:      Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize:   24)),
               ]),
+              const Spacer(),
+              // Barra gastos/ventas
+              if (r.totalVentas > 0)
+                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Text('Gastos / Ventas',
+                    style: GoogleFonts.poppins(
+                        color: Colors.white70, fontSize: 11)),
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    width: 110,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value:      gastosPct,
+                        minHeight:  10,
+                        backgroundColor: Colors.white.withOpacity(0.3),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          gastosPct > 0.8
+                              ? Colors.redAccent.shade100 : Colors.white),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text('Margen: ${margenPct.toStringAsFixed(1)}%',
+                    style: GoogleFonts.poppins(
+                        color: Colors.white70, fontSize: 10)),
+                ]),
+            ]),
           ),
           const SizedBox(height: 20),
 
-          // Ventas por método
+          // ── Métodos de pago ─────────────────────────
           if (r.ventasPorMetodo.isNotEmpty) ...[
-            Text('Ventas por método de pago',
-              style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.bold, fontSize: 15)),
+            Row(children: [
+              const Icon(Icons.payments_rounded,
+                  size: 18, color: Color(Constants.primaryColor)),
+              const SizedBox(width: 8),
+              Text('Ventas por método de pago',
+                style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold, fontSize: 15,
+                    color: const Color(0xFF1A1A2E))),
+              const Spacer(),
+              Text('${r.ventasPorMetodo.length} método${r.ventasPorMetodo.length != 1 ? "s" : ""}',
+                style: GoogleFonts.poppins(
+                    fontSize: 11, color: Colors.grey.shade400)),
+            ]),
             const SizedBox(height: 12),
             ...r.ventasPorMetodo.map((m) {
               final pct = r.totalVentas > 0
                   ? (m['total'] as num) / r.totalVentas : 0.0;
-              return _metodoPago(m['metodo'] ?? '', m['cantidad'] ?? 0,
-                  (m['total'] as num).toDouble(), pct, fmt);
+              return _metodoPago(
+                m['metodo']   ?? '',
+                m['cantidad'] ?? 0,
+                (m['total']   as num).toDouble(),
+                pct, fmt,
+              );
             }),
+            const SizedBox(height: 20),
           ],
+
+          // ── Detalle del día ─────────────────────────
+          Row(children: [
+            const Icon(Icons.info_outline_rounded,
+                size: 18, color: Color(Constants.primaryColor)),
+            const SizedBox(width: 8),
+            Text('Detalle del día',
+              style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold, fontSize: 15,
+                  color: const Color(0xFF1A1A2E))),
+          ]),
+          const SizedBox(height: 12),
+          _buildDetalleDia(r, ticketPromedio, margenPct, fmt),
+          const SizedBox(height: 12),
         ]),
       ),
     );
   }
 
-  // ── Helpers (igual que antes) ────────────────────────
-  Widget _kpiCard(IconData icon, String label, String valor,
-      String sub, Color color, Color bg) =>
+  // ── Detalle rápido inferior ───────────────────────────
+  Widget _buildDetalleDia(dynamic r, double ticketProm,
+      double margenPct, NumberFormat fmt) =>
     Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: bg, borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withOpacity(0.15))),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(icon, color: color, size: 24),
-        const SizedBox(height: 8),
-        Text(label, style: GoogleFonts.poppins(
-            color: Colors.grey.shade600, fontSize: 12)),
-        const SizedBox(height: 4),
-        Text(valor, style: GoogleFonts.poppins(
-            fontWeight: FontWeight.bold, fontSize: 18, color: color)),
-        if (sub.isNotEmpty)
-          Text(sub, style: GoogleFonts.poppins(
-              color: Colors.grey.shade500, fontSize: 11)),
+        color:        Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [BoxShadow(
+            color:     Colors.black.withOpacity(0.04),
+            blurRadius: 8, offset: const Offset(0, 2))]),
+      child: Column(children: [
+        _detalleRow(Icons.shopping_cart_rounded, Colors.blue,
+            'Total transacciones', '${r.numVentas} venta${r.numVentas != 1 ? "s" : ""}'),
+        _divider(),
+        _detalleRow(Icons.confirmation_number_rounded, Colors.purple,
+            'Ticket promedio',
+            r.numVentas > 0 ? '\$${fmt.format(ticketProm)}' : '-'),
+        _divider(),
+        _detalleRow(Icons.pie_chart_rounded, Colors.teal,
+            'Margen de utilidad',
+            r.totalVentas > 0 ? '${margenPct.toStringAsFixed(1)}%' : '-'),
+        _divider(),
+        _detalleRow(Icons.payments_outlined, Colors.orange,
+            'Métodos usados',
+            '${r.ventasPorMetodo.length} método${r.ventasPorMetodo.length != 1 ? "s" : ""}'),
+        _divider(),
+        _detalleRow(
+          r.utilidadBruta >= 0
+              ? Icons.sentiment_satisfied_alt_rounded
+              : Icons.sentiment_dissatisfied_rounded,
+          r.utilidadBruta >= 0 ? Colors.green : Colors.red,
+          'Estado del día',
+          r.utilidadBruta >= 0 ? '✅ Rentable' : '⚠️ Con pérdidas'),
       ]),
     );
 
-  Widget _metodoPago(String metodo, int cantidad, double total,
-      double pct, NumberFormat fmt) =>
+  Widget _detalleRow(IconData icon, Color color,
+      String label, String valor) =>
+    Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color:        color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8)),
+          child: Icon(icon, color: color, size: 16)),
+        const SizedBox(width: 12),
+        Text(label, style: GoogleFonts.poppins(
+            fontSize: 13, color: Colors.grey.shade600)),
+        const Spacer(),
+        Text(valor, style: GoogleFonts.poppins(
+            fontSize: 13, fontWeight: FontWeight.w600,
+            color: const Color(0xFF1A1A2E))),
+      ]),
+    );
+
+  Widget _divider() => Divider(height: 1, color: Colors.grey.shade100);
+
+  // ── KPI card ──────────────────────────────────────────
+  Widget _kpiCard({
+    required IconData icon, required String label,
+    required String valor, required String sub,
+    required Color color, required Color bg,
+  }) =>
     Container(
-      margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white, borderRadius: BorderRadius.circular(12),
+        color:        bg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withOpacity(0.15))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(height: 8),
+        Text(label, style: GoogleFonts.poppins(
+            color: Colors.grey.shade600, fontSize: 11),
+          overflow: TextOverflow.ellipsis),
+        const SizedBox(height: 4),
+        Text(valor, style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold, fontSize: 16, color: color)),
+        if (sub.isNotEmpty)
+          Text(sub, style: GoogleFonts.poppins(
+              color: Colors.grey.shade500, fontSize: 10)),
+      ]),
+    );
+
+  // ── Método de pago ────────────────────────────────────
+  Widget _metodoPago(String metodo, int cantidad, double total,
+      double pct, NumberFormat fmt) {
+    final info = _infoMetodo(metodo);
+    return Container(
+      margin:  const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color:        Colors.white,
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04),
             blurRadius: 6, offset: const Offset(0, 2))]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text(_labelMetodo(metodo),
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13)),
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color:        info['color'].withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8)),
+              child: Icon(info['icon'], color: info['color'], size: 16)),
+            const SizedBox(width: 10),
+            Text(info['label'],
+              style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600, fontSize: 13)),
+          ]),
           Text('\$${fmt.format(total)}',
             style: GoogleFonts.poppins(
                 fontWeight: FontWeight.bold,
-                color: const Color(Constants.primaryColor))),
+                color: const Color(Constants.primaryColor),
+                fontSize: 14)),
         ]),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Row(children: [
           Expanded(child: ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
-              value: pct.clamp(0.0, 1.0), minHeight: 6,
+              value:           pct.clamp(0.0, 1.0),
+              minHeight:       6,
               backgroundColor: Colors.grey.shade100,
-              valueColor: const AlwaysStoppedAnimation(
-                  Color(Constants.primaryColor)),
+              valueColor:      AlwaysStoppedAnimation(info['color']),
             ),
           )),
           const SizedBox(width: 8),
@@ -631,18 +794,20 @@ class _TabResumenDiaState extends State<_TabResumenDia> {
             style: GoogleFonts.poppins(
                 fontSize: 11, color: Colors.grey.shade500)),
         ]),
+        const SizedBox(height: 4),
         Text('$cantidad venta${cantidad != 1 ? "s" : ""}',
           style: GoogleFonts.poppins(
               fontSize: 11, color: Colors.grey.shade500)),
       ]),
     );
+  }
 
-  String _labelMetodo(String m) => const {
-    'efectivo':      '💵 Efectivo',
-    'tarjeta':       '💳 Tarjeta',
-    'transferencia': '🏦 Transferencia',
-    'mixto':         '🔀 Mixto',
-  }[m] ?? m;
+  Map<String, dynamic> _infoMetodo(String m) => const {
+    'efectivo':      {'label': 'Efectivo',      'icon': Icons.payments_rounded,       'color': Colors.green},
+    'tarjeta':       {'label': 'Tarjeta',        'icon': Icons.credit_card_rounded,    'color': Colors.blue},
+    'transferencia': {'label': 'Transferencia',  'icon': Icons.account_balance_rounded,'color': Colors.indigo},
+    'mixto':         {'label': 'Mixto',          'icon': Icons.shuffle_rounded,        'color': Colors.purple},
+  }[m] ?? {'label': m, 'icon': Icons.attach_money_rounded, 'color': Colors.grey};
 }
 // ──────────────────────────────────────────────────────
 // TAB 2 — RESUMEN MENSUAL
@@ -669,97 +834,259 @@ class _TabMensual extends StatelessWidget {
     final r = cont.resumenMensual;
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        IconButton(
-          icon: const Icon(Icons.chevron_left_rounded),
-          onPressed: () {
-            final nm = mes - 1 <= 0 ? 12 : mes - 1;
-            final na = mes - 1 <= 0 ? anio - 1 : anio;
-            onCambiarMes(na, nm);
-          },
+
+      // ── Navegador de mes ────────────────────────────────
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 6, offset: const Offset(0, 2))],
         ),
-        Expanded(child: Center(
-          child: Text('${meses[mes - 1]} $anio',
-            style: GoogleFonts.poppins(
-                fontWeight: FontWeight.bold, fontSize: 16)),
-        )),
-        IconButton(
-          icon: const Icon(Icons.chevron_right_rounded),
-          onPressed: () {
-            final nm = mes + 1 > 12 ? 1 : mes + 1;
-            final na = mes + 1 > 12 ? anio + 1 : anio;
-            onCambiarMes(na, nm);
-          },
-        ),
-      ]),
-      const SizedBox(height: 8),
-      if (r == null)
-        Expanded(child: Center(child: Text('Sin datos para este mes',
-          style: GoogleFonts.poppins(color: Colors.grey.shade400))))
-      else
-        Expanded(child: SingleChildScrollView(child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Expanded(child: _kpiMes('Total ventas',
-                  '\$${fmt.format(r.totalVentas)}',
-                  Colors.blue.shade700, Colors.blue.shade50)),
-              const SizedBox(width: 12),
-              Expanded(child: _kpiMes('Total gastos',
-                  '\$${fmt.format(r.totalGastos)}',
-                  Colors.orange.shade700, Colors.orange.shade50)),
-            ]),
-            const SizedBox(height: 12),
-            _kpiMes('Utilidad bruta',
-              '\$${fmt.format(r.utilidadBruta)}',
-              r.utilidadBruta >= 0
-                  ? Colors.green.shade700 : Colors.red.shade700,
-              r.utilidadBruta >= 0
-                  ? Colors.green.shade50 : Colors.red.shade50,
-              fullWidth: true),
-            const SizedBox(height: 20),
-            if (r.ventasPorDia.isNotEmpty) ...[
-              Text('Ventas por día',
+        child: Row(children: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left_rounded),
+            onPressed: () {
+              final nm = mes - 1 <= 0 ? 12 : mes - 1;
+              final na = mes - 1 <= 0 ? anio - 1 : anio;
+              onCambiarMes(na, nm);
+            },
+          ),
+          Expanded(child: Center(
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.calendar_month_rounded,
+                  size: 18, color: Color(Constants.primaryColor)),
+              const SizedBox(width: 8),
+              Text('${meses[mes - 1]} $anio',
                 style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.bold, fontSize: 15)),
-              const SizedBox(height: 12),
-              _buildBarChart(r.ventasPorDia),
-            ],
+                    fontWeight: FontWeight.bold, fontSize: 16,
+                    color: const Color(0xFF1A1A2E))),
+            ]),
+          )),
+          IconButton(
+            icon: const Icon(Icons.chevron_right_rounded),
+            onPressed: () {
+              final nm = mes + 1 > 12 ? 1 : mes + 1;
+              final na = mes + 1 > 12 ? anio + 1 : anio;
+              onCambiarMes(na, nm);
+            },
+          ),
+        ]),
+      ),
+
+      const SizedBox(height: 16),
+
+      if (r == null)
+        Expanded(child: Center(child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.bar_chart_rounded,
+                size: 56, color: Colors.grey.shade300),
+            const SizedBox(height: 12),
+            Text('Sin datos para este mes',
+              style: GoogleFonts.poppins(
+                  color: Colors.grey.shade400, fontSize: 15)),
           ],
-        ))),
+        )))
+      else
+        Expanded(child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+
+              // ── Fila KPIs principales ──────────────────
+              Row(children: [
+                Expanded(child: _kpiCard(
+                  label:  'Total ventas',
+                  valor:  '\$${fmt.format(r.totalVentas)}',
+                  icon:   Icons.trending_up_rounded,
+                  color:  Colors.blue.shade700,
+                  bg:     Colors.blue.shade50,
+                )),
+                const SizedBox(width: 12),
+                Expanded(child: _kpiCard(
+                  label:  'Total gastos',
+                  valor:  '\$${fmt.format(r.totalGastos)}',
+                  icon:   Icons.trending_down_rounded,
+                  color:  Colors.orange.shade700,
+                  bg:     Colors.orange.shade50,
+                )),
+                const SizedBox(width: 12),
+                Expanded(child: _kpiCard(
+                  label: 'Margen utilidad',
+                  valor: r.totalVentas > 0
+                      ? '${((r.utilidadBruta / r.totalVentas) * 100).toStringAsFixed(1)}%'
+                      : '0%',
+                  icon:  Icons.pie_chart_rounded,
+                  color: r.utilidadBruta >= 0
+                      ? Colors.teal.shade700 : Colors.red.shade700,
+                  bg:    r.utilidadBruta >= 0
+                      ? Colors.teal.shade50 : Colors.red.shade50,
+                )),
+              ]),
+
+              const SizedBox(height: 12),
+
+              // ── Utilidad bruta (full width) ────────────
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: r.utilidadBruta >= 0
+                        ? [Colors.green.shade700, Colors.green.shade500]
+                        : [Colors.red.shade700, Colors.red.shade500],
+                    begin: Alignment.centerLeft,
+                    end:   Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(10)),
+                    child: Icon(
+                      r.utilidadBruta >= 0
+                          ? Icons.account_balance_wallet_rounded
+                          : Icons.warning_rounded,
+                      color: Colors.white, size: 26),
+                  ),
+                  const SizedBox(width: 16),
+                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Utilidad bruta del mes',
+                      style: GoogleFonts.poppins(
+                          color: Colors.white70, fontSize: 12)),
+                    Text('\$${fmt.format(r.utilidadBruta)}',
+                      style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 24)),
+                  ]),
+                  const Spacer(),
+                  // Proporción ventas vs gastos
+                  if (r.totalVentas > 0)
+                    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                      Text('Gastos / Ventas',
+                        style: GoogleFonts.poppins(
+                            color: Colors.white70, fontSize: 11)),
+                      const SizedBox(height: 4),
+                      SizedBox(
+                        width: 120,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: LinearProgressIndicator(
+                            value: (r.totalGastos / r.totalVentas).clamp(0.0, 1.0),
+                            minHeight: 10,
+                            backgroundColor: Colors.white.withOpacity(0.3),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              (r.totalGastos / r.totalVentas) > 0.8
+                                  ? Colors.redAccent.shade100
+                                  : Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${((r.totalGastos / r.totalVentas) * 100).toStringAsFixed(1)}% de las ventas',
+                        style: GoogleFonts.poppins(
+                            color: Colors.white70, fontSize: 10)),
+                    ]),
+                ]),
+              ),
+
+              const SizedBox(height: 20),
+
+              // ── Gráfico barras ─────────────────────────
+              if (r.ventasPorDia.isNotEmpty) ...[
+                Row(children: [
+                  const Icon(Icons.bar_chart_rounded,
+                      size: 18, color: Color(Constants.primaryColor)),
+                  const SizedBox(width: 8),
+                  Text('Ventas por día',
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold, fontSize: 15,
+                        color: const Color(0xFF1A1A2E))),
+                  const Spacer(),
+                  Text('${r.ventasPorDia.length} días con ventas',
+                    style: GoogleFonts.poppins(
+                        fontSize: 11, color: Colors.grey.shade400)),
+                ]),
+                const SizedBox(height: 12),
+                _buildBarChart(r.ventasPorDia),
+              ],
+
+              const SizedBox(height: 20),
+
+              // ── Resumen rápido ─────────────────────────
+              Row(children: [
+                const Icon(Icons.info_outline_rounded,
+                    size: 18, color: Color(Constants.primaryColor)),
+                const SizedBox(width: 8),
+                Text('Resumen del mes',
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold, fontSize: 15,
+                      color: const Color(0xFF1A1A2E))),
+              ]),
+              const SizedBox(height: 12),
+              _buildResumenRapido(r),
+              const SizedBox(height: 12),
+            ],
+          ),
+        )),
     ]);
   }
 
-  Widget _kpiMes(String label, String valor, Color color, Color bg,
-      {bool fullWidth = false}) =>
+  // ── KPI card con ícono ────────────────────────────────
+  Widget _kpiCard({
+    required String label,
+    required String valor,
+    required IconData icon,
+    required Color color,
+    required Color bg,
+  }) =>
     Container(
-      width: fullWidth ? double.infinity : null,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: bg, borderRadius: BorderRadius.circular(14),
+        color: bg,
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: color.withOpacity(0.15))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label, style: GoogleFonts.poppins(
-            color: Colors.grey.shade600, fontSize: 12)),
-        const SizedBox(height: 4),
+        Row(children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(label, style: GoogleFonts.poppins(
+                color: Colors.grey.shade600, fontSize: 11),
+              overflow: TextOverflow.ellipsis),
+          ),
+        ]),
+        const SizedBox(height: 8),
         Text(valor, style: GoogleFonts.poppins(
-            fontWeight: FontWeight.bold, fontSize: 20, color: color)),
+            fontWeight: FontWeight.bold, fontSize: 18, color: color)),
       ]),
     );
 
+  // ── Gráfico de barras mejorado ────────────────────────
   Widget _buildBarChart(List<Map<String, dynamic>> dias) {
     final maxVal = dias
         .map((d) => (d['total'] as num).toDouble())
         .fold(0.0, (a, b) => a > b ? a : b);
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       decoration: BoxDecoration(
-        color: Colors.white, borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(
+            color: Colors.black.withOpacity(0.04),
             blurRadius: 8, offset: const Offset(0, 2))]),
       child: SizedBox(
-        height: 180,
+        height: 200,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: dias.map((d) {
@@ -767,19 +1094,38 @@ class _TabMensual extends StatelessWidget {
             final dia = (d['dia']?.toString().length ?? 0) >= 10
                 ? d['dia'].toString().substring(8, 10) : '?';
             final pct = maxVal > 0 ? val / maxVal : 0.0;
+            final esMax = val == maxVal;
+
             return Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 1.5),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    // Valor encima de la barra máxima
+                    if (esMax)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          '\$${fmt.format(val)}',
+                          style: GoogleFonts.poppins(
+                              fontSize: 8, fontWeight: FontWeight.bold,
+                              color: const Color(Constants.primaryColor)),
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                        ),
+                      )
+                    else
+                      const SizedBox(height: 16),
+                    // Barra
                     Container(
-                      height: 140 * pct.clamp(0.02, 1.0),
+                      height: 150 * pct.clamp(0.02, 1.0),
                       decoration: BoxDecoration(
-                        color: const Color(Constants.primaryColor)
-                            .withOpacity(0.7 + 0.3 * pct),
+                        color: esMax
+                            ? const Color(Constants.primaryColor)
+                            : const Color(Constants.primaryColor).withOpacity(0.45),
                         borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(3))),
+                            top: Radius.circular(4))),
                     ),
                     const SizedBox(height: 4),
                     Text(dia, style: GoogleFonts.poppins(
@@ -793,14 +1139,77 @@ class _TabMensual extends StatelessWidget {
       ),
     );
   }
-}
 
+  // ── Resumen rápido al fondo ───────────────────────────
+  Widget _buildResumenRapido(dynamic r) {
+    final diasConVentas = r.ventasPorDia.length;
+    final promedioVentaDia = diasConVentas > 0
+        ? r.totalVentas / diasConVentas : 0.0;
+    final promedioGastoDia = diasConVentas > 0
+        ? r.totalGastos / diasConVentas : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8, offset: const Offset(0, 2))]),
+      child: Column(children: [
+        _resumenFila(
+          Icons.calendar_today_rounded, Colors.blue,
+          'Días con ventas', '$diasConVentas días'),
+        _divider(),
+        _resumenFila(
+          Icons.show_chart_rounded, Colors.indigo,
+          'Promedio venta/día', '\$${fmt.format(promedioVentaDia)}'),
+        _divider(),
+        _resumenFila(
+          Icons.receipt_long_rounded, Colors.orange,
+          'Promedio gasto/día', '\$${fmt.format(promedioGastoDia)}'),
+        _divider(),
+        _resumenFila(
+          r.utilidadBruta >= 0
+              ? Icons.sentiment_satisfied_rounded
+              : Icons.sentiment_dissatisfied_rounded,
+          r.utilidadBruta >= 0 ? Colors.green : Colors.red,
+          'Estado del mes',
+          r.utilidadBruta >= 0 ? '✅ Rentable' : '⚠️ Con pérdidas'),
+      ]),
+    );
+  }
+
+  Widget _resumenFila(IconData icon, Color color, String label, String valor) =>
+    Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8)),
+          child: Icon(icon, color: color, size: 16)),
+        const SizedBox(width: 12),
+        Text(label, style: GoogleFonts.poppins(
+            fontSize: 13, color: Colors.grey.shade600)),
+        const Spacer(),
+        Text(valor, style: GoogleFonts.poppins(
+            fontSize: 13, fontWeight: FontWeight.w600,
+            color: const Color(0xFF1A1A2E))),
+      ]),
+    );
+
+  Widget _divider() =>
+    Divider(height: 1, color: Colors.grey.shade100);
+}
 // ──────────────────────────────────────────────────────
 // TAB 3 — TOP PRODUCTOS
 // ──────────────────────────────────────────────────────
 class _TabTopProductos extends StatelessWidget {
   final ContabilidadProvider cont;
-  final NumberFormat fmt;
+  final NumberFormat         fmt;
+
   const _TabTopProductos({required this.cont, required this.fmt});
 
   @override
@@ -812,82 +1221,349 @@ class _TabTopProductos extends StatelessWidget {
       return Center(child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.leaderboard_rounded, size: 64, color: Colors.grey.shade300),
+          Icon(Icons.leaderboard_rounded,
+              size: 64, color: Colors.grey.shade300),
           const SizedBox(height: 12),
-          Text('Sin datos de productos', style: GoogleFonts.poppins(
-              color: Colors.grey.shade400, fontSize: 16)),
+          Text('Sin datos de productos',
+            style: GoogleFonts.poppins(
+                color: Colors.grey.shade400, fontSize: 16)),
         ],
       ));
     }
 
-    final maxVendido = cont.topProductos
-        .map((p) => p.totalVendido)
-        .fold(0.0, (a, b) => a > b ? a : b);
-    final colores = [
-      Colors.amber, Colors.grey.shade400, Colors.brown.shade300];
+    // ── Agrupar por categoría ─────────────────────────
+    final Map<String, List<TopProducto>> porCategoria = {};
+    for (final p in cont.topProductos) {
+      porCategoria.putIfAbsent(p.categoria, () => []).add(p);
+    }
 
-    return ListView.builder(
-      itemCount: cont.topProductos.length,
-      itemBuilder: (_, i) {
-        final p   = cont.topProductos[i];
-        final pct = maxVendido > 0 ? p.totalVendido / maxVendido : 0.0;
-        return Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white, borderRadius: BorderRadius.circular(14),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04),
-                blurRadius: 8, offset: const Offset(0, 2))]),
-          child: Row(children: [
-            Container(
-              width: 36, height: 36,
-              decoration: BoxDecoration(
-                color: i < 3
-                    ? colores[i].withOpacity(0.15) : Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(8)),
-              child: Center(child: Text('${i + 1}',
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.bold, fontSize: 14,
-                  color: i < 3 ? colores[i] : Colors.grey.shade500))),
-            ),
-            const SizedBox(width: 12),
-            Expanded(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(p.producto,
-                  style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w600, fontSize: 13),
-                  overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 4),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: pct.clamp(0.0, 1.0), minHeight: 5,
-                    backgroundColor: Colors.grey.shade100,
-                    valueColor: AlwaysStoppedAnimation(
-                        i < 3 ? colores[i]
-                            : const Color(Constants.primaryColor)),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text('${p.totalVendido.toStringAsFixed(0)} unidades',
-                  style: GoogleFonts.poppins(
-                      fontSize: 11, color: Colors.grey.shade500)),
-              ],
-            )),
-            const SizedBox(width: 12),
-            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text('\$${fmt.format(p.totalIngresos)}',
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.bold,
-                  color: const Color(Constants.primaryColor), fontSize: 13)),
-              Text('ingresos', style: GoogleFonts.poppins(
-                  fontSize: 10, color: Colors.grey.shade400)),
-            ]),
+    final totalIngresos = cont.topProductos
+        .fold(0.0, (s, p) => s + p.totalIngresos);
+    final totalUnidades = cont.topProductos
+        .fold(0.0, (s, p) => s + p.totalVendido);
+    final maxIngresos   = cont.topProductos
+        .map((p) => p.totalIngresos)
+        .fold(0.0, (a, b) => a > b ? a : b);
+
+    return SingleChildScrollView(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+
+        // ── 3 KPIs globales ─────────────────────────
+        Row(children: [
+          Expanded(child: _kpiGlobal(
+            Icons.emoji_events_rounded,
+            '${cont.topProductos.length} productos',
+            'en ranking',
+            Colors.amber.shade700, Colors.amber.shade50,
+          )),
+          const SizedBox(width: 10),
+          Expanded(child: _kpiGlobal(
+            Icons.inventory_2_rounded,
+            '${totalUnidades.toStringAsFixed(0)} uds',
+            'total vendidas',
+            Colors.blue.shade700, Colors.blue.shade50,
+          )),
+          const SizedBox(width: 10),
+          Expanded(child: _kpiGlobal(
+            Icons.attach_money_rounded,
+            '\$${fmt.format(totalIngresos)}',
+            'ingresos totales',
+            Colors.green.shade700, Colors.green.shade50,
+          )),
+        ]),
+        const SizedBox(height: 20),
+
+        // ── Podium top 3 ────────────────────────────
+        if (cont.topProductos.length >= 3) ...[
+          Row(children: [
+            const Icon(Icons.workspace_premium_rounded,
+                size: 18, color: Color(Constants.primaryColor)),
+            const SizedBox(width: 8),
+            Text('Top 3 productos',
+              style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold, fontSize: 15,
+                  color: const Color(0xFF1A1A2E))),
           ]),
-        );
-      },
+          const SizedBox(height: 12),
+          _buildPodium(cont.topProductos.take(3).toList(), maxIngresos),
+          const SizedBox(height: 20),
+        ],
+
+        // ── Secciones por categoría ──────────────────
+        ...porCategoria.entries.map((entry) {
+          final categoria   = entry.key;
+          final productos   = entry.value;
+          final ingresosCat = productos
+              .fold(0.0, (s, p) => s + p.totalIngresos);
+          final pctCat = totalIngresos > 0
+              ? ingresosCat / totalIngresos : 0.0;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header categoría
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      _colorCategoria(categoria).withOpacity(0.12),
+                      _colorCategoria(categoria).withOpacity(0.04),
+                    ],
+                    begin: Alignment.centerLeft,
+                    end:   Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: _colorCategoria(categoria).withOpacity(0.2)),
+                ),
+                child: Row(children: [
+                  Icon(_iconoCategoria(categoria),
+                      size: 18, color: _colorCategoria(categoria)),
+                  const SizedBox(width: 8),
+                  Text(categoria,
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold, fontSize: 13,
+                        color: _colorCategoria(categoria))),
+                  const Spacer(),
+                  Column(crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('\$${fmt.format(ingresosCat)}',
+                        style: GoogleFonts.poppins(
+                            fontSize: 12, fontWeight: FontWeight.bold,
+                            color: _colorCategoria(categoria))),
+                      Text('${(pctCat * 100).toStringAsFixed(1)}% del total',
+                        style: GoogleFonts.poppins(
+                            fontSize: 10, color: Colors.grey.shade500)),
+                    ]),
+                ]),
+              ),
+              const SizedBox(height: 8),
+
+              // Productos de la categoría
+              ...productos.map((p) {
+                final idx      = cont.topProductos.indexOf(p);
+                final pct      = maxIngresos > 0
+                    ? p.totalIngresos / maxIngresos : 0.0;
+                final pctEnCat = ingresosCat > 0
+                    ? p.totalIngresos / ingresosCat : 0.0;
+                return _productoCard(p, idx, pct, pctEnCat);
+              }),
+              const SizedBox(height: 16),
+            ],
+          );
+        }),
+      ]),
     );
+  }
+
+  // ── Podium ────────────────────────────────────────────
+  Widget _buildPodium(List<TopProducto> top3, double maxIng) {
+    final medallas  = ['🥇', '🥈', '🥉'];
+    final colores   = [Colors.amber.shade600, Colors.grey.shade500, Colors.brown.shade400];
+    final bgColores = [Colors.amber.shade50,  Colors.grey.shade50,  Colors.brown.shade50];
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: List.generate(top3.length, (i) {
+        final p   = top3[i];
+        final pct = maxIng > 0 ? p.totalIngresos / maxIng : 0.0;
+        return Expanded(
+          child: Container(
+            margin: EdgeInsets.only(
+              left:  i == 0 ? 0 : 5,
+              right: i == 2 ? 0 : 5,
+              top:   i == 0 ? 0 : i == 1 ? 12 : 24,
+            ),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color:        bgColores[i],
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: colores[i].withOpacity(0.3)),
+              boxShadow: [BoxShadow(
+                  color: colores[i].withOpacity(0.1),
+                  blurRadius: 8, offset: const Offset(0, 3))],
+            ),
+            child: Column(children: [
+              Text(medallas[i], style: const TextStyle(fontSize: 24)),
+              const SizedBox(height: 6),
+              Text(p.producto,
+                style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold, fontSize: 11,
+                    color: const Color(0xFF1A1A2E)),
+                textAlign: TextAlign.center,
+                maxLines: 2, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 4),
+              Text(p.categoria,
+                style: GoogleFonts.poppins(
+                    fontSize: 9, color: Colors.grey.shade500),
+                textAlign: TextAlign.center),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value:           pct.clamp(0.0, 1.0),
+                  minHeight:       4,
+                  backgroundColor: Colors.white,
+                  valueColor:      AlwaysStoppedAnimation(colores[i]),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text('\$${NumberFormat('#,###').format(p.totalIngresos)}',
+                style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12, color: colores[i])),
+              Text('${p.totalVendido.toStringAsFixed(0)} uds',
+                style: GoogleFonts.poppins(
+                    fontSize: 9, color: Colors.grey.shade400)),
+            ]),
+          ),
+        );
+      }),
+    );
+  }
+
+  // ── Producto card ─────────────────────────────────────
+  Widget _productoCard(TopProducto p, int idx,
+      double pct, double pctEnCat) =>
+    Container(
+      margin:  const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 6, offset: const Offset(0, 2))],
+      ),
+      child: Row(children: [
+        // Número ranking global
+        Container(
+          width: 32, height: 32,
+          decoration: BoxDecoration(
+            color: idx < 3
+                ? [Colors.amber.shade50,
+                   Colors.grey.shade100,
+                   Colors.brown.shade50][idx]
+                : Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(8)),
+          child: Center(child: Text('${idx + 1}',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.bold, fontSize: 12,
+              color: idx < 3
+                  ? [Colors.amber.shade700,
+                     Colors.grey.shade600,
+                     Colors.brown.shade500][idx]
+                  : Colors.grey.shade400))),
+        ),
+        const SizedBox(width: 12),
+
+        // Info producto
+        Expanded(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(p.producto,
+              style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600, fontSize: 13),
+              overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 4),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value:           pct.clamp(0.0, 1.0),
+                minHeight:       6,
+                backgroundColor: Colors.grey.shade100,
+                valueColor: const AlwaysStoppedAnimation(
+                    Color(Constants.primaryColor)),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(children: [
+              Text('${p.totalVendido.toStringAsFixed(0)} uds',
+                style: GoogleFonts.poppins(
+                    fontSize: 10, color: Colors.grey.shade500)),
+              const SizedBox(width: 8),
+              // Badge % dentro de su categoría
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: _colorCategoria(p.categoria).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10)),
+                child: Text(
+                  '${(pctEnCat * 100).toStringAsFixed(0)}% en cat.',
+                  style: GoogleFonts.poppins(
+                      fontSize: 9,
+                      color: _colorCategoria(p.categoria),
+                      fontWeight: FontWeight.w600)),
+              ),
+            ]),
+          ],
+        )),
+        const SizedBox(width: 12),
+
+        // Ingresos
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text('\$${fmt.format(p.totalIngresos)}',
+            style: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold,
+                color: const Color(Constants.primaryColor),
+                fontSize: 13)),
+          Text('ingresos',
+            style: GoogleFonts.poppins(
+                fontSize: 10, color: Colors.grey.shade400)),
+          const SizedBox(height: 2),
+          Text('${(pct * 100).toStringAsFixed(1)}% del top',
+            style: GoogleFonts.poppins(
+                fontSize: 9, color: Colors.grey.shade400)),
+        ]),
+      ]),
+    );
+
+  // ── KPI global ────────────────────────────────────────
+  Widget _kpiGlobal(IconData icon, String valor,
+      String sub, Color color, Color bg) =>
+    Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color:        bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.15))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(height: 8),
+        Text(valor, style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold, fontSize: 15, color: color),
+          overflow: TextOverflow.ellipsis),
+        Text(sub, style: GoogleFonts.poppins(
+            fontSize: 10, color: Colors.grey.shade500)),
+      ]),
+    );
+
+  // ── Helpers categoría ─────────────────────────────────
+  Color _colorCategoria(String cat) {
+    final c = cat.toLowerCase();
+    if (c.contains('ropa') || c.contains('moda'))       return Colors.pink.shade600;
+    if (c.contains('electro'))                          return Colors.blue.shade700;
+    if (c.contains('alimento') || c.contains('comida')) return Colors.green.shade700;
+    if (c.contains('hogar') || c.contains('casa'))      return Colors.orange.shade700;
+    if (c.contains('joya') || c.contains('accesorio'))  return Colors.purple.shade700;
+    if (c.contains('calzado') || c.contains('zapato'))  return Colors.brown.shade600;
+    if (c.contains('belleza') || c.contains('cosmet'))  return Colors.deepPurple.shade500;
+    return Colors.teal.shade600;
+  }
+
+  IconData _iconoCategoria(String cat) {
+    final c = cat.toLowerCase();
+    if (c.contains('ropa') || c.contains('moda'))       return Icons.checkroom_rounded;
+    if (c.contains('electro'))                          return Icons.devices_rounded;
+    if (c.contains('alimento') || c.contains('comida')) return Icons.fastfood_rounded;
+    if (c.contains('hogar') || c.contains('casa'))      return Icons.home_rounded;
+    if (c.contains('joya') || c.contains('accesorio'))  return Icons.diamond_rounded;
+    if (c.contains('calzado') || c.contains('zapato'))  return Icons.run_circle_rounded;
+    if (c.contains('belleza') || c.contains('cosmet'))  return Icons.face_retouching_natural_rounded;
+    return Icons.category_rounded;
   }
 }
 
@@ -923,11 +1599,16 @@ class _TabGastosState extends State<_TabGastos> {
 
   @override
   void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _cargar(); // ← usa _cargar() en vez de cargarGastos directo
-    });
-  }
+  super.initState();
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    final auth = context.read<AuthProvider>();
+    context.read<ClienteProvider>().cargarSeparados(
+      // ✅ cajero filtra por su tienda, admin/supervisor ve todo
+      tiendaId: auth.rol == 'cajero' ? auth.tiendaId : null,
+    );
+  });
+}
+
 
   // ── Helpers de fecha ────────────────────────────────
   void _cargar() {

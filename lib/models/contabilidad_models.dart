@@ -46,19 +46,22 @@ class ResumenMensual {
 
 class TopProducto {
   final String producto;
+  final String categoria;      // ✅ nuevo campo
   final double totalVendido;
   final double totalIngresos;
 
   TopProducto({
     required this.producto,
+    required this.categoria,   // ✅
     required this.totalVendido,
     required this.totalIngresos,
   });
 
   factory TopProducto.fromJson(Map<String, dynamic> j) => TopProducto(
-    producto:       j['producto'] ?? '',
-    totalVendido:   (j['total_vendido'] ?? 0).toDouble(),
-    totalIngresos:  (j['total_ingresos'] ?? 0).toDouble(),
+    producto:      j['producto']      ?? '',
+    categoria:     j['categoria']     ?? 'Sin categoría',  // ✅
+    totalVendido:  (j['total_vendido']  ?? 0).toDouble(),
+    totalIngresos: (j['total_ingresos'] ?? 0).toDouble(),
   );
 }
 
