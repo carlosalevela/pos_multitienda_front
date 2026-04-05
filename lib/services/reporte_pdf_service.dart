@@ -9,9 +9,9 @@ class ReportePdfService {
     required String fecha,
     required String tiendaNombre,
   }) async {
-    final pdf = pw.Document();
-    final font      = await PdfGoogleFonts.poppinsRegular();
-    final fontBold  = await PdfGoogleFonts.poppinsBold();
+    final pdf        = pw.Document();
+    final font       = await PdfGoogleFonts.poppinsRegular();
+    final fontBold   = await PdfGoogleFonts.poppinsBold();
     final fontMedium = await PdfGoogleFonts.poppinsMedium();
 
     pdf.addPage(
@@ -19,28 +19,24 @@ class ReportePdfService {
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(32),
         header: (context) => _buildHeader(
-          fecha: fecha,
-          tiendaNombre: tiendaNombre,
-          fontBold: fontBold,
-          font: font,
+          fecha: fecha, tiendaNombre: tiendaNombre,
+          fontBold: fontBold, font: font,
         ),
         footer: (context) => _buildFooter(font: font, context: context),
         build: (context) => [
-          // ── KPIs ──────────────────────────────────────
           _buildKpis(rep: rep, fontBold: fontBold, font: font),
           pw.SizedBox(height: 16),
-
-          // ── Métodos de pago ───────────────────────────
           _buildMetodos(rep: rep, fontBold: fontBold, font: font),
           pw.SizedBox(height: 16),
-
-          // ── Top productos ─────────────────────────────
           _buildTopProductos(rep: rep, fontBold: fontBold, font: font),
           pw.SizedBox(height: 16),
+          _buildTabla(rep: rep, fontBold: fontBold, font: font, fontMedium: fontMedium),
 
-          // ── Tabla de ventas ───────────────────────────
-          _buildTabla(rep: rep, fontBold: fontBold, font: font,
-              fontMedium: fontMedium),
+          // ── ✅ NUEVO: Sección abonos ──────────────────
+          if (rep.abonos.isNotEmpty) ...[
+            pw.SizedBox(height: 16),
+            _buildAbonos(rep: rep, fontBold: fontBold, font: font, fontMedium: fontMedium),
+          ],
         ],
       ),
     );
@@ -67,30 +63,22 @@ class ReportePdfService {
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text('Reporte de Ventas',
-                style: pw.TextStyle(
-                    font: fontBold,
-                    fontSize: 18,
-                    color: const PdfColor.fromInt(0xFF1A1A2E))),
-              pw.Text(tiendaNombre,
-                style: pw.TextStyle(
-                    font: font, fontSize: 11,
-                    color: PdfColors.grey600)),
-            ],
-          ),
-          pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.end,
-            children: [
-              pw.Text('Fecha: $fecha',
-                style: pw.TextStyle(font: fontBold, fontSize: 12)),
-              pw.Text('Generado: ${DateTime.now().toString().substring(0, 16)}',
-                style: pw.TextStyle(
-                    font: font, fontSize: 10, color: PdfColors.grey500)),
-            ],
-          ),
+          pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.Text('Reporte de Ventas',
+              style: pw.TextStyle(
+                  font: fontBold, fontSize: 18,
+                  color: const PdfColor.fromInt(0xFF1A1A2E))),
+            pw.Text(tiendaNombre,
+              style: pw.TextStyle(
+                  font: font, fontSize: 11, color: PdfColors.grey600)),
+          ]),
+          pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+            pw.Text('Fecha: $fecha',
+              style: pw.TextStyle(font: fontBold, fontSize: 12)),
+            pw.Text('Generado: ${DateTime.now().toString().substring(0, 16)}',
+              style: pw.TextStyle(
+                  font: font, fontSize: 10, color: PdfColors.grey500)),
+          ]),
         ],
       ),
     );
@@ -122,45 +110,51 @@ class ReportePdfService {
   // ── KPIs ───────────────────────────────────────────
 
   static pw.Widget _buildKpis({
-    required ReportesProvider rep,
-    required pw.Font fontBold,
-    required pw.Font font,
-  }) {
-    final items = [
-      {'label': 'Total vendido',    'valor': '\$${_fmt(rep.totalDia)}',        'color': PdfColors.green700},
-      {'label': 'Ventas',           'valor': '${rep.totalVentas}',             'color': PdfColors.blue700},
-      {'label': 'Ticket promedio',  'valor': '\$${_fmt(rep.ticketPromedio)}',  'color': PdfColors.purple700},
-      {'label': 'Descuentos',       'valor': '\$${_fmt(rep.totalDescuentos)}', 'color': PdfColors.orange700},
-      if (rep.totalAnuladas > 0)
-        {'label': 'Anuladas', 'valor': '${rep.totalAnuladas}', 'color': PdfColors.red700},
-    ];
+  required ReportesProvider rep,
+  required pw.Font fontBold,
+  required pw.Font font,
+}) {
+  final items = [
+    {'label': 'Total vendido',      'valor': '\$${_fmt(rep.totalDia)}',        'color': PdfColors.green700},
+    {'label': 'Ventas',             'valor': '${rep.totalVentas}',             'color': PdfColors.blue700},
+    {'label': 'Ticket promedio',    'valor': '\$${_fmt(rep.ticketPromedio)}',  'color': PdfColors.purple700},
+    {'label': 'Descuentos',         'valor': '\$${_fmt(rep.totalDescuentos)}', 'color': PdfColors.orange700},
+    if (rep.totalAbonos > 0)
+      {'label': 'Abonos separados', 'valor': '\$${_fmt(rep.totalAbonos)}',     'color': PdfColors.teal700},
+    if (rep.totalAnuladas > 0)
+      {'label': 'Anuladas',         'valor': '${rep.totalAnuladas}',           'color': PdfColors.red700},
+  ];
 
-    return pw.Row(
-      children: items.map((item) => pw.Expanded(
-        child: pw.Container(
-          margin: const pw.EdgeInsets.only(right: 8),
-          padding: const pw.EdgeInsets.all(12),
-          decoration: pw.BoxDecoration(
-            color: PdfColors.grey100,
-            borderRadius: pw.BorderRadius.circular(8),
-          ),
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text(item['valor'] as String,
-                style: pw.TextStyle(
-                    font: fontBold, fontSize: 16,
-                    color: item['color'] as PdfColor)),
-              pw.SizedBox(height: 4),
-              pw.Text(item['label'] as String,
-                style: pw.TextStyle(
-                    font: font, fontSize: 9, color: PdfColors.grey600)),
-            ],
-          ),
+  return pw.Row(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: items.map((item) => pw.Expanded(
+      child: pw.Container(
+        height: 58,                              // ← altura fija igual para todas
+        margin: const pw.EdgeInsets.only(right: 8),
+        padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: pw.BoxDecoration(
+          color: PdfColors.grey100,
+          borderRadius: pw.BorderRadius.circular(8),
         ),
-      )).toList(),
-    );
-  }
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          mainAxisAlignment: pw.MainAxisAlignment.center, // ← centra verticalmente
+          children: [
+            pw.Text(item['valor'] as String,
+              style: pw.TextStyle(
+                  font:     fontBold,
+                  fontSize: 13,                // ← bajado de 16 → no hace wrap
+                  color:    item['color'] as PdfColor)),
+            pw.SizedBox(height: 3),
+            pw.Text(item['label'] as String,
+              style: pw.TextStyle(
+                  font: font, fontSize: 8, color: PdfColors.grey600)),
+          ],
+        ),
+      ),
+    )).toList(),
+  );
+}
 
   // ── Métodos de pago ────────────────────────────────
 
@@ -192,13 +186,11 @@ class ReportePdfService {
                 children: [
                   pw.Text(e.key.toUpperCase(),
                     style: pw.TextStyle(
-                        font: fontBold, fontSize: 10,
-                        color: PdfColors.grey700)),
+                        font: fontBold, fontSize: 10, color: PdfColors.grey700)),
                   pw.SizedBox(height: 4),
                   pw.Text('\$${_fmt(e.value)}',
                     style: pw.TextStyle(
-                        font: fontBold, fontSize: 14,
-                        color: PdfColors.blue700)),
+                        font: fontBold, fontSize: 14, color: PdfColors.blue700)),
                   pw.Text(
                     '${(rep.totalDia == 0 ? 0 : (e.value / rep.totalDia * 100)).toStringAsFixed(1)}%',
                     style: pw.TextStyle(
@@ -237,7 +229,6 @@ class ReportePdfService {
             3: const pw.FixedColumnWidth(80),
           },
           children: [
-            // Header
             pw.TableRow(
               decoration: const pw.BoxDecoration(color: PdfColors.grey200),
               children: ['#', 'Producto', 'Unidades', 'Total']
@@ -247,28 +238,22 @@ class ReportePdfService {
                       style: pw.TextStyle(font: fontBold, fontSize: 10))))
                   .toList(),
             ),
-            // Filas
             ...top.asMap().entries.map((e) => pw.TableRow(
               children: [
-                pw.Padding(
-                  padding: const pw.EdgeInsets.all(6),
+                pw.Padding(padding: const pw.EdgeInsets.all(6),
                   child: pw.Text('${e.key + 1}',
                     style: pw.TextStyle(font: font, fontSize: 10))),
-                pw.Padding(
-                  padding: const pw.EdgeInsets.all(6),
+                pw.Padding(padding: const pw.EdgeInsets.all(6),
                   child: pw.Text(e.value['nombre'],
                     style: pw.TextStyle(font: font, fontSize: 10))),
-                pw.Padding(
-                  padding: const pw.EdgeInsets.all(6),
+                pw.Padding(padding: const pw.EdgeInsets.all(6),
                   child: pw.Text(
                     (e.value['cantidad'] as double).toStringAsFixed(0),
                     style: pw.TextStyle(font: font, fontSize: 10))),
-                pw.Padding(
-                  padding: const pw.EdgeInsets.all(6),
+                pw.Padding(padding: const pw.EdgeInsets.all(6),
                   child: pw.Text('\$${_fmt(e.value['subtotal'])}',
                     style: pw.TextStyle(
-                        font: fontBold, fontSize: 10,
-                        color: PdfColors.blue700))),
+                        font: fontBold, fontSize: 10, color: PdfColors.blue700))),
               ],
             )),
           ],
@@ -302,7 +287,6 @@ class ReportePdfService {
             5: const pw.FixedColumnWidth(60),
           },
           children: [
-            // Header
             pw.TableRow(
               decoration: const pw.BoxDecoration(
                   color: PdfColor.fromInt(0xFF1A1A2E)),
@@ -315,43 +299,35 @@ class ReportePdfService {
                           color: PdfColors.white))))
                   .toList(),
             ),
-            // Filas
             ...rep.ventas.map((v) {
               final esAnulada = v['estado'] == 'anulada';
-              final created = v['created_at']?.toString() ?? '';
-              final hora = created.length >= 19
+              final created   = v['created_at']?.toString() ?? '';
+              final hora      = created.length >= 19
                   ? created.substring(11, 16) : '';
               return pw.TableRow(
                 decoration: pw.BoxDecoration(
                   color: esAnulada ? PdfColors.red50 : PdfColors.white),
                 children: [
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.all(5),
+                  pw.Padding(padding: const pw.EdgeInsets.all(5),
                     child: pw.Text(v['numero_factura'] ?? '',
                       style: pw.TextStyle(
                           font: fontMedium, fontSize: 9,
                           color: PdfColors.blue700))),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.all(5),
+                  pw.Padding(padding: const pw.EdgeInsets.all(5),
                     child: pw.Text(hora,
                       style: pw.TextStyle(font: font, fontSize: 9))),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.all(5),
+                  pw.Padding(padding: const pw.EdgeInsets.all(5),
                     child: pw.Text(
                       v['cliente_nombre'] ?? 'Consumidor Final',
                       style: pw.TextStyle(font: font, fontSize: 9))),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.all(5),
+                  pw.Padding(padding: const pw.EdgeInsets.all(5),
                     child: pw.Text(v['metodo_pago'] ?? '',
                       style: pw.TextStyle(font: font, fontSize: 9))),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.all(5),
+                  pw.Padding(padding: const pw.EdgeInsets.all(5),
                     child: pw.Text(
                       '\$${_fmt(double.tryParse(v['total'].toString()) ?? 0)}',
-                      style: pw.TextStyle(
-                          font: fontBold, fontSize: 9))),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.all(5),
+                      style: pw.TextStyle(font: fontBold, fontSize: 9))),
+                  pw.Padding(padding: const pw.EdgeInsets.all(5),
                     child: pw.Text(v['estado'] ?? '',
                       style: pw.TextStyle(
                           font: fontMedium, fontSize: 9,
@@ -361,6 +337,140 @@ class ReportePdfService {
                 ],
               );
             }),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ── ✅ NUEVO: Tabla abonos ─────────────────────────
+
+  static pw.Widget _buildAbonos({
+    required ReportesProvider rep,
+    required pw.Font fontBold,
+    required pw.Font font,
+    required pw.Font fontMedium,
+  }) {
+    final totalAbonos = rep.totalAbonos;
+    final cantidad    = rep.cantidadAbonos;
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        // ── Título con badge ────────────────────────
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          children: [
+            pw.Text('Abonos a separados del día',
+              style: pw.TextStyle(font: fontBold, fontSize: 13)),
+            pw.SizedBox(width: 10),
+            pw.Container(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.teal50,
+                borderRadius: pw.BorderRadius.circular(20),
+                border: pw.Border.all(color: PdfColors.teal200),
+              ),
+              child: pw.Text(
+                '$cantidad abono${cantidad > 1 ? "s" : ""}',
+                style: pw.TextStyle(
+                    font: fontBold, fontSize: 9, color: PdfColors.teal700)),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 8),
+
+        // ── Tabla ───────────────────────────────────
+        pw.Table(
+          border: pw.TableBorder.all(color: PdfColors.teal100),
+          columnWidths: {
+            0: const pw.FixedColumnWidth(70),
+            1: const pw.FixedColumnWidth(45),
+            2: const pw.FlexColumnWidth(),
+            3: const pw.FlexColumnWidth(),
+            4: const pw.FixedColumnWidth(80),
+            5: const pw.FixedColumnWidth(80),
+          },
+          children: [
+            // Header teal
+            pw.TableRow(
+              decoration: const pw.BoxDecoration(color: PdfColors.teal700),
+              children: ['Separado', 'Hora', 'Cliente', 'Empleado', 'Método', 'Monto']
+                  .map((h) => pw.Padding(
+                    padding: const pw.EdgeInsets.all(6),
+                    child: pw.Text(h,
+                      style: pw.TextStyle(
+                          font: fontBold, fontSize: 9,
+                          color: PdfColors.white))))
+                  .toList(),
+            ),
+
+            // Filas de abonos
+            ...rep.abonos.asMap().entries.map((entry) {
+              final i = entry.key;
+              final a = entry.value;
+              final created = a['created_at']?.toString() ?? '';
+              final hora    = created.length >= 19
+                  ? created.substring(11, 16) : '';
+              final bgColor = i.isEven ? PdfColors.teal50 : PdfColors.white;
+
+              return pw.TableRow(
+                decoration: pw.BoxDecoration(color: bgColor),
+                children: [
+                  pw.Padding(padding: const pw.EdgeInsets.all(5),
+                    child: pw.Text('SEP-${a['separado_id']}',
+                      style: pw.TextStyle(
+                          font: fontBold, fontSize: 9,
+                          color: PdfColors.teal700))),
+                  pw.Padding(padding: const pw.EdgeInsets.all(5),
+                    child: pw.Text(hora,
+                      style: pw.TextStyle(font: font, fontSize: 9))),
+                  pw.Padding(padding: const pw.EdgeInsets.all(5),
+                    child: pw.Text(a['cliente_nombre'] ?? '',
+                      style: pw.TextStyle(font: font, fontSize: 9))),
+                  pw.Padding(padding: const pw.EdgeInsets.all(5),
+                    child: pw.Text(a['empleado_nombre'] ?? '',
+                      style: pw.TextStyle(font: font, fontSize: 9))),
+                  pw.Padding(padding: const pw.EdgeInsets.all(5),
+                    child: pw.Text(a['metodo_pago'] ?? '',
+                      style: pw.TextStyle(font: fontMedium, fontSize: 9))),
+                  pw.Padding(padding: const pw.EdgeInsets.all(5),
+                    child: pw.Text(
+                      '\$${_fmt(double.tryParse(a['monto'].toString()) ?? 0)}',
+                      style: pw.TextStyle(
+                          font: fontBold, fontSize: 9,
+                          color: PdfColors.teal700))),
+                ],
+              );
+            }),
+
+            // ── Fila total ───────────────────────────
+            pw.TableRow(
+              decoration: const pw.BoxDecoration(color: PdfColors.teal100),
+              children: [
+                pw.Padding(padding: const pw.EdgeInsets.all(6),
+                  child: pw.Text('TOTAL',
+                    style: pw.TextStyle(
+                        font: fontBold, fontSize: 10,
+                        color: PdfColors.teal900))),
+                pw.Padding(padding: const pw.EdgeInsets.all(6),
+                  child: pw.Text('')),
+                pw.Padding(padding: const pw.EdgeInsets.all(6),
+                  child: pw.Text('$cantidad abono${cantidad > 1 ? "s" : ""}',
+                    style: pw.TextStyle(
+                        font: fontMedium, fontSize: 9,
+                        color: PdfColors.teal800))),
+                pw.Padding(padding: const pw.EdgeInsets.all(6),
+                  child: pw.Text('')),
+                pw.Padding(padding: const pw.EdgeInsets.all(6),
+                  child: pw.Text('')),
+                pw.Padding(padding: const pw.EdgeInsets.all(6),
+                  child: pw.Text('\$${_fmt(totalAbonos)}',
+                    style: pw.TextStyle(
+                        font: fontBold, fontSize: 11,
+                        color: PdfColors.teal900))),
+              ],
+            ),
           ],
         ),
       ],

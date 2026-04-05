@@ -90,4 +90,34 @@ class ContabilidadService {
       return true;
     } catch (_) { return false; }
   }
+
+  Future<List<Map<String, dynamic>>> getAbonosDia(
+      String fecha, int? tiendaId) async {
+    try {
+      final params = <String, dynamic>{'fecha': fecha};
+      if (tiendaId != null) params['tienda_id'] = tiendaId.toString();
+      final r = await ApiClient.instance.get(
+          '/clientes/abonos/', queryParameters: params);
+      return List<Map<String, dynamic>>.from(r.data['abonos'] ?? []);
+    } catch (e) {
+      debugPrint('❌ getAbonosDia error: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getSeparadosDia(
+      String fecha, int? tiendaId) async {
+    try {
+      final params = <String, dynamic>{'fecha_creacion': fecha};
+      if (tiendaId != null) params['tienda_id'] = tiendaId.toString();
+      final r = await ApiClient.instance.get(
+          '/clientes/separados/', queryParameters: params);
+      final data  = r.data;
+      final lista = data is List ? data : (data['results'] ?? data);
+      return List<Map<String, dynamic>>.from(lista);
+    } catch (e) {
+      debugPrint('❌ getSeparadosDia error: $e');
+      return [];
+    }
+  }
 }

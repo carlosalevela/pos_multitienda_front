@@ -802,15 +802,22 @@ class _SeparadoCard extends StatelessWidget {
 
   // ── Abonar dialog ────────────────────────────────────
   void _mostrarAbonar(BuildContext context) {
-    final montoCtrl = TextEditingController();
-    String metodoPago = 'efectivo';
+  final montoCtrl    = TextEditingController();
+  final recibidoCtrl = TextEditingController();
+  String metodoPago  = 'efectivo';
 
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setStateDialog) => AlertDialog(
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16)),
+  showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setStateDialog) {
+        // ── cálculo reactivo ──────────────────────────
+        final montoAbonar   = double.tryParse(montoCtrl.text)    ?? 0;
+        final montoRecibido = double.tryParse(recibidoCtrl.text) ?? 0;
+        final vuelto        = (montoRecibido - montoAbonar).clamp(0, double.infinity);
+        final esEfectivo    = metodoPago == 'efectivo';
+
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(children: [
             const Icon(Icons.payments_rounded,
                 color: Color(Constants.primaryColor)),
@@ -823,11 +830,12 @@ class _SeparadoCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Info separado
+
+              // ── Info saldo ──────────────────────────
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color:        Colors.orange.shade50,
+                  color: Colors.orange.shade50,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: Colors.orange.shade200)),
                 child: Row(
@@ -858,7 +866,7 @@ class _SeparadoCard extends StatelessWidget {
               ),
               const SizedBox(height: 16),
 
-              // Monto
+              // ── Monto a abonar ──────────────────────
               Text('Monto a abonar',
                 style: GoogleFonts.poppins(
                     fontSize: 13, fontWeight: FontWeight.w600)),
@@ -868,6 +876,7 @@ class _SeparadoCard extends StatelessWidget {
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 style: GoogleFonts.poppins(fontSize: 14),
+                onChanged: (_) => setStateDialog(() {}), // recalcula vuelto
                 decoration: InputDecoration(
                   prefixText: '\$ ',
                   hintText:   'Ej: 50000',
@@ -884,7 +893,7 @@ class _SeparadoCard extends StatelessWidget {
               ),
               const SizedBox(height: 14),
 
-              // Método de pago
+              // ── Método de pago ──────────────────────
               Text('Método de pago',
                 style: GoogleFonts.poppins(
                     fontSize: 13, fontWeight: FontWeight.w600)),
@@ -893,11 +902,98 @@ class _SeparadoCard extends StatelessWidget {
                 _metodoPagoChip('efectivo', '💵 Efectivo',
                     metodoPago, (v) => setStateDialog(() => metodoPago = v)),
                 const SizedBox(width: 8),
-                _metodoPagoChip('transferencia', '📲 Transferencia',
+                _metodoPagoChip('tarjeta', '💳 Tarjeta',
+                    metodoPago, (v) => setStateDialog(() => metodoPago = v)),
+                const SizedBox(width: 8),
+                _metodoPagoChip('transferencia', '📲 Transfer',
                     metodoPago, (v) => setStateDialog(() => metodoPago = v)),
               ]),
+
+              // ── Monto recibido (solo efectivo) ──────
+              if (esEfectivo) ...[
+                const SizedBox(height: 14),
+                Text('Monto recibido',
+                  style: GoogleFonts.poppins(
+                      fontSize: 13, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller:   recibidoCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: GoogleFonts.poppins(fontSize: 14),
+                  onChanged: (_) => setStateDialog(() {}), // recalcula vuelto
+                  decoration: InputDecoration(
+                    prefixText: '\$ ',
+                    hintText:   'Ej: 50000',
+                    filled:     true,
+                    fillColor:  Colors.grey.shade50,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: Colors.grey.shade300)),
+                    focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(
+                            color: Color(Constants.primaryColor))),
+                  ),
+                ),
+              ],
+
+              // ── Caja de vuelto (solo si efectivo y hay datos) ──
+              if (esEfectivo && montoRecibido > 0 && montoAbonar > 0) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color:        vuelto > 0
+                        ? Colors.green.shade50
+                        : Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: vuelto > 0
+                          ? Colors.green.shade300
+                          : Colors.red.shade300),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(children: [
+                        Icon(
+                          vuelto > 0
+                              ? Icons.keyboard_return_rounded
+                              : Icons.warning_rounded,
+                          size: 18,
+                          color: vuelto > 0
+                              ? Colors.green.shade700
+                              : Colors.red.shade700,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          vuelto > 0 ? 'Vuelto a entregar' : 'Monto insuficiente',
+                          style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: vuelto > 0
+                                  ? Colors.green.shade700
+                                  : Colors.red.shade700),
+                        ),
+                      ]),
+                      Text(
+                        '\$${vuelto.toStringAsFixed(0)}',
+                        style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: vuelto > 0
+                                ? Colors.green.shade700
+                                : Colors.red.shade700),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           )),
+
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
@@ -915,6 +1011,19 @@ class _SeparadoCard extends StatelessWidget {
               onPressed: () async {
                 final monto = double.tryParse(montoCtrl.text) ?? 0;
                 if (monto <= 0) return;
+
+                // Validación efectivo
+                if (esEfectivo) {
+                  final recibido = double.tryParse(recibidoCtrl.text) ?? 0;
+                  if (recibido < monto) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('El monto recibido es menor al abono',
+                          style: GoogleFonts.poppins()),
+                      backgroundColor: Colors.red));
+                    return;
+                  }
+                }
+
                 if (monto > separado.saldoPendiente) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                     content: Text('El monto no puede superar el saldo pendiente',
@@ -922,12 +1031,18 @@ class _SeparadoCard extends StatelessWidget {
                     backgroundColor: Colors.red));
                   return;
                 }
+
                 Navigator.pop(ctx);
                 final ok = await prov.abonarSeparado(
                     separado.id, monto, metodoPago);
                 if (ok && context.mounted) {
+                  // Muestra vuelto en el snackbar si fue efectivo
+                  final recibido = double.tryParse(recibidoCtrl.text) ?? 0;
+                  final msgVuelto = esEfectivo && recibido > monto
+                      ? ' — Vuelto: \$${(recibido - monto).toStringAsFixed(0)}'
+                      : '';
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text('✅ Abono registrado correctamente',
+                    content: Text('✅ Abono registrado$msgVuelto',
                         style: GoogleFonts.poppins()),
                     backgroundColor: Colors.green,
                     behavior: SnackBarBehavior.floating));
@@ -935,10 +1050,11 @@ class _SeparadoCard extends StatelessWidget {
               },
             ),
           ],
-        ),
-      ),
-    );
-  }
+        );
+      },
+    ),
+  );
+}
 
   Widget _metodoPagoChip(String value, String label,
       String current, Function(String) onSelect) {

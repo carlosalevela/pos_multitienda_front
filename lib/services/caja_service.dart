@@ -3,7 +3,6 @@ import '../core/api_client.dart';
 import '../models/sesion_caja.dart';
 import '../models/resumen_cierre.dart';
 
-
 class CajaService {
 
   Future<SesionCaja?> getSesionActiva(int tiendaId) async {
@@ -52,7 +51,7 @@ class CajaService {
     }
   }
 
-  // ✅ NUEVO — usa ApiClient.instance, no _dio
+  // ✅ Ahora parsea efectivo y transferencia del breakdown
   Future<AbonosCierre> getAbonosSesion(DateTime fechaApertura) async {
     try {
       final fecha = fechaApertura.toLocal().toString().substring(0, 10);
@@ -60,9 +59,32 @@ class CajaService {
         '/clientes/abonos/',
         queryParameters: {'fecha': fecha},
       );
-      final total    = (resp.data['total']     ?? 0).toDouble();
-      final cantidad = (resp.data['abonos'] as List).length;
-      return AbonosCierre(total: total, cantidad: cantidad);
+
+      final data   = resp.data as Map<String, dynamic>;
+      final lista  = (data['abonos'] as List? ?? []);
+
+      // Suma por método de pago iterando la lista
+      double totalEfectivo      = 0;
+      double totalTransferencia = 0;
+      double totalGeneral       = 0;
+
+      for (final a in lista) {
+        final monto  = double.tryParse(a['monto']?.toString() ?? '0') ?? 0.0;
+        final metodo = a['metodo_pago']?.toString() ?? '';
+        totalGeneral += monto;
+        if (metodo == 'efectivo')      totalEfectivo      += monto;
+        if (metodo == 'transferencia') totalTransferencia += monto;
+      }
+
+      // Si el backend ya retorna el total directamente úsalo, si no usa la suma
+      final totalBackend = double.tryParse(data['total']?.toString() ?? '0') ?? 0.0;
+
+      return AbonosCierre(
+        total:         totalBackend > 0 ? totalBackend : totalGeneral,
+        efectivo:      totalEfectivo,
+        transferencia: totalTransferencia,
+        cantidad:      lista.length,
+      );
     } catch (_) {
       return AbonosCierre.vacio();
     }

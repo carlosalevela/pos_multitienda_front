@@ -10,6 +10,9 @@ class ContabilidadProvider extends ChangeNotifier {
   List<TopProducto> topProductos = [];
   List<Gasto>       gastos       = [];
 
+  List<Map<String, dynamic>> abonosDia    = [];
+  List<Map<String, dynamic>> separadosDia = [];
+
   bool   _cargando   = false;
   bool   _guardando  = false;
   String _errorMsg   = '';
@@ -35,12 +38,20 @@ class ContabilidadProvider extends ChangeNotifier {
         ? '${fecha.year}-'
           '${fecha.month.toString().padLeft(2, '0')}-'
           '${fecha.day.toString().padLeft(2, '0')}'
-        : null;
+        : '${DateTime.now().year}-'
+          '${DateTime.now().month.toString().padLeft(2, '0')}-'
+          '${DateTime.now().day.toString().padLeft(2, '0')}';
 
-    resumenDiario = await _service.getResumenDiario(  // ✅ FIX: era _resumenDiario
-      tiendaId: tiendaId,
-      fecha: fechaStr,
-    );
+    final results = await Future.wait([
+      _service.getResumenDiario(tiendaId: tiendaId, fecha: fechaStr),
+      _service.getAbonosDia(fechaStr, tiendaId),    // ✅ nuevo
+      _service.getSeparadosDia(fechaStr, tiendaId), // ✅ nuevo
+    ]);
+
+    resumenDiario = results[0] as ResumenDiario?;
+    abonosDia     = results[1] as List<Map<String, dynamic>>;
+    separadosDia  = results[2] as List<Map<String, dynamic>>;
+
     _cargando = false;
     notifyListeners();
   }

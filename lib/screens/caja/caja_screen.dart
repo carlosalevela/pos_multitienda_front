@@ -285,6 +285,7 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
 
   String _f(double v) => '\$${_fmt.format(v)}';
 
+  // ✅ Usa montoEsperadoCaja del backend (ya incluye abonos en efectivo)
   double get _diferencia =>
       _montoIngresado - (context.read<CajaProvider>().resumenCierre?.montoEsperadoCaja ?? 0);
 
@@ -370,7 +371,7 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
     key: const ValueKey(1),
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      // Tarjeta del empleado
+      // Tarjeta empleado
       Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
@@ -438,7 +439,7 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
       ),
       const SizedBox(height: 16),
 
-      // ✅ ABONOS — visible solo si hay abonos en el turno
+      // Abonos — solo si existen
       if (r.abonos.total > 0) ...[
         _tituloSeccion('🔖 Abonos recibidos', Colors.teal.shade700),
         const SizedBox(height: 8),
@@ -449,7 +450,12 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.teal.shade200)),
           child: Column(children: [
-            _fila('Total abonos', r.abonos.total, Colors.teal.shade700),
+            if (r.abonos.efectivo > 0)
+              _fila('Efectivo',      r.abonos.efectivo,      Colors.teal.shade700),
+            if (r.abonos.transferencia > 0)
+              _fila('Transferencia', r.abonos.transferencia, Colors.teal.shade600),
+            const Divider(height: 12),
+            _fila('TOTAL ABONOS',   r.abonos.total,         Colors.teal.shade800, bold: true),
             const SizedBox(height: 4),
             Align(
               alignment: Alignment.centerRight,
@@ -464,13 +470,13 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
           Icon(Icons.info_outline, size: 13, color: Colors.grey.shade400),
           const SizedBox(width: 6),
           Expanded(child: Text(
-            'Los abonos son pagos a créditos existentes, no cuentan en el cuadre de caja.',
+            'Solo los abonos en efectivo afectan el cuadre de caja.',
             style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade500))),
         ]),
         const SizedBox(height: 16),
       ],
 
-      // Cálculo caja física
+      // ✅ Cálculo caja física — ahora incluye abonos en efectivo
       _tituloSeccion('💵 Cálculo de caja física', Colors.green.shade700),
       const SizedBox(height: 8),
       Container(
@@ -480,13 +486,16 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.green.shade200, width: 1.5)),
         child: Column(children: [
-          _fila('Saldo inicial',     r.montoInicial,      Colors.black87),
-          _fila('+ Ventas efectivo', r.ventas.efectivo,   Colors.green.shade700),
+          _fila('Saldo inicial',      r.montoInicial,    Colors.black87),
+          _fila('+ Ventas efectivo',  r.ventas.efectivo, Colors.green.shade700),
           if (r.ventas.mixto > 0)
-            _fila('+ Ventas mixto',  r.ventas.mixto,      Colors.green.shade700),
-          _fila('- Gastos efectivo', r.gastos.efectivo,   Colors.red.shade600, negativo: true),
+            _fila('+ Ventas mixto',   r.ventas.mixto,    Colors.green.shade700),
+          // ✅ NUEVO — abonos en efectivo suman a la caja
+          if (r.abonos.efectivo > 0)
+            _fila('+ Abonos efectivo', r.abonos.efectivo, Colors.teal.shade700),
+          _fila('- Gastos efectivo',  r.gastos.efectivo, Colors.red.shade600, negativo: true),
           const Divider(height: 16),
-          _fila('ESPERADO EN CAJA',  r.montoEsperadoCaja, Colors.green.shade800, bold: true),
+          _fila('ESPERADO EN CAJA',   r.montoEsperadoCaja, Colors.green.shade800, bold: true),
         ]),
       ),
       const SizedBox(height: 8),
@@ -520,6 +529,25 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
           Text(_f(r.montoEsperadoCaja),
             style: GoogleFonts.poppins(
               color: Colors.white, fontWeight: FontWeight.bold, fontSize: 32)),
+          // ✅ Desglose rápido
+          const SizedBox(height: 8),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 12,
+            children: [
+              _chipInfo('Inicial',    _f(r.montoInicial)),
+              _chipInfo('Ventas ef.', _f(r.ventas.efectivo)),
+              if (r.abonos.efectivo > 0)
+                _chipInfo('Abonos ef.', _f(r.abonos.efectivo)),
+              if (r.gastos.efectivo > 0)
+                _chipInfo(
+                  '- Gastos',
+                  _f(r.gastos.efectivo),
+                  labelColor: Colors.red.shade200,    // ✅ rojo suave
+                  valorColor: Colors.red.shade200,    // ✅ rojo suave
+                ),
+            ],
+          ),
         ]),
       ),
       const SizedBox(height: 24),
@@ -569,6 +597,14 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
     ],
   );
 
+  Widget _chipInfo(String label, String valor, {Color labelColor = Colors.white60, Color valorColor = Colors.white}) => Column(
+  children: [
+    Text(label, style: GoogleFonts.poppins(color: labelColor, fontSize: 10)),
+    Text(valor,  style: GoogleFonts.poppins(
+        color: valorColor, fontSize: 12, fontWeight: FontWeight.bold)),
+  ],
+);
+
 
   // ── PASO 3 ───────────────────────────────────────────
   Widget _buildPaso3(ResumenCierre r) {
@@ -576,9 +612,9 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
     final esExacto   = dif.abs() < 0.01;
     final esSobrante = dif > 0;
 
-    final color    = esExacto ? Colors.green.shade600
+    final color     = esExacto ? Colors.green.shade600
         : esSobrante ? Colors.blue.shade600 : Colors.red.shade600;
-    final icono    = esExacto ? '✅' : esSobrante ? '💰' : '⚠️';
+    final icono     = esExacto ? '✅' : esSobrante ? '💰' : '⚠️';
     final resultado = esExacto ? 'CUADRE EXACTO'
         : esSobrante ? 'SOBRANTE' : 'FALTANTE';
 
@@ -646,11 +682,15 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
             _rFila('Transacciones', '${r.ventas.numTransacciones}'),
             const SizedBox(height: 10),
 
-            // ✅ ABONOS en el ticket — solo si existen
+            // Abonos en el ticket — solo si existen
             if (r.abonos.total > 0) ...[
               _rSeccion('ABONOS RECIBIDOS'),
-              _rFila('Total abonos', _f(r.abonos.total)),
-              _rFila('Cantidad',     '${r.abonos.cantidad}'),
+              if (r.abonos.efectivo > 0)
+                _rFila('Efectivo',      _f(r.abonos.efectivo)),
+              if (r.abonos.transferencia > 0)
+                _rFila('Transferencia', _f(r.abonos.transferencia)),
+              _rFila('TOTAL ABONOS',   _f(r.abonos.total), bold: true),
+              _rFila('Cantidad',        '${r.abonos.cantidad}'),
               const SizedBox(height: 10),
             ],
 
@@ -664,12 +704,15 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
             ],
             const SizedBox(height: 10),
 
+            // ✅ Cálculo con abonos en efectivo
             _rSeccion('CÁLCULO CAJA FÍSICA'),
             _rFila('Saldo inicial',    _f(r.montoInicial)),
-            _rFila('+ Ef. ventas',     '+${_f(r.ventas.efectivo)}'),
+            _rFila('+ Ef. ventas',    '+${_f(r.ventas.efectivo)}'),
             if (r.ventas.mixto > 0)
-              _rFila('+ Mixto',        '+${_f(r.ventas.mixto)}'),
-            _rFila('- Ef. gastos',     '-${_f(r.gastos.efectivo)}'),
+              _rFila('+ Mixto',       '+${_f(r.ventas.mixto)}'),
+            if (r.abonos.efectivo > 0)
+              _rFila('+ Ef. abonos',  '+${_f(r.abonos.efectivo)}'),  // ✅ NUEVO
+            _rFila('- Ef. gastos',    '-${_f(r.gastos.efectivo)}'),
             _rDivider(),
             _rFila('ESPERADO EN CAJA', _f(r.montoEsperadoCaja), bold: true),
             const SizedBox(height: 10),
@@ -790,7 +833,8 @@ class _CorteCajaDialogState extends State<_CorteCajaDialog> {
       ]),
     );
 
-  // ── Helpers ticket (recibo) ──────────────────────────
+
+  // ── Helpers ticket ───────────────────────────────────
   Widget _mono(String texto, Color color, {bool bold = false}) => Text(
     texto,
     style: TextStyle(
