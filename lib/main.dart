@@ -11,6 +11,7 @@ import 'providers/caja_provider.dart';
 import 'providers/contabilidad_provider.dart';
 import 'providers/tienda_provider.dart';
 import 'providers/cliente_provider.dart';
+import 'providers/proveedores_provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() {
@@ -25,6 +26,7 @@ void main() {
         ChangeNotifierProvider(create: (_) => ContabilidadProvider()),
         ChangeNotifierProvider(create: (_) => TiendaProvider()),
         ChangeNotifierProvider(create: (_) => ClienteProvider()),
+        ChangeNotifierProvider(create: (_) => ProveedoresProvider()),
       ],
       child: const MyApp(),
     ),

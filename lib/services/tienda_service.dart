@@ -57,4 +57,14 @@ class TiendaService {
       return null;
     }
   }
+
+  Future<List<Map<String, dynamic>>> getTiendasSimple() async {
+  try {
+    final r = await ApiClient.instance.get('/tiendas/simple/');
+    return List<Map<String, dynamic>>.from(r.data);
+  } catch (e) {
+    debugPrint('❌ getTiendasSimple error: $e');
+    return [];
+  }
+}
 }
