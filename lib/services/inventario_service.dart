@@ -47,7 +47,8 @@ class InventarioService {
     try {
       await ApiClient.instance.delete('/productos/$id/');
       return true;
-    } catch (_) {
+    } catch (e) {
+      print('❌ eliminarProducto error: $e'); // ✅ ahora puedes ver qué falla
       return false;
     }
   }

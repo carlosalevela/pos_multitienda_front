@@ -74,6 +74,7 @@ class Gasto {
   final String descripcion;
   final double monto;
   final String metodoPago;
+  final String visibilidad; 
   final String createdAt;
 
   Gasto({
@@ -81,6 +82,7 @@ class Gasto {
     required this.tiendaNombre, required this.empleadoNombre,
     required this.categoria, required this.descripcion,
     required this.monto, required this.metodoPago,
+    this.visibilidad = 'todos',
     required this.createdAt,
   });
 
@@ -93,6 +95,7 @@ class Gasto {
     descripcion:    j['descripcion'] ?? '',
     monto:          double.parse((j['monto'] ?? '0').toString()), // ✅ FIX
     metodoPago:     j['metodo_pago'] ?? 'efectivo',
+    visibilidad:    j['visibilidad']    ?? 'todos',
     createdAt:      j['created_at'] ?? '',
   );
 }

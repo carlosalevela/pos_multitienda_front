@@ -84,13 +84,16 @@ class InventarioProvider extends ChangeNotifier {
     return result['success'] as bool;
   }
 
-  Future<bool> eliminarProducto(int id) async {
+  Future<bool> eliminarProducto(int id, {int? tiendaId}) async {
+    // ✅ Primero llama al backend
     final ok = await _service.eliminarProducto(id);
+
+    // ✅ Solo actualiza la UI si el backend confirmó el delete
     if (ok) {
       _productos.removeWhere((p) => p.id == id);
-      _successMsg = '🗑️ Producto eliminado';
       notifyListeners();
     }
+
     return ok;
   }
 

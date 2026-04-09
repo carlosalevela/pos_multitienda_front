@@ -542,38 +542,58 @@ class _InventarioScreenState extends State<InventarioScreen> {
   }
 
   void _confirmarEliminar(
-      BuildContext context, InventarioProvider inv, Producto p) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16)),
-        title: Text('¿Eliminar producto?',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-        content: Text('Se desactivará "${p.nombre}" del inventario.',
-            style: GoogleFonts.poppins(fontSize: 14)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () async {
-              await inv.eliminarProducto(p.id);
-              if (context.mounted) {
-                Navigator.pop(context);
-                inv.cargarProductos(tiendaId: _tiendaActiva);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8))),
-            child: const Text('Eliminar')),
-        ],
-      ),
-    );
-  }
+    BuildContext context, InventarioProvider inv, Producto p) {
+  showDialog(
+    context: context,
+    builder: (_) => AlertDialog(
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16)),
+      title: Text('¿Eliminar producto?',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+      content: Text('Se desactivará "${p.nombre}" del inventario.',
+          style: GoogleFonts.poppins(fontSize: 14)),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar')),
+        ElevatedButton(
+          onPressed: () async {
+            Navigator.pop(context);
+
+            // ✅ Ahora sí espera la respuesta real del backend
+            final ok = await inv.eliminarProducto(p.id);
+
+            if (!context.mounted) return;
+
+            if (ok) {
+              // ✅ Solo recarga si el backend confirmó el delete
+              inv.cargarProductos(tiendaId: _tiendaActiva);
+            } else {
+              // ✅ Avisa al usuario si falló
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    '❌ No se pudo eliminar "${p.nombre}"',
+                    style: GoogleFonts.poppins(fontSize: 13),
+                  ),
+                  backgroundColor: Colors.red.shade600,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              );
+            }
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.redAccent,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8))),
+          child: const Text('Eliminar')),
+      ],
+    ),
+  );
+}
 
   Widget _emptyState(bool esCajero) => Center(
     child: Column(

@@ -40,7 +40,7 @@ class _EmpleadoFormDialogState extends State<EmpleadoFormDialog> {
       _apellidoCtrl.text = e['apellido'] ?? '';
       _cedulaCtrl.text   = e['cedula']   ?? '';
       _emailCtrl.text    = e['email']    ?? '';
-      _rolSelected       = e['rol']      ?? 'cajero';
+      _rolSelected = (e['rol'] == 'admin') ? 'supervisor' : (e['rol'] ?? 'cajero');
       _tiendaSelected    = e['tienda'];
     }
   }
@@ -195,9 +195,6 @@ class _EmpleadoFormDialogState extends State<EmpleadoFormDialog> {
                       DropdownMenuItem(
                           value: 'supervisor',
                           child: Text('Supervisor')),
-                      DropdownMenuItem(
-                          value: 'admin',
-                          child: Text('Admin')),
                     ],
                     onChanged: (v) => setState(() => _rolSelected = v!),
                   ),
@@ -308,22 +305,21 @@ class _EmpleadoFormDialogState extends State<EmpleadoFormDialog> {
     );
   }
 
-  Future<void> _guardar() async {
-    if (!_formKey.currentState!.validate()) return;
+    Future<void> _guardar() async {
+      if (!_formKey.currentState!.validate()) return;
+      setState(() => _guardando = true);
 
-    setState(() => _guardando = true);
+      final data = {
+        'nombre':   _nombreCtrl.text.trim(),
+        'apellido': _apellidoCtrl.text.trim(),
+        'cedula':   _cedulaCtrl.text.trim(),
+        'email':    _emailCtrl.text.trim(),
+        'rol':      _rolSelected,
+        if (_tiendaSelected != null) 'tienda': _tiendaSelected,
+        if (_passCtrl.text.isNotEmpty) 'password': _passCtrl.text.trim(),
+      };
 
-    final data = {
-      'nombre':   _nombreCtrl.text.trim(),
-      'apellido': _apellidoCtrl.text.trim(),
-      'cedula':   _cedulaCtrl.text.trim(),
-      'email':    _emailCtrl.text.trim(),
-      'rol':      _rolSelected,
-      if (_tiendaSelected != null) 'tienda': _tiendaSelected,
-      if (_passCtrl.text.isNotEmpty) 'password': _passCtrl.text.trim(),
-    };
-
-    await widget.onGuardar(data);
-    setState(() => _guardando = false);
-  }
+      await widget.onGuardar(data);
+      if (mounted) setState(() => _guardando = false);  // ← solo si sigue vivo
+    }
 }

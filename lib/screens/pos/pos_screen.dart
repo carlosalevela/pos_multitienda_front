@@ -22,6 +22,7 @@ class _PosScreenState extends State<PosScreen> {
   final _searchCtrl        = TextEditingController();
   final _montoCtrl         = TextEditingController();
   final _clienteSearchCtrl = TextEditingController();
+  final _descuentoCtrl     = TextEditingController(); // ✅ DESCUENTO
   final _searchFocus       = FocusNode();
 
   Cliente?  _clienteSeleccionado;
@@ -33,6 +34,7 @@ class _PosScreenState extends State<PosScreen> {
     _searchCtrl.dispose();
     _montoCtrl.dispose();
     _clienteSearchCtrl.dispose();
+    _descuentoCtrl.dispose(); // ✅ DESCUENTO
     _searchFocus.dispose();
     super.dispose();
   }
@@ -309,23 +311,73 @@ class _PosScreenState extends State<PosScreen> {
               color: Colors.grey.shade50,
               border: Border(top: BorderSide(color: Colors.grey.shade200))),
             child: Column(children: [
-              // Total
+
+              // ✅ DESCUENTO — Total bruto
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('TOTAL',
+                  Text('SUBTOTAL',
                     style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.bold, fontSize: 16,
-                        color: const Color(0xFF1A1A2E))),
+                        fontWeight: FontWeight.w600, fontSize: 14,
+                        color: Colors.grey.shade600)),
                   Text('\$${pos.total.toStringAsFixed(0)}',
                     style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.bold, fontSize: 20,
-                        color: const Color(Constants.primaryColor))),
+                        fontWeight: FontWeight.w600, fontSize: 16,
+                        color: Colors.grey.shade600)),
                 ],
               ),
+              const SizedBox(height: 10),
+
+              // ✅ DESCUENTO — Campo + botones %
+              _buildDescuentoField(pos),
+
+              // ✅ DESCUENTO — Total final destacado
+              if (pos.descuento > 0) ...[
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade200)),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(children: [
+                        Icon(Icons.discount_rounded,
+                            size: 14, color: Colors.green.shade700),
+                        const SizedBox(width: 6),
+                        Text('Descuento: -\$${pos.descuento.toStringAsFixed(0)}',
+                          style: GoogleFonts.poppins(
+                              color: Colors.green.shade700,
+                              fontSize: 12, fontWeight: FontWeight.w500)),
+                      ]),
+                      Text('\$${pos.totalConDescuento.toStringAsFixed(0)}',
+                        style: GoogleFonts.poppins(
+                            color: Colors.green.shade700,
+                            fontWeight: FontWeight.bold, fontSize: 18)),
+                    ],
+                  ),
+                ),
+              ] else ...[
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('TOTAL',
+                      style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold, fontSize: 16,
+                          color: const Color(0xFF1A1A2E))),
+                    Text('\$${pos.total.toStringAsFixed(0)}',
+                      style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold, fontSize: 20,
+                          color: const Color(Constants.primaryColor))),
+                  ],
+                ),
+              ],
               const SizedBox(height: 12),
 
-              // ✅ Métodos de pago — 4 botones en grilla 2×2
+              // Métodos de pago — 4 botones en grilla 2×2
               GridView.count(
                 crossAxisCount: 2,
                 shrinkWrap: true,
@@ -335,7 +387,7 @@ class _PosScreenState extends State<PosScreen> {
                 childAspectRatio: 3.2,
                 children: [
                   _metodoBtn('efectivo',      '💵 Efectivo',   pos),
-                  _metodoBtn('tarjeta',       '💳 Tarjeta',    pos), // ✅ NUEVO
+                  _metodoBtn('tarjeta',       '💳 Tarjeta',    pos),
                   _metodoBtn('transferencia', '📲 Transfer.',  pos),
                   _metodoBtn('separado',      '📦 Separado',   pos),
                 ],
@@ -418,6 +470,69 @@ class _PosScreenState extends State<PosScreen> {
       ]),
     );
   }
+
+  // ✅ DESCUENTO — campo + botones de porcentaje rápido
+  Widget _buildDescuentoField(PosProvider pos) {
+    return Row(children: [
+      Expanded(
+        child: TextField(
+          controller:      _descuentoCtrl,
+          keyboardType:    TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: InputDecoration(
+            labelText:  'Descuento',
+            labelStyle: GoogleFonts.poppins(fontSize: 12),
+            prefixText: '\$ ',
+            filled:     true, fillColor: Colors.white,
+            isDense:    true,
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: Colors.grey.shade300)),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: Colors.grey.shade300)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(
+                    color: Color(Constants.primaryColor), width: 2)),
+            suffixIcon: pos.descuento > 0
+                ? IconButton(
+                    icon: const Icon(Icons.close_rounded,
+                        size: 16, color: Colors.grey),
+                    onPressed: () {
+                      _descuentoCtrl.clear();
+                      pos.setDescuento(0);
+                    })
+                : null,
+          ),
+          onChanged: (v) => pos.setDescuento(double.tryParse(v) ?? 0),
+        ),
+      ),
+      const SizedBox(width: 6),
+      _pctBtn(pos, 5),
+      const SizedBox(width: 4),
+      _pctBtn(pos, 10),
+      const SizedBox(width: 4),
+      _pctBtn(pos, 15),
+    ]);
+  }
+
+  // ✅ DESCUENTO — botón de % rápido
+  Widget _pctBtn(PosProvider pos, int pct) => GestureDetector(
+    onTap: () {
+      pos.setDescuentoPorcentaje(pct);
+      _descuentoCtrl.text = pos.descuento.toStringAsFixed(0);
+    },
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(Constants.primaryColor).withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8)),
+      child: Text('$pct%', style: GoogleFonts.poppins(
+        fontSize: 11, fontWeight: FontWeight.w600,
+        color: const Color(Constants.primaryColor))),
+    ),
+  );
 
   // ── Búsqueda de cliente para separado ──────────────────
   Widget _buildClienteSearch() {
@@ -675,7 +790,7 @@ class _PosScreenState extends State<PosScreen> {
       'detalles': pos.carrito.map((item) => {
         'producto':        item.producto.id,
         'cantidad':        item.cantidad,
-        'precio_unitario': item.producto.precio,
+        'precio_unitario': item.precioUnitario,
       }).toList(),
     };
 
@@ -686,6 +801,7 @@ class _PosScreenState extends State<PosScreen> {
         _clienteSeleccionado = null;
         _fechaLimite         = null;
         _clienteSearchCtrl.clear();
+        _descuentoCtrl.clear(); // ✅ DESCUENTO
       });
       pos.limpiarCarrito();
       pos.setMetodoPago('efectivo');
@@ -710,11 +826,10 @@ class _PosScreenState extends State<PosScreen> {
     ),
   );
 
-  // ✅ _metodoBtn con color para tarjeta
   Widget _metodoBtn(String value, String label, PosProvider pos) {
     final selected = pos.metodoPago == value;
     final color = value == 'separado'      ? Colors.orange.shade600
-                : value == 'tarjeta'       ? Colors.indigo.shade600  // ✅ NUEVO
+                : value == 'tarjeta'       ? Colors.indigo.shade600
                 : const Color(Constants.primaryColor);
 
     return GestureDetector(
@@ -787,6 +902,7 @@ class _PosScreenState extends State<PosScreen> {
             onPressed: () {
               pos.limpiarCarrito();
               _montoCtrl.clear();
+              _descuentoCtrl.clear(); // ✅ DESCUENTO
               setState(() {
                 _clienteSeleccionado = null;
                 _fechaLimite         = null;

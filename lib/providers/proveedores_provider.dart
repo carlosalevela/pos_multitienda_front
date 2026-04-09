@@ -129,18 +129,27 @@ class ProveedoresProvider extends ChangeNotifier {
     return false;
   }
 
-  Future<bool> recibirCompra(int id) async {
-    final res = await _compraService.recibir(id);
-    if (res['success'] == true) {
-      final idx = compras.indexWhere((c) => c['id'] == id);
-      if (idx != -1) {
-        compras[idx] = {...compras[idx], 'estado': 'recibida'};
+    Future<Map<String, dynamic>?> recibirCompra(int id) async {
+      guardando = true;
+      notifyListeners();
+
+      final res = await _compraService.recibir(id);
+
+      guardando = false;
+
+      if (res['success'] == true) {
+        // Actualiza estado local sin recargar toda la lista
+        final idx = compras.indexWhere((c) => c['id'] == id);
+        if (idx != -1) {
+          compras[idx] = {...compras[idx], 'estado': 'recibida'};
+        }
         notifyListeners();
+        return res['data']; // ← devuelve JSON completo con productos y códigos
       }
-      return true;
+
+      notifyListeners();
+      return null; // ← error
     }
-    return false;
-  }
 
   Future<bool> cancelarCompra(int id) async {
     final res = await _compraService.cancelar(id);

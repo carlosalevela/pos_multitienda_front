@@ -7,6 +7,7 @@ class ContabilidadProvider extends ChangeNotifier {
 
   ResumenDiario?    resumenDiario;
   ResumenMensual?   resumenMensual;
+  Map<String, dynamic>?      resumenAnual;
   List<TopProducto> topProductos = [];
   List<Gasto>       gastos       = [];
 
@@ -61,6 +62,16 @@ class ContabilidadProvider extends ChangeNotifier {
     notifyListeners();
     resumenMensual = await _service.getResumenMensual(
         tiendaId: tiendaId, anio: anio, mes: mes);
+    _cargando = false;
+    notifyListeners();
+  }
+    Future<void> cargarResumenAnual({int? tiendaId, required int anio}) async {
+      _cargando = true;
+      notifyListeners();
+      resumenAnual = await _service.getResumenAnual(
+        tiendaId: tiendaId,
+        anio: anio,
+      );
     _cargando = false;
     notifyListeners();
   }

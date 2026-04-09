@@ -716,7 +716,7 @@ class _ComprasScreenState extends State<ComprasScreen> {
                             'nombre':          '',
                             'cantidad':        '',
                             'precio_unitario': '',
-                            'categoria':       null, // ← nuevo
+                            'categoria_nombre':  '', // ← nuevo
                           })),
                       icon:  const Icon(Icons.add_rounded, size: 16),
                       label: Text('Agregar producto',
@@ -844,7 +844,7 @@ Future<void> _crearOrden(
     'detalles': detalles.map((d) => {
       'producto':        d['producto'],
       'nombre_libre':    d['nombre'] ?? '',    // ← nuevo
-      'categoria':       d['categoria'],        // ← nuevo
+      'categoria_nombre_input': d['categoria_nombre'] ?? '',       // ← nuevo
       'cantidad':        double.tryParse(d['cantidad'].toString()) ?? 0,
       'precio_unitario': double.tryParse(
           d['precio_unitario'].toString()) ?? 0,
@@ -872,6 +872,164 @@ Future<void> _crearOrden(
   ));
 }
 
+
+void _mostrarResultadoRecepcion(BuildContext context, Map<String, dynamic> data) {
+  final productos = (data['productos'] as List?) ?? [];
+
+  showDialog(
+    context: context,
+    builder: (_) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Row(children: [
+        Icon(Icons.check_circle_rounded, color: Colors.green.shade600, size: 22),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            data['detail'] ?? 'Orden recibida',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15),
+          ),
+        ),
+      ]),
+      content: SizedBox(
+        width: 480,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Tienda
+              Row(children: [
+                Icon(Icons.store_rounded, size: 14, color: Colors.grey.shade400),
+                const SizedBox(width: 6),
+                Text(
+                  data['tienda'] ?? '',
+                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ]),
+              const SizedBox(height: 12),
+              Text(
+                'Productos actualizados:',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+
+              // Lista de productos
+              ...productos.map((p) {
+                final esNuevo = p['es_nuevo'] == true;
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: esNuevo ? Colors.orange.shade50 : Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: esNuevo ? Colors.orange.shade200 : Colors.green.shade200,
+                    ),
+                  ),
+                  child: Row(children: [
+                    // Ícono nuevo / existente
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: esNuevo ? Colors.orange.shade100 : Colors.green.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        esNuevo ? Icons.add_box_rounded : Icons.inventory_2_rounded,
+                        size: 16,
+                        color: esNuevo ? Colors.orange.shade700 : Colors.green.shade700,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Nombre + badge NUEVO
+                          Row(children: [
+                            Expanded(
+                              child: Text(
+                                p['producto'] ?? '',
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.w600, fontSize: 12),
+                              ),
+                            ),
+                            if (esNuevo)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.shade600,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  'NUEVO',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 9, fontWeight: FontWeight.bold,
+                                    color: Colors.white),
+                                ),
+                              ),
+                          ]),
+                          const SizedBox(height: 4),
+
+                          // Código de barras + categoría
+                          Row(children: [
+                            Icon(Icons.qr_code_rounded, size: 12, color: Colors.grey.shade400),
+                            const SizedBox(width: 4),
+                            Text(
+                              p['codigo_barras'] ?? '',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11, fontWeight: FontWeight.w500,
+                                color: Colors.grey.shade700),
+                            ),
+                            if (p['categoria'] != null) ...[
+                              const SizedBox(width: 10),
+                              Icon(Icons.category_rounded, size: 12, color: Colors.grey.shade400),
+                              const SizedBox(width: 4),
+                              Text(
+                                p['categoria'],
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11, color: Colors.grey.shade600),
+                              ),
+                            ],
+                          ]),
+                          const SizedBox(height: 3),
+
+                          // Cantidad + stock
+                          Text(
+                            '+${(p['cantidad_recibida'] as num?)?.toStringAsFixed(0) ?? '0'} uds  →  Stock: ${(p['stock_actual'] as num?)?.toStringAsFixed(0) ?? '0'}',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: esNuevo
+                                  ? Colors.orange.shade700
+                                  : Colors.green.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ]),
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green.shade600,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          ),
+          child: Text('Entendido', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        ),
+      ],
+    ),
+  );
+}
 // ── Confirmar recibir ──────────────────────────────────
 
 void _confirmarRecibir(
@@ -911,27 +1069,27 @@ void _confirmarRecibir(
               style: GoogleFonts.poppins(
                   color: Colors.grey.shade600))),
         ElevatedButton.icon(
-          onPressed: () async {
-            Navigator.pop(context);
-            final ok = await context
-                .read<ProveedoresProvider>()
-                .recibirCompra(c['id']);
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text(
-                ok
-                    ? 'Orden recibida — inventario actualizado ✓'
-                    : 'Error al recibir la orden',
-                style: GoogleFonts.poppins(color: Colors.white)),
-              backgroundColor: ok
-                  ? Colors.green.shade600
-                  : Colors.red.shade600,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-              margin: const EdgeInsets.all(16),
-            ));
-          },
+            onPressed: () async {
+                Navigator.pop(context);
+                final data = await context
+                    .read<ProveedoresProvider>()
+                    .recibirCompra(c['id']);
+
+                if (!mounted) return;
+
+                if (data != null) {
+                  _mostrarResultadoRecepcion(context, data);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text('Error al recibir la orden',
+                        style: GoogleFonts.poppins(color: Colors.white)),
+                    backgroundColor: Colors.red.shade600,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    margin: const EdgeInsets.all(16),
+                  ));
+                }
+              },
           icon:  const Icon(Icons.check_rounded, size: 16),
           label: Text('Sí, recibir',
               style: GoogleFonts.poppins(
@@ -1267,9 +1425,9 @@ class _FilaProductoState extends State<_FilaProducto> {
               onTap: () => setState(() {
                 _modoLibre = !_modoLibre;
                 _searchCtrl.clear();
-                widget.onChanged('producto',  null);
-                widget.onChanged('nombre',    '');
-                widget.onChanged('categoria', null); // ← limpia categoría
+                widget.onChanged('producto',         null);
+                widget.onChanged('nombre',           '');
+                widget.onChanged('categoria_nombre', '');
                 _sugerencias = [];
               }),
               child: Container(
@@ -1320,7 +1478,7 @@ class _FilaProductoState extends State<_FilaProducto> {
           const SizedBox(height: 8),
 
           // ── Fila principal de campos ──────────────────
-          Row(children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
             // Campo nombre / búsqueda + categoría
             Expanded(
@@ -1348,13 +1506,10 @@ class _FilaProductoState extends State<_FilaProducto> {
                       }
                     },
                     decoration: _modoLibre
-                        ? _miniInputDecoration(
-                            'Nombre del producto *').copyWith(
+                        ? _miniInputDecoration('Nombre del producto *').copyWith(
                             prefixIcon: Icon(Icons.edit_rounded,
-                                size: 16,
-                                color: Colors.orange.shade400))
-                        : _miniInputDecoration(
-                            'Buscar producto *').copyWith(
+                                size: 16, color: Colors.orange.shade400))
+                        : _miniInputDecoration('Buscar producto *').copyWith(
                             prefixIcon: const Icon(
                                 Icons.search_rounded,
                                 size: 16,
@@ -1381,8 +1536,7 @@ class _FilaProductoState extends State<_FilaProducto> {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                            color: Colors.grey.shade200),
+                        border: Border.all(color: Colors.grey.shade200),
                         boxShadow: [BoxShadow(
                             color: Colors.black.withOpacity(0.06),
                             blurRadius: 8,
@@ -1420,8 +1574,7 @@ class _FilaProductoState extends State<_FilaProducto> {
                                         horizontal: 8, vertical: 2),
                                     decoration: BoxDecoration(
                                       color: alertaColor.withOpacity(0.1),
-                                      borderRadius:
-                                          BorderRadius.circular(6),
+                                      borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Text('Stock: $stock',
                                       style: GoogleFonts.poppins(
@@ -1436,46 +1589,86 @@ class _FilaProductoState extends State<_FilaProducto> {
                       ),
                     ),
 
-                  // ── Categoría (solo modo libre) ───────
+                  // ── Categoría (solo modo libre) ───────  ← FIX: _modoLibre
                   if (_modoLibre) ...[
                     const SizedBox(height: 6),
                     Consumer<ProveedoresProvider>(
                       builder: (_, prov, __) {
                         final cats = prov.categoriasSimple;
-                        return DropdownButtonFormField<int>(
-                          value: widget.detalle['categoria'] as int?,
-                          isExpanded: true,
-                          style: GoogleFonts.poppins(
-                              fontSize: 12, color: _dark),
-                          decoration: _miniInputDecoration(
-                              'Categoría (opcional)').copyWith(
-                            prefixIcon: Icon(
-                                Icons.category_rounded,
-                                size: 16,
-                                color: Colors.orange.shade400),
+                        return Autocomplete<String>(
+                          initialValue: TextEditingValue(
+                            text: widget.detalle['categoria_nombre'] ?? '',
                           ),
-                          hint: Text('Sin categoría',
-                              style: GoogleFonts.poppins(
-                                  fontSize: 11,
-                                  color: Colors.grey.shade400)),
-                          items: [
-                            DropdownMenuItem<int>(
-                              value: null,
-                              child: Text('Sin categoría',
-                                  style: GoogleFonts.poppins(
-                                      fontSize: 12)),
-                            ),
-                            ...cats.map((c) => DropdownMenuItem<int>(
-                              value: c['id'] as int,
-                              child: Text(c['nombre'],
-                                  style: GoogleFonts.poppins(
-                                      fontSize: 12)),
-                            )),
-                          ],
-                          onChanged: (v) {
-                            widget.onChanged('categoria', v);
+                          optionsBuilder: (textEditingValue) {
+                            final input = textEditingValue.text.toLowerCase();
+                            final nombres =
+                                cats.map((c) => c['nombre'] as String);
+                            if (input.isEmpty) return nombres;
+                            return nombres.where(
+                                (n) => n.toLowerCase().contains(input));
+                          },
+                          onSelected: (value) {
+                            widget.onChanged('categoria_nombre', value);
                             setState(() {});
                           },
+                          fieldViewBuilder: (ctx, ctrl, focusNode, onSubmit) {
+                            WidgetsBinding.instance
+                                .addPostFrameCallback((_) {
+                              final val =
+                                  widget.detalle['categoria_nombre'] ?? '';
+                              if (ctrl.text != val) ctrl.text = val;
+                            });
+                            return TextFormField(
+                              controller: ctrl,
+                              focusNode:  focusNode,
+                              style: GoogleFonts.poppins(fontSize: 12),
+                              onChanged: (v) =>
+                                  widget.onChanged('categoria_nombre', v),
+                              // ← FIX: _miniInputDecoration con guión bajo
+                              decoration: _miniInputDecoration(
+                                      'Categoría (opcional)')
+                                  .copyWith(
+                                prefixIcon: Icon(Icons.category_rounded,
+                                    size: 16,
+                                    color: Colors.orange.shade400),
+                                hintText: 'Escribe o selecciona...',
+                                hintStyle: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade400),
+                              ),
+                            );
+                          },
+                          optionsViewBuilder: (ctx, onSelected, options) =>
+                              Align(
+                            alignment: Alignment.topLeft,
+                            child: Material(
+                              elevation: 4,
+                              borderRadius: BorderRadius.circular(10),
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                    maxHeight: 180, maxWidth: 260),
+                                child: ListView.builder(
+                                  padding:    EdgeInsets.zero,
+                                  shrinkWrap: true,
+                                  itemCount:  options.length,
+                                  itemBuilder: (_, i) {
+                                    final opt = options.elementAt(i);
+                                    return ListTile(
+                                      dense: true,
+                                      leading: Icon(
+                                          Icons.category_rounded,
+                                          size: 14,
+                                          color: Colors.orange.shade400),
+                                      title: Text(opt,
+                                          style: GoogleFonts.poppins(
+                                              fontSize: 12)),
+                                      onTap: () => onSelected(opt),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
                         );
                       },
                     ),
@@ -1533,8 +1726,7 @@ class _FilaProductoState extends State<_FilaProducto> {
                 children: [
                   Text('Subtotal',
                     style: GoogleFonts.poppins(
-                        fontSize: 10,
-                        color: Colors.grey.shade500)),
+                        fontSize: 10, color: Colors.grey.shade500)),
                   Text('\$${_fmt(_subtotal)}',
                     style: GoogleFonts.poppins(
                         fontSize: 13,

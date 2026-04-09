@@ -6,6 +6,7 @@ class VentaService {
     required int    tiendaId,
     required String metodoPago,
     required double montoRecibido,
+    double          descuento = 0,
     int?            clienteId,
     required List<Map<String, dynamic>> detalles,
   }) async {
@@ -16,6 +17,7 @@ class VentaService {
           'tienda':          tiendaId,
           'metodo_pago':     metodoPago,
           'monto_recibido':  montoRecibido.toString(),
+          'descuento_total': descuento.toString(),
           if (clienteId != null) 'cliente': clienteId,
           'detalles': detalles,
         },

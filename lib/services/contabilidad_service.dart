@@ -32,6 +32,7 @@ class ContabilidadService {
       if (tiendaId != null) params['tienda_id'] = tiendaId;
       final r = await ApiClient.instance.get(
         '/contabilidad/reportes/mensual/', queryParameters: params);
+      debugPrint('📊 MENSUAL RESPONSE: ${r.data}');
       return ResumenMensual.fromJson(r.data);
     } catch (e) {
       debugPrint('❌ getResumenMensual error: $e');
@@ -39,6 +40,22 @@ class ContabilidadService {
     }
   }
 
+    Future<Map<String, dynamic>?> getResumenAnual({
+    int? tiendaId, required int anio}) async {
+    try {
+      final params = <String, dynamic>{'anio': anio};
+      if (tiendaId != null) params['tienda_id'] = tiendaId;
+      final r = await ApiClient.instance.get(
+        '/contabilidad/reportes/anual/',
+        queryParameters: params,
+      );
+      debugPrint('📊 ANUAL RESPONSE: ${r.data}'); // ← agrega esto
+      return Map<String, dynamic>.from(r.data);
+    } catch (e) {
+      debugPrint('❌ getResumenAnual error: $e');
+      return null;
+    }
+  }
   Future<List<TopProducto>> getTopProductos({
     int? tiendaId, String? fechaIni, String? fechaFin}) async {
   try {
