@@ -13,6 +13,7 @@ import '../tiendas/tiendas_screen.dart';
 import '../clientes/clientes_screen.dart';
 import '../proveedores/proveedores_screen.dart';
 import '../compras/compras_screen.dart';
+import '../devoluciones//devoluciones_screen.dart';
 
 
 class HomeScreen extends StatefulWidget {
@@ -67,6 +68,10 @@ class _HomeScreenState extends State<HomeScreen> {
         icon:  Icons.shopping_cart_rounded,
         label: 'Compras',
         roles: ['admin', 'supervisor']),
+      _MenuItem(
+        icon:  Icons.assignment_return_rounded,
+        label: 'Devoluciones',
+        roles: ['admin', 'supervisor','cajero']),
     ];
 
     return items.where((i) => i.roles.contains(rol)).toList();
@@ -84,6 +89,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _Screen(widget: const ClientesScreen(), roles: ['admin', 'supervisor', 'cajero']),
       _Screen(widget: const ProveedoresScreen(), roles: ['admin', 'supervisor']),
       _Screen(widget: const ComprasScreen(),     roles: ['admin', 'supervisor']),
+      _Screen(widget: const DevolucionesScreen(), roles: ['admin', 'supervisor','cajero']),
     ];
 
     return all

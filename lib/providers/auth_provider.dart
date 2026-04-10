@@ -12,7 +12,8 @@ class AuthProvider extends ChangeNotifier {
   String _errorMsg     = '';
   int    _tiendaId     = 0;
   int    _empleadoId   = 0;
-  String _tiendaNombre = ''; // ✅ NUEVO
+  String _tiendaNombre = '';
+  String _token        = '';   // ✅ NUEVO
 
   bool   get isLoading    => _isLoading;
   bool   get isLoggedIn   => _isLoggedIn;
@@ -21,7 +22,8 @@ class AuthProvider extends ChangeNotifier {
   String get errorMsg     => _errorMsg;
   int    get tiendaId     => _tiendaId;
   int    get empleadoId   => _empleadoId;
-  String get tiendaNombre => _tiendaNombre; // ✅ NUEVO
+  String get tiendaNombre => _tiendaNombre;
+  String get token        => _token;   // ✅ NUEVO
 
   Future<void> login(String email, String password) async {
     _isLoading = true;
@@ -36,14 +38,15 @@ class AuthProvider extends ChangeNotifier {
       _rol          = emp['rol'];
       _tiendaId     = emp['tienda_id']     ?? emp['tienda']      ?? 0;
       _empleadoId   = emp['id']            ?? emp['empleado_id'] ?? 0;
-      _tiendaNombre = emp['tienda_nombre'] ?? ''; // ✅ NUEVO
+      _tiendaNombre = emp['tienda_nombre'] ?? '';
+      _token        = result['token'] ?? result['access_token'] ?? '';  // ✅
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('empleado_nombre', _nombre);
       await prefs.setString('empleado_rol',    _rol);
       await prefs.setInt('tienda_id',          _tiendaId);
       await prefs.setInt('empleado_id',        _empleadoId);
-      await prefs.setString('tienda_nombre',   _tiendaNombre); // ✅ NUEVO
+      await prefs.setString('tienda_nombre',   _tiendaNombre);
 
       _isLoggedIn = true;
     } else {
@@ -63,7 +66,8 @@ class AuthProvider extends ChangeNotifier {
     _errorMsg     = '';
     _tiendaId     = 0;
     _empleadoId   = 0;
-    _tiendaNombre = ''; // ✅ NUEVO
+    _tiendaNombre = '';
+    _token        = '';   // ✅
     notifyListeners();
   }
 
@@ -71,11 +75,12 @@ class AuthProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('access_token');
     if (token != null) {
+      _token        = token;   // ✅
       _nombre       = prefs.getString('empleado_nombre') ?? '';
       _rol          = prefs.getString('empleado_rol')    ?? '';
       _tiendaId     = prefs.getInt('tienda_id')          ?? 0;
       _empleadoId   = prefs.getInt('empleado_id')        ?? 0;
-      _tiendaNombre = prefs.getString('tienda_nombre')   ?? ''; // ✅ NUEVO
+      _tiendaNombre = prefs.getString('tienda_nombre')   ?? '';
       _isLoggedIn   = true;
       notifyListeners();
     }

@@ -2,104 +2,177 @@ import 'package:flutter/material.dart';
 import '../models/producto.dart';
 import '../services/inventario_service.dart';
 
+
 class InventarioProvider extends ChangeNotifier {
   final InventarioService _service = InventarioService();
 
   List<Producto> _productos  = [];
-  bool   _cargando   = false;
-  bool   _guardando  = false;
-  String _errorMsg   = '';
-  String _successMsg = '';
+  bool           _cargando   = false;
+  bool           _guardando  = false;
+  String?        _errorMsg;    // ✅ nullable: null = sin error
+  String?        _successMsg; // ✅ nullable: null = sin mensaje
 
-  // ✅ Guardamos el tiendaId activo para reutilizarlo en recargas
-  int? _tiendaIdActual;
+  int?   _tiendaIdActual;
+  String _activoFiltro = 'true';  // ✅ nuevo: estado del filtro activo
 
-  List<Producto> get productos  => _productos;
-  bool   get cargando   => _cargando;
-  bool   get guardando  => _guardando;
-  String get errorMsg   => _errorMsg;
-  String get successMsg => _successMsg;
+  List<Producto> get productos    => _productos;
+  bool           get cargando     => _cargando;
+  bool           get guardando    => _guardando;
+  String?        get errorMsg     => _errorMsg;
+  String?        get successMsg   => _successMsg;
+  String         get activoFiltro => _activoFiltro;
 
-  Future<void> cargarProductos({String? q, int? tiendaId}) async {
-    // ✅ Persistimos el tiendaId para usarlo en recargas posteriores
+  // ── Cargar ────────────────────────────────────────────────
+  Future<void> cargarProductos({
+    String? q,
+    int?    tiendaId,
+    String  activo = 'true',   // ✅ nuevo parámetro
+  }) async {
     if (tiendaId != null) _tiendaIdActual = tiendaId;
-
-    _cargando = true;
+    _activoFiltro = activo;   // ✅ guardamos para recargas
+    _cargando     = true;
+    _errorMsg     = null;
     notifyListeners();
 
-    // ✅ Siempre usamos el tiendaId guardado si no se pasa uno nuevo
-    _productos = await _service.getProductos(
-      q:        q,
-      tiendaId: tiendaId ?? _tiendaIdActual,
-    );
-
-    _cargando = false;
-    notifyListeners();
+    try {
+      _productos = await _service.getProductos(
+        q:        q,
+        tiendaId: tiendaId ?? _tiendaIdActual,
+        activo:   activo,
+      );
+    } catch (e) {
+      // ✅ captura el rethrow del servicio y lo muestra
+      _errorMsg = e.toString().replaceFirst('Exception: ', '');
+    } finally {
+      _cargando = false;
+      notifyListeners();
+    }
   }
 
-  // ✅ Firma compatible con onGuardar: solo recibe `data`
-  // El tiendaId ya viene dentro de data['tienda_id'] (inyectado en el dialog)
+  // ── Crear ─────────────────────────────────────────────────
   Future<bool> crearProducto(Map<String, dynamic> data) async {
-    _guardando = true;
-    _errorMsg  = '';
+    _guardando  = true;
+    _errorMsg   = null;
+    _successMsg = null;
     notifyListeners();
 
-    // ✅ Extraemos tiendaId desde data para la recarga posterior
     final tiendaId = data['tienda_id'] is int
         ? data['tienda_id'] as int
         : int.tryParse('${data['tienda_id'] ?? ''}');
 
-    final result = await _service.crearProducto(data);
-    _guardando = false;
+    try {
+      final result = await _service.crearProducto(data);
 
-    if (result['success']) {
-      _successMsg = '✅ Producto creado correctamente';
-      // ✅ Recarga con tiendaId correcto → stock se muestra bien
-      await cargarProductos(tiendaId: tiendaId ?? _tiendaIdActual);
-    } else {
-      _errorMsg = result['error'] ?? 'Error desconocido';
-    }
-
-    notifyListeners();
-    return result['success'] as bool;
-  }
-
-  Future<bool> editarProducto(int id, Map<String, dynamic> data) async {
-    _guardando = true;
-    _errorMsg  = '';
-    notifyListeners();
-
-    final result = await _service.editarProducto(id, data);
-    _guardando = false;
-
-    if (result['success']) {
-      _successMsg = '✅ Producto actualizado';
-      // ✅ Usa el tiendaId guardado
-      await cargarProductos(tiendaId: _tiendaIdActual);
-    } else {
-      _errorMsg = result['error'] ?? 'Error desconocido';
-    }
-
-    notifyListeners();
-    return result['success'] as bool;
-  }
-
-  Future<bool> eliminarProducto(int id, {int? tiendaId}) async {
-    // ✅ Primero llama al backend
-    final ok = await _service.eliminarProducto(id);
-
-    // ✅ Solo actualiza la UI si el backend confirmó el delete
-    if (ok) {
-      _productos.removeWhere((p) => p.id == id);
+      if (result['success'] == true) {
+        _successMsg = 'Producto creado correctamente ✅';
+        await cargarProductos(
+          tiendaId: tiendaId ?? _tiendaIdActual,
+          activo:   _activoFiltro,  // ✅ respeta el filtro activo
+        );
+        return true;
+      } else {
+        _errorMsg = result['error'] ?? 'Error desconocido';
+        return false;
+      }
+    } catch (e) {
+      _errorMsg = e.toString().replaceFirst('Exception: ', '');
+      return false;
+    } finally {
+      _guardando = false;
       notifyListeners();
     }
-
-    return ok;
   }
 
+  // ── Editar ────────────────────────────────────────────────
+  Future<bool> editarProducto(int id, Map<String, dynamic> data) async {
+    _guardando  = true;
+    _errorMsg   = null;
+    _successMsg = null;
+    notifyListeners();
+
+    try {
+      final result = await _service.editarProducto(id, data);
+
+      if (result['success'] == true) {
+        _successMsg = 'Producto actualizado ✅';
+        await cargarProductos(
+          tiendaId: _tiendaIdActual,
+          activo:   _activoFiltro,  // ✅ respeta el filtro activo
+        );
+        return true;
+      } else {
+        _errorMsg = result['error'] ?? 'Error desconocido';
+        return false;
+      }
+    } catch (e) {
+      _errorMsg = e.toString().replaceFirst('Exception: ', '');
+      return false;
+    } finally {
+      _guardando = false;
+      notifyListeners();
+    }
+  }
+
+  // ── Eliminar (soft-delete → desactiva) ────────────────────
+  Future<bool> eliminarProducto(int id) async {
+    _guardando  = true;
+    _errorMsg   = null;
+    _successMsg = null;
+    notifyListeners();
+
+    try {
+      final result = await _service.eliminarProducto(id);
+
+      if (result['success'] == true) {
+        _successMsg = 'Producto desactivado ✅';
+        // ✅ actualiza localmente sin otro request
+        _productos.removeWhere((p) => p.id == id);
+        return true;
+      } else {
+        _errorMsg = result['error'] ?? 'Error al desactivar';
+        return false;
+      }
+    } catch (e) {
+      _errorMsg = e.toString().replaceFirst('Exception: ', '');
+      return false;
+    } finally {
+      _guardando = false;
+      notifyListeners();
+    }
+  }
+
+  // ── Reactivar ─────────────────────────────────────────────
+  Future<bool> reactivarProducto(int id) async {
+    _guardando  = true;
+    _errorMsg   = null;
+    _successMsg = null;
+    notifyListeners();
+
+    try {
+      final result = await _service.reactivarProducto(id);
+
+      if (result['success'] == true) {
+        _successMsg = 'Producto reactivado ✅';
+        // ✅ actualiza localmente sin otro request
+        _productos.removeWhere((p) => p.id == id);
+        return true;
+      } else {
+        _errorMsg = result['error'] ?? 'Error al reactivar';
+        return false;
+      }
+    } catch (e) {
+      _errorMsg = e.toString().replaceFirst('Exception: ', '');
+      return false;
+    } finally {
+      _guardando = false;
+      notifyListeners();
+    }
+  }
+
+  // ── Utilidades ────────────────────────────────────────────
   void limpiarMensajes() {
-    _errorMsg   = '';
-    _successMsg = '';
+    _errorMsg   = null;
+    _successMsg = null;
     notifyListeners();
   }
 }
