@@ -1,3 +1,5 @@
+// lib/screens/inventario/widgets/producto_form_dialog.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,15 +9,14 @@ import '../../../models/producto.dart';
 class ProductoFormDialog extends StatefulWidget {
   final Producto?                                    producto;
   final Future<void> Function(Map<String, dynamic>) onGuardar;
-  final bool                                         guardando;
-  final int                                          tiendaId; // ✅ AGREGADO
+  final int                                          tiendaId;
 
   const ProductoFormDialog({
     super.key,
     this.producto,
     required this.onGuardar,
-    required this.guardando,
-    required this.tiendaId, // ✅ AGREGADO
+    required this.tiendaId,
+    // ✅ FIX: guardando eliminado — se maneja localmente
   });
 
   @override
@@ -32,6 +33,9 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
   final _stockCtrl        = TextEditingController();
   final _minStockCtrl     = TextEditingController();
   final _catCtrl          = TextEditingController();
+
+  // ✅ FIX: estado local — funciona correctamente dentro de showDialog
+  bool _guardando = false;
 
   @override
   void initState() {
@@ -75,21 +79,16 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
           color:        Color(0xFF1A1A2E),
           borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
         ),
-        child: Row(
-          children: [
-            Icon(esEdicion ? Icons.edit_rounded : Icons.add_rounded,
-                color: Colors.white),
-            const SizedBox(width: 10),
-            Text(
-              esEdicion ? 'Editar Producto' : 'Nuevo Producto',
-              style: GoogleFonts.poppins(
-                color:      Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize:   16,
-              ),
-            ),
-          ],
-        ),
+        child: Row(children: [
+          Icon(esEdicion ? Icons.edit_rounded : Icons.add_rounded,
+              color: Colors.white),
+          const SizedBox(width: 10),
+          Text(
+            esEdicion ? 'Editar Producto' : 'Nuevo Producto',
+            style: GoogleFonts.poppins(
+              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+        ]),
       ),
       content: SizedBox(
         width: 520,
@@ -103,8 +102,8 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
 
                 // Nombre
                 _campo('Nombre del producto *', _nombreCtrl,
-                    validator: (v) =>
-                        v == null || v.isEmpty ? 'Campo requerido' : null),
+                  validator: (v) =>
+                      v == null || v.isEmpty ? 'Campo requerido' : null),
 
                 // Descripción
                 _campo('Descripción', _descripcionCtrl),
@@ -122,8 +121,7 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
                     child: _campo('Precio venta *', _precioVentaCtrl,
                       isNumber: true,
                       validator: (v) =>
-                          v == null || v.isEmpty ? 'Requerido' : null,
-                    ),
+                          v == null || v.isEmpty ? 'Requerido' : null),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -135,12 +133,10 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
                 // Stock inicial + Stock mínimo
                 Row(children: [
                   Expanded(
-                    child: _campo('Stock inicial', _stockCtrl, isNumber: true),
-                  ),
+                    child: _campo('Stock inicial', _stockCtrl, isNumber: true)),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: _campo('Stock mínimo', _minStockCtrl, isNumber: true),
-                  ),
+                    child: _campo('Stock mínimo', _minStockCtrl, isNumber: true)),
                 ]),
               ],
             ),
@@ -149,23 +145,22 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: _guardando ? null : () => Navigator.pop(context),
           child: Text('Cancelar',
               style: GoogleFonts.poppins(color: Colors.grey)),
         ),
         ElevatedButton.icon(
-          icon: widget.guardando
+          icon: _guardando
               ? const SizedBox(
                   width: 16, height: 16,
                   child: CircularProgressIndicator(
-                      color: Colors.white, strokeWidth: 2),
-                )
+                      color: Colors.white, strokeWidth: 2))
               : const Icon(Icons.save_rounded, size: 18),
           label: Text(
             esEdicion ? 'Actualizar' : 'Guardar',
             style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
           ),
-          onPressed: widget.guardando ? null : _guardar,
+          onPressed: _guardando ? null : _guardar,
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(Constants.primaryColor),
             foregroundColor: Colors.white,
@@ -212,41 +207,41 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
           ),
           errorBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide:   const BorderSide(
-                color: Color(Constants.errorColor)),
+            borderSide:   const BorderSide(color: Color(Constants.errorColor)),
           ),
         ),
       ),
     );
   }
 
-  void _guardar() {
+  // ✅ FIX: async + try/catch + Navigator.pop al éxito
+  Future<void> _guardar() async {
     if (!_formKey.currentState!.validate()) return;
+    setState(() => _guardando = true);
 
     final data = <String, dynamic>{
       'nombre':          _nombreCtrl.text.trim(),
       'codigo_barras':   _codigoCtrl.text.trim(),
       'descripcion':     _descripcionCtrl.text.trim(),
-      'precio_venta':    _precioVentaCtrl.text.trim(),
-      'precio_compra':   _precioCompraCtrl.text.isEmpty
-          ? '0'
-          : _precioCompraCtrl.text.trim(),
+      // ✅ FIX: precios como int, no como String
+      'precio_venta':    int.tryParse(_precioVentaCtrl.text) ?? 0,
+      'precio_compra':   int.tryParse(_precioCompraCtrl.text) ?? 0,
       'unidad_medida':   'unidad',
       'aplica_impuesto': false,
-
-      // ✅ CRÍTICO: tienda_id para que el backend cree el inventario
-      'tienda_id':    widget.tiendaId,
-
-      // ✅ CRÍTICO: enviados como int, no como String
-      'stock_actual': int.tryParse(_stockCtrl.text) ?? 0,
-      'stock_minimo': int.tryParse(_minStockCtrl.text) ?? 0,
+      'tienda_id':       widget.tiendaId,
+      'stock_actual':    int.tryParse(_stockCtrl.text) ?? 0,
+      'stock_minimo':    int.tryParse(_minStockCtrl.text) ?? 0,
     };
 
-    // Categoría solo si tiene valor
     if (_catCtrl.text.isNotEmpty) {
       data['categoria_nombre'] = _catCtrl.text.trim();
     }
 
-    widget.onGuardar(data);
+    try {
+      await widget.onGuardar(data);
+      if (mounted) Navigator.pop(context);    // ← cierra al éxito
+    } catch (_) {
+      if (mounted) setState(() => _guardando = false);  // ← desbloquea botón
+    }
   }
 }

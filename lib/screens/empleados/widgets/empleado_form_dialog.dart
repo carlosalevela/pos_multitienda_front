@@ -1,3 +1,5 @@
+// lib/screens/empleados/tabs/empleado_form_dialog.dart
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/constants.dart';
@@ -24,6 +26,10 @@ class _EmpleadoFormDialogState extends State<EmpleadoFormDialog> {
   final _cedulaCtrl   = TextEditingController();
   final _emailCtrl    = TextEditingController();
   final _passCtrl     = TextEditingController();
+
+  // ✅ Service como campo — no instanciar en cada llamada
+  final _empleadoService = EmpleadoService();
+
   bool   _obscurePass = true;
   bool   _guardando   = false;
   String _rolSelected = 'cajero';
@@ -41,13 +47,17 @@ class _EmpleadoFormDialogState extends State<EmpleadoFormDialog> {
       _cedulaCtrl.text   = e['cedula']   ?? '';
       _emailCtrl.text    = e['email']    ?? '';
       _rolSelected = (e['rol'] == 'admin') ? 'supervisor' : (e['rol'] ?? 'cajero');
-      _tiendaSelected    = e['tienda'];
+      // ✅ FIX: cast seguro — backend puede retornar objeto o int
+      _tiendaSelected = e['tienda'] is int
+          ? e['tienda'] as int
+          : (e['tienda_id'] as int?);
     }
   }
 
   Future<void> _cargarTiendas() async {
-    final tiendas = await EmpleadoService().getTiendas();
-    setState(() => _tiendas = tiendas);
+    final tiendas = await _empleadoService.getTiendas();
+    // ✅ FIX: mounted guard — el dialog pudo cerrarse antes de la respuesta
+    if (mounted) setState(() => _tiendas = tiendas);
   }
 
   @override
@@ -65,8 +75,7 @@ class _EmpleadoFormDialogState extends State<EmpleadoFormDialog> {
     final esEdicion = widget.empleado != null;
 
     return AlertDialog(
-      shape:        RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16)),
+      shape:        RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       titlePadding: EdgeInsets.zero,
       title: Container(
         padding: const EdgeInsets.all(20),
@@ -74,169 +83,147 @@ class _EmpleadoFormDialogState extends State<EmpleadoFormDialog> {
           color:        Color(0xFF1A1A2E),
           borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
         ),
-        child: Row(
-          children: [
-            Icon(esEdicion ? Icons.edit_rounded : Icons.person_add_rounded,
-                color: Colors.white),
-            const SizedBox(width: 10),
-            Text(
-              esEdicion ? 'Editar Empleado' : 'Nuevo Empleado',
-              style: GoogleFonts.poppins(
-                color:      Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize:   16,
-              ),
-            ),
-          ],
-        ),
+        child: Row(children: [
+          Icon(esEdicion ? Icons.edit_rounded : Icons.person_add_rounded,
+              color: Colors.white),
+          const SizedBox(width: 10),
+          Text(
+            esEdicion ? 'Editar Empleado' : 'Nuevo Empleado',
+            style: GoogleFonts.poppins(
+              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+        ]),
       ),
       content: SizedBox(
         width: 500,
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
-            child: Column(
-              children: [
-                const SizedBox(height: 8),
+            child: Column(children: [
+              const SizedBox(height: 8),
 
-                // Nombre + Apellido
-                Row(children: [
-                  Expanded(child: _campo('Nombre *', _nombreCtrl)),
-                  const SizedBox(width: 12),
-                  Expanded(child: _campo('Apellido *', _apellidoCtrl)),
-                ]),
+              // Nombre + Apellido
+              Row(children: [
+                Expanded(child: _campo('Nombre *', _nombreCtrl)),
+                const SizedBox(width: 12),
+                Expanded(child: _campo('Apellido *', _apellidoCtrl)),
+              ]),
 
-                // Cédula
-                _campo('Cédula *', _cedulaCtrl,
-                  keyboardType: TextInputType.number),
+              // Cédula
+              _campo('Cédula *', _cedulaCtrl,
+                keyboardType: TextInputType.number),
 
-                // Email
-                _campo('Email *', _emailCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Requerido';
-                    if (!v.contains('@')) return 'Email inválido';
-                    return null;
-                  },
-                ),
+              // Email
+              _campo('Email *', _emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Requerido';
+                  if (!v.contains('@')) return 'Email inválido';
+                  return null;
+                },
+              ),
 
-                // Contraseña (solo en creación)
-                if (!esEdicion)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 14),
-                    child: TextFormField(
-                      controller:  _passCtrl,
-                      obscureText: _obscurePass,
-                      decoration: InputDecoration(
-                        labelText:  'Contraseña *',
-                        labelStyle: GoogleFonts.poppins(fontSize: 13),
-                        filled:     true,
-                        fillColor:  Colors.grey.shade50,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide:
-                              BorderSide(color: Colors.grey.shade300),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide:
-                              BorderSide(color: Colors.grey.shade300),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                              color: Color(Constants.primaryColor),
-                              width: 2),
-                        ),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePass
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                            color: Colors.grey,
-                          ),
-                          onPressed: () =>
-                              setState(() => _obscurePass = !_obscurePass),
-                        ),
-                      ),
-                      validator: (v) {
-                        if (v == null || v.isEmpty) return 'Requerido';
-                        if (v.length < 6) return 'Mínimo 6 caracteres';
-                        return null;
-                      },
-                    ),
-                  ),
-
-                // Rol
+              // Contraseña (solo en creación)
+              if (!esEdicion)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 14),
-                  child: DropdownButtonFormField<String>(
-                    value: _rolSelected,
+                  child: TextFormField(
+                    controller:  _passCtrl,
+                    obscureText: _obscurePass,
                     decoration: InputDecoration(
-                      labelText:  'Rol *',
+                      labelText:  'Contraseña *',
                       labelStyle: GoogleFonts.poppins(fontSize: 13),
                       filled:     true,
                       fillColor:  Colors.grey.shade50,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide:
-                            BorderSide(color: Colors.grey.shade300),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide:
-                            BorderSide(color: Colors.grey.shade300),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(
+                            color: Color(Constants.primaryColor), width: 2),
+                      ),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePass
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                          color: Colors.grey,
+                        ),
+                        onPressed: () =>
+                            setState(() => _obscurePass = !_obscurePass),
                       ),
                     ),
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'cajero',
-                          child: Text('Cajero')),
-                      DropdownMenuItem(
-                          value: 'supervisor',
-                          child: Text('Supervisor')),
-                    ],
-                    onChanged: (v) => setState(() => _rolSelected = v!),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Requerido';
+                      if (v.length < 6) return 'Mínimo 6 caracteres';
+                      return null;
+                    },
                   ),
                 ),
 
-                // Tienda
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 14),
-                  child: DropdownButtonFormField<int>(
-                    value: _tiendaSelected,
-                    hint: Text('Sin tienda asignada',
-                      style: GoogleFonts.poppins(
-                          fontSize: 13, color: Colors.grey)),
-                    decoration: InputDecoration(
-                      labelText:  'Tienda',
-                      labelStyle: GoogleFonts.poppins(fontSize: 13),
-                      filled:     true,
-                      fillColor:  Colors.grey.shade50,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide:
-                            BorderSide(color: Colors.grey.shade300),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide:
-                            BorderSide(color: Colors.grey.shade300),
-                      ),
+              // Rol
+              Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: DropdownButtonFormField<String>(
+                  value: _rolSelected,
+                  decoration: InputDecoration(
+                    labelText:  'Rol *',
+                    labelStyle: GoogleFonts.poppins(fontSize: 13),
+                    filled:     true,
+                    fillColor:  Colors.grey.shade50,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
                     ),
-                    items: _tiendas.map((t) {
-                      return DropdownMenuItem<int>(
-                        value: t['id'],
-                        child: Text(t['nombre'] ?? '',
-                          style: GoogleFonts.poppins(fontSize: 13)),
-                      );
-                    }).toList(),
-                    onChanged: (v) =>
-                        setState(() => _tiendaSelected = v),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
                   ),
+                  items: const [
+                    DropdownMenuItem(value: 'cajero',     child: Text('Cajero')),
+                    DropdownMenuItem(value: 'supervisor', child: Text('Supervisor')),
+                  ],
+                  onChanged: (v) => setState(() => _rolSelected = v!),
                 ),
-              ],
-            ),
+              ),
+
+              // Tienda
+              Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: DropdownButtonFormField<int>(
+                  value: _tiendaSelected,
+                  hint: Text('Sin tienda asignada',
+                    style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey)),
+                  decoration: InputDecoration(
+                    labelText:  'Tienda',
+                    labelStyle: GoogleFonts.poppins(fontSize: 13),
+                    filled:     true,
+                    fillColor:  Colors.grey.shade50,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                  ),
+                  items: _tiendas.map((t) => DropdownMenuItem<int>(
+                    value: t['id'],
+                    child: Text(t['nombre'] ?? '',
+                        style: GoogleFonts.poppins(fontSize: 13)),
+                  )).toList(),
+                  onChanged: (v) => setState(() => _tiendaSelected = v),
+                ),
+              ),
+            ]),
           ),
         ),
       ),
@@ -261,8 +248,7 @@ class _EmpleadoFormDialogState extends State<EmpleadoFormDialog> {
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(Constants.primaryColor),
             foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
       ],
@@ -295,7 +281,7 @@ class _EmpleadoFormDialogState extends State<EmpleadoFormDialog> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide:   const BorderSide(
+            borderSide: const BorderSide(
                 color: Color(Constants.primaryColor), width: 2),
           ),
         ),
@@ -305,21 +291,27 @@ class _EmpleadoFormDialogState extends State<EmpleadoFormDialog> {
     );
   }
 
-    Future<void> _guardar() async {
-      if (!_formKey.currentState!.validate()) return;
-      setState(() => _guardando = true);
+  Future<void> _guardar() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _guardando = true);
 
-      final data = {
-        'nombre':   _nombreCtrl.text.trim(),
-        'apellido': _apellidoCtrl.text.trim(),
-        'cedula':   _cedulaCtrl.text.trim(),
-        'email':    _emailCtrl.text.trim(),
-        'rol':      _rolSelected,
-        if (_tiendaSelected != null) 'tienda': _tiendaSelected,
-        if (_passCtrl.text.isNotEmpty) 'password': _passCtrl.text.trim(),
-      };
+    final data = {
+      'nombre':   _nombreCtrl.text.trim(),
+      'apellido': _apellidoCtrl.text.trim(),
+      'cedula':   _cedulaCtrl.text.trim(),
+      'email':    _emailCtrl.text.trim(),
+      'rol':      _rolSelected,
+      if (_tiendaSelected != null) 'tienda': _tiendaSelected,
+      if (_passCtrl.text.isNotEmpty) 'password': _passCtrl.text.trim(),
+    };
 
+    try {
       await widget.onGuardar(data);
-      if (mounted) setState(() => _guardando = false);  // ← solo si sigue vivo
+      // ✅ FIX: cierra el dialog al guardar exitosamente
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      // ✅ FIX: desbloquea el botón si onGuardar lanza
+      if (mounted) setState(() => _guardando = false);
     }
+  }
 }

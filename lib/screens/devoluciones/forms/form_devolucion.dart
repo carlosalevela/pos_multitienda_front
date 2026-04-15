@@ -1,4 +1,4 @@
-// lib/screens/devoluciones/tabs/form_devolucion.dart
+// lib/screens/devoluciones/forms/form_devolucion.dart
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,10 +9,9 @@ import 'package:provider/provider.dart';
 import 'package:pos_multitienda_app/core/constants.dart';
 import 'package:pos_multitienda_app/providers/auth_provider.dart';
 import 'package:pos_multitienda_app/providers/devoluciones_provider.dart';
-import 'package:pos_multitienda_app/services/devoluciones_service.dart';
+import 'package:pos_multitienda_app/services/venta_service.dart';
 
-
-// ── Modelos ligeros solo para este formulario ─────────────────────────────────
+// ── Modelos ligeros ───────────────────────────────────────────────────────────
 
 class _VentaResumen {
   final int      id;
@@ -21,12 +20,22 @@ class _VentaResumen {
   final String   cliente;
   final DateTime createdAt;
 
+  // desde JSON (flujo interno paso 1)
   _VentaResumen.fromJson(Map<String, dynamic> j)
       : id            = j['id'],
         numeroFactura = j['numero_factura'] ?? '',
         total         = double.tryParse(j['total'].toString()) ?? 0,
         cliente       = j['cliente'] ?? 'Consumidor Final',
         createdAt     = DateTime.parse(j['created_at']);
+
+  // ✅ NUEVO: desde VentaSelectorSheet
+  _VentaResumen({
+    required this.id,
+    required this.numeroFactura,
+    required this.total,
+    required this.cliente,
+    required this.createdAt,
+  });
 }
 
 class _ProductoSeleccionable {
@@ -49,26 +58,27 @@ class _ProductoSeleccionable {
   void dispose() => motivoCtrl.dispose();
 
   Map<String, dynamic> toDetalle() => {
-        'producto':       productoId,
-        'cantidad':       cantidad,
+        'producto':        productoId,
+        'cantidad':        cantidad,
         'precio_unitario': precioUnitario,
         if (motivoCtrl.text.trim().isNotEmpty) 'motivo': motivoCtrl.text.trim(),
       };
 }
 
-
 // ── Widget principal ──────────────────────────────────────────────────────────
 
 class FormDevolucion extends StatefulWidget {
-  final AuthProvider auth;
-  final int?         tiendaId;
-  final VoidCallback onCreada;
+  final AuthProvider          auth;
+  final int?                  tiendaId;
+  final VoidCallback          onCreada;
+  final Map<String, dynamic>? ventaPreseleccionada; // ✅ NUEVO (opcional)
 
   const FormDevolucion({
     super.key,
     required this.auth,
     required this.tiendaId,
     required this.onCreada,
+    this.ventaPreseleccionada,  // ✅ no rompe llamadas existentes
   });
 
   @override
@@ -76,9 +86,9 @@ class FormDevolucion extends StatefulWidget {
 }
 
 class _FormDevolucionState extends State<FormDevolucion> {
-  final _service = DevolucionesService();
-  final _fmt     = NumberFormat.currency(locale: 'es_CO', symbol: '\$');
-  final _obsCtrl = TextEditingController();
+  final _ventaService = VentaService();
+  final _fmt          = NumberFormat.currency(locale: 'es_CO', symbol: '\$');
+  final _obsCtrl      = TextEditingController();
 
   static const _metodos = ['efectivo', 'transferencia', 'tarjeta', 'notacredito'];
 
@@ -101,7 +111,27 @@ class _FormDevolucionState extends State<FormDevolucion> {
   @override
   void initState() {
     super.initState();
-    _cargarVentas();
+
+    if (widget.ventaPreseleccionada != null) {
+      // ✅ Viene de VentaSelectorSheet → salta directo al paso 2
+      _paso = 2;
+      final v = widget.ventaPreseleccionada!;
+      _ventaSel = _VentaResumen(
+        id:            v['id'] as int,
+        numeroFactura: v['numero_venta'] as String?    ?? '',
+        total:         double.tryParse(
+                           v['total'].toString())      ?? 0,
+        cliente:       v['cliente_nombre'] as String?  ?? 'Consumidor Final',
+        createdAt:     DateTime.tryParse(
+                           v['created_at'].toString()) ?? DateTime.now(),
+      );
+      // carga productos automáticamente
+      WidgetsBinding.instance.addPostFrameCallback((_) =>
+          _seleccionarVenta(_ventaSel!));
+    } else {
+      // flujo original: muestra lista de ventas
+      _cargarVentas();
+    }
   }
 
   @override
@@ -116,16 +146,19 @@ class _FormDevolucionState extends State<FormDevolucion> {
   Future<void> _cargarVentas() async {
     setState(() { _cargandoVentas = true; _errorVentas = null; });
     try {
-      final data = await _service.listarVentasPorFecha(
-        fecha:    DateFormat('yyyy-MM-dd').format(_fechaSel),
+      final data = await _ventaService.listarVentas(
         tiendaId: widget.tiendaId,
+        fecha:    DateFormat('yyyy-MM-dd').format(_fechaSel),
       );
+      if (!mounted) return;
       setState(() =>
           _ventas = data.map((e) => _VentaResumen.fromJson(e)).toList());
     } catch (e) {
+      if (!mounted) return;
       setState(() =>
           _errorVentas = e.toString().replaceFirst('Exception: ', ''));
     } finally {
+      if (!mounted) return;
       setState(() => _cargandoVentas = false);
     }
   }
@@ -138,8 +171,17 @@ class _FormDevolucionState extends State<FormDevolucion> {
       _paso         = 2;
     });
     try {
-      final data  = await _service.ventaDisponible(venta.id);
-      final prods = data['productos'] as List;
+      final data = await _ventaService.ventaDisponibleDevolucion(venta.id);
+
+      if (!mounted) return;
+
+      if (data == null) {
+        setState(() {
+          _errorProd    = 'No se pudo cargar la información de la venta.';
+          _cargandoProd = false;
+        });
+        return;
+      }
 
       if (data['todos_devueltos'] == true) {
         setState(() {
@@ -149,19 +191,24 @@ class _FormDevolucionState extends State<FormDevolucion> {
         return;
       }
 
+      final prods = data['productos'] as List? ?? [];
       for (final p in _productos) p.dispose();
       setState(() {
         _productos = prods.map((p) => _ProductoSeleccionable(
           productoId:     p['producto_id'],
           nombre:         p['producto_nombre'],
-          precioUnitario: double.tryParse(p['precio_unitario'].toString()) ?? 0,
-          disponible:     double.tryParse(p['disponible'].toString()) ?? 0,
+          precioUnitario: double.tryParse(
+              p['precio_unitario'].toString()) ?? 0,
+          disponible:     double.tryParse(
+              p['disponible'].toString())      ?? 0,
         )).toList();
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() =>
           _errorProd = e.toString().replaceFirst('Exception: ', ''));
     } finally {
+      if (!mounted) return;
       setState(() => _cargandoProd = false);
     }
   }
@@ -189,12 +236,12 @@ class _FormDevolucionState extends State<FormDevolucion> {
       metodoPago:    _metodoPago,
       detalles:      seleccionados.map((p) => p.toDetalle()).toList(),
       observaciones: _obsCtrl.text.trim(),
-      tiendaId:      widget.tiendaId,
     );
-    setState(() => _guardando = false);
 
     if (!mounted) return;
-    if (resp != null) {
+    setState(() => _guardando = false);
+
+    if (resp['success'] == true) {
       Navigator.pop(context);
       widget.onCreada();
       _snack('Devolución registrada ✅');
@@ -218,8 +265,8 @@ class _FormDevolucionState extends State<FormDevolucion> {
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     return Container(
       padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + bottom),
-      constraints:
-          BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.92),
+      constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.92),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -227,7 +274,7 @@ class _FormDevolucionState extends State<FormDevolucion> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Handle
+          // drag handle
           Center(
             child: Container(
               width: 40, height: 4,
@@ -237,9 +284,11 @@ class _FormDevolucionState extends State<FormDevolucion> {
                   borderRadius: BorderRadius.circular(2)),
             ),
           ),
-          // Header con indicador de paso
+
+          // header con paso
           Row(children: [
-            if (_paso == 2)
+            // ✅ back solo visible en paso 2 Y si NO hay venta preseleccionada
+            if (_paso == 2 && widget.ventaPreseleccionada == null)
               GestureDetector(
                 onTap: () => setState(() { _paso = 1; _ventaSel = null; }),
                 child: Padding(
@@ -250,35 +299,41 @@ class _FormDevolucionState extends State<FormDevolucion> {
               ),
             Expanded(
               child: Text(
-                _paso == 1 ? 'Registrar devolución' : 'Seleccionar productos',
+                _paso == 1
+                    ? 'Registrar devolución'
+                    : 'Seleccionar productos',
                 style: GoogleFonts.poppins(
                     fontWeight: FontWeight.bold,
                     fontSize: 18,
                     color: const Color(0xFF1A1A2E)),
               ),
             ),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(Constants.primaryColor).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
+            // ✅ badge de paso solo si hay 2 pasos (sin preselección)
+            if (widget.ventaPreseleccionada == null)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(Constants.primaryColor)
+                      .withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text('Paso $_paso de 2',
+                    style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(Constants.primaryColor))),
               ),
-              child: Text('Paso $_paso de 2',
-                  style: GoogleFonts.poppins(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(Constants.primaryColor))),
-            ),
           ]),
           const SizedBox(height: 16),
+
           Flexible(child: _paso == 1 ? _buildPaso1() : _buildPaso2()),
         ],
       ),
     );
   }
 
-  // ── Paso 1: elegir fecha y venta ──────────────────────────────────────────
+  // ── Paso 1 ────────────────────────────────────────────────────────────────
 
   Widget _buildPaso1() {
     return Column(
@@ -291,20 +346,22 @@ class _FormDevolucionState extends State<FormDevolucion> {
                 fontWeight: FontWeight.w600,
                 color: Colors.grey.shade600)),
         const SizedBox(height: 8),
-        // Chips de fecha rápida
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(children: [
-            _chipFecha('Hoy',         DateTime.now()),
+            _chipFecha('Hoy',       DateTime.now()),
             const SizedBox(width: 8),
-            _chipFecha('Ayer',        DateTime.now().subtract(const Duration(days: 1))),
+            _chipFecha('Ayer',
+                DateTime.now().subtract(const Duration(days: 1))),
             const SizedBox(width: 8),
-            _chipFecha('Hace 2 días', DateTime.now().subtract(const Duration(days: 2))),
+            _chipFecha('Hace 2 días',
+                DateTime.now().subtract(const Duration(days: 2))),
             const SizedBox(width: 8),
             GestureDetector(
               onTap: _elegirFechaCustom,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 7),
                 decoration: BoxDecoration(
                     color: Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(20)),
@@ -354,7 +411,10 @@ class _FormDevolucionState extends State<FormDevolucion> {
     final sel = DateFormat('yyyy-MM-dd').format(_fechaSel) ==
         DateFormat('yyyy-MM-dd').format(fecha);
     return GestureDetector(
-      onTap: () { setState(() => _fechaSel = fecha); _cargarVentas(); },
+      onTap: () {
+        setState(() => _fechaSel = fecha);
+        _cargarVentas();
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
@@ -382,12 +442,10 @@ class _FormDevolucionState extends State<FormDevolucion> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.grey.shade200),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 6,
-                offset: const Offset(0, 2))
-          ],
+          boxShadow: [BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 6,
+              offset: const Offset(0, 2))],
         ),
         child: Row(children: [
           Container(
@@ -459,14 +517,14 @@ class _FormDevolucionState extends State<FormDevolucion> {
     }
   }
 
-  // ── Paso 2: elegir productos ──────────────────────────────────────────────
+  // ── Paso 2 ────────────────────────────────────────────────────────────────
 
   Widget _buildPaso2() {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Banner venta seleccionada
+        // banner de venta seleccionada
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -495,6 +553,7 @@ class _FormDevolucionState extends State<FormDevolucion> {
           ]),
         ),
         const SizedBox(height: 14),
+
         if (_cargandoProd)
           const Center(
               child: Padding(
@@ -514,7 +573,6 @@ class _FormDevolucionState extends State<FormDevolucion> {
               child: Column(children: [
                 ..._productos.map((p) => _productoTile(p)),
                 const SizedBox(height: 12),
-                // Método de devolución
                 DropdownButtonFormField<String>(
                   value: _metodoPago,
                   decoration: _inputDeco(
@@ -529,7 +587,6 @@ class _FormDevolucionState extends State<FormDevolucion> {
                   onChanged: (v) => setState(() => _metodoPago = v!),
                 ),
                 const SizedBox(height: 10),
-                // Observaciones
                 TextFormField(
                   controller: _obsCtrl,
                   decoration: _inputDeco(
@@ -537,7 +594,6 @@ class _FormDevolucionState extends State<FormDevolucion> {
                   maxLines: 2,
                 ),
                 const SizedBox(height: 20),
-                // Botón guardar
                 SizedBox(
                   width: double.infinity,
                   height: 50,
@@ -557,7 +613,8 @@ class _FormDevolucionState extends State<FormDevolucion> {
                                 color: Colors.white, strokeWidth: 2.5))
                         : Text('Guardar devolución',
                             style: GoogleFonts.poppins(
-                                fontWeight: FontWeight.bold, fontSize: 15)),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15)),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -576,12 +633,12 @@ class _FormDevolucionState extends State<FormDevolucion> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: p.seleccionado
-            ? const Color(Constants.primaryColor).withOpacity(0.05)
+            ? const Color(Constants.primaryColor).withValues(alpha: 0.05)
             : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: p.seleccionado
-              ? const Color(Constants.primaryColor).withOpacity(0.4)
+              ? const Color(Constants.primaryColor).withValues(alpha: 0.4)
               : Colors.grey.shade200,
           width: p.seleccionado ? 1.5 : 1,
         ),
@@ -605,13 +662,13 @@ class _FormDevolucionState extends State<FormDevolucion> {
                       fontSize: 13,
                       color: const Color(0xFF1A1A2E))),
               Text(
-                  'Disponible: ${_cantStr(p.disponible)} · ${_fmt.format(p.precioUnitario)}/u',
+                  'Disponible: ${_cantStr(p.disponible)} · '
+                  '${_fmt.format(p.precioUnitario)}/u',
                   style: GoogleFonts.poppins(
                       fontSize: 11, color: Colors.grey.shade500)),
             ]),
           ),
         ]),
-        // Campos cantidad + motivo solo si está seleccionado
         if (p.seleccionado) ...[
           const SizedBox(height: 8),
           Row(children: [
@@ -623,12 +680,19 @@ class _FormDevolucionState extends State<FormDevolucion> {
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [
-                  FilteringTextInputFormatter.allow(
-                      RegExp(r'^\d+\.?\d{0,2}'))
+                  FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
                 ],
                 decoration: _inputDecoSm('Cantidad'),
-                onChanged: (v) =>
-                    p.cantidad = double.tryParse(v) ?? p.disponible,
+                onChanged: (v) {
+                  final parts = v.split('.');
+                  if (parts.length > 2) {
+                    p.cantidad = double.tryParse(
+                            '${parts[0]}.${parts[1]}') ??
+                        p.disponible;
+                  } else {
+                    p.cantidad = double.tryParse(v) ?? p.disponible;
+                  }
+                },
               ),
             ),
             const SizedBox(width: 8),
@@ -678,8 +742,8 @@ class _FormDevolucionState extends State<FormDevolucion> {
 
   InputDecoration _inputDeco(String hint, IconData icon) => InputDecoration(
         hintText: hint,
-        hintStyle:
-            GoogleFonts.poppins(fontSize: 13, color: Colors.grey.shade400),
+        hintStyle: GoogleFonts.poppins(
+            fontSize: 13, color: Colors.grey.shade400),
         prefixIcon: Icon(icon,
             size: 20, color: const Color(Constants.primaryColor)),
         filled: true,
@@ -700,8 +764,8 @@ class _FormDevolucionState extends State<FormDevolucion> {
 
   InputDecoration _inputDecoSm(String hint) => InputDecoration(
         hintText: hint,
-        hintStyle:
-            GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade400),
+        hintStyle: GoogleFonts.poppins(
+            fontSize: 11, color: Colors.grey.shade400),
         filled: true,
         fillColor: Colors.white,
         isDense: true,

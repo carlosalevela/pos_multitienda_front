@@ -1,3 +1,6 @@
+// lib/screens/proveedores/proveedores_screen.dart
+
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -16,7 +19,10 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
   static const _accent = Color(Constants.primaryColor);
 
   final _searchCtrl = TextEditingController();
-  String _busqueda  = '';
+
+  // ✅ FIX: eliminar _busqueda — usar _searchCtrl.text directamente
+  // ✅ FIX: debounce para búsqueda
+  Timer? _debounceSearch;
 
   @override
   void initState() {
@@ -27,23 +33,26 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
   @override
   void dispose() {
     _searchCtrl.dispose();
+    // ✅ FIX: cancelar timer
+    _debounceSearch?.cancel();
     super.dispose();
   }
 
   void _cargar() =>
-      context.read<ProveedoresProvider>().cargarProveedores(q: _busqueda);
+      context.read<ProveedoresProvider>()
+          .cargarProveedores(q: _searchCtrl.text);
 
   // ── Build ──────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final prov = context.watch<ProveedoresProvider>();
-    final auth = context.watch<AuthProvider>();
+    context.watch<AuthProvider>();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FA),
       body: Column(children: [
-        _buildHeader(prov, auth),
+        _buildHeader(prov),
         Expanded(
           child: prov.cargandoProveedores
               ? const Center(child: CircularProgressIndicator())
@@ -55,7 +64,7 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
 
   // ── Header ─────────────────────────────────────────────
 
-  Widget _buildHeader(ProveedoresProvider prov, AuthProvider auth) =>
+  Widget _buildHeader(ProveedoresProvider prov) =>
     Container(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
       decoration: BoxDecoration(
@@ -69,8 +78,7 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: _accent.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(12),
-          ),
+            borderRadius: BorderRadius.circular(12)),
           child: const Icon(Icons.local_shipping_rounded,
               color: _accent, size: 24),
         ),
@@ -78,7 +86,8 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Proveedores',
             style: GoogleFonts.poppins(
-                fontSize: 20, fontWeight: FontWeight.bold, color: _dark)),
+                fontSize: 20, fontWeight: FontWeight.bold,
+                color: _dark)),
           Text('Gestión de proveedores',
             style: GoogleFonts.poppins(
                 fontSize: 12, color: Colors.grey.shade500)),
@@ -90,33 +99,38 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
           child: TextField(
             controller: _searchCtrl,
             onChanged: (v) {
-              setState(() => _busqueda = v);
-              context.read<ProveedoresProvider>()
-                  .cargarProveedores(q: v);
+              // ✅ FIX: setState para refrescar suffixIcon, debounce para la query
+              setState(() {});
+              _debounceSearch?.cancel();
+              _debounceSearch = Timer(
+                  const Duration(milliseconds: 350), () {
+                context.read<ProveedoresProvider>()
+                    .cargarProveedores(q: v);
+              });
             },
             style: GoogleFonts.poppins(fontSize: 13),
             decoration: InputDecoration(
-              hintText:    'Buscar proveedor...',
-              hintStyle:   GoogleFonts.poppins(
+              hintText:   'Buscar proveedor...',
+              hintStyle:  GoogleFonts.poppins(
                   fontSize: 13, color: Colors.grey.shade400),
-              prefixIcon:  const Icon(Icons.search_rounded,
+              prefixIcon: const Icon(Icons.search_rounded,
                   size: 18, color: Colors.grey),
-              suffixIcon: _busqueda.isNotEmpty
+              // ✅ FIX: usa _searchCtrl.text — fuente única
+              suffixIcon: _searchCtrl.text.isNotEmpty
                   ? IconButton(
                       icon: const Icon(Icons.close_rounded, size: 16),
                       onPressed: () {
                         _searchCtrl.clear();
-                        setState(() => _busqueda = '');
+                        setState(() {});
                         context.read<ProveedoresProvider>()
                             .cargarProveedores();
                       })
                   : null,
-              filled:      true,
-              fillColor:   const Color(0xFFF4F6FA),
+              filled:    true,
+              fillColor: const Color(0xFFF4F6FA),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide:   BorderSide.none,
-              ),
+                borderSide:   BorderSide.none),
               contentPadding: const EdgeInsets.symmetric(
                   horizontal: 14, vertical: 10),
             ),
@@ -131,7 +145,7 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
           style: ElevatedButton.styleFrom(
             backgroundColor: _accent,
             foregroundColor: Colors.white,
-            elevation:       0,
+            elevation: 0,
             padding: const EdgeInsets.symmetric(
                 horizontal: 18, vertical: 12),
             shape: RoundedRectangleBorder(
@@ -203,8 +217,7 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
           width: 40, height: 40,
           decoration: BoxDecoration(
             color: color.withOpacity(0.10),
-            borderRadius: BorderRadius.circular(10),
-          ),
+            borderRadius: BorderRadius.circular(10)),
           child: Icon(icon, color: color, size: 20),
         ),
         const SizedBox(width: 12),
@@ -234,19 +247,19 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
         padding: const EdgeInsets.all(48),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-        ),
+          borderRadius: BorderRadius.circular(14)),
         child: Center(child: Column(children: [
           Icon(Icons.local_shipping_outlined,
               size: 52, color: Colors.grey.shade200),
           const SizedBox(height: 12),
           Text(
-            _busqueda.isNotEmpty
-                ? 'Sin resultados para "$_busqueda"'
+            // ✅ FIX: _searchCtrl.text — fuente única
+            _searchCtrl.text.isNotEmpty
+                ? 'Sin resultados para "${_searchCtrl.text}"'
                 : 'Aún no hay proveedores registrados',
             style: GoogleFonts.poppins(
                 color: Colors.grey.shade400, fontSize: 14)),
-          if (_busqueda.isEmpty) ...[
+          if (_searchCtrl.text.isEmpty) ...[
             const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: () => _abrirFormulario(context),
@@ -280,8 +293,7 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
             child: Row(children: [
-              const Icon(Icons.list_alt_rounded,
-                  size: 16, color: _dark),
+              const Icon(Icons.list_alt_rounded, size: 16, color: _dark),
               const SizedBox(width: 7),
               Text('Lista de proveedores',
                 style: GoogleFonts.poppins(
@@ -297,13 +309,13 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
           ClipRRect(
             borderRadius: const BorderRadius.only(
               bottomLeft:  Radius.circular(14),
-              bottomRight: Radius.circular(14),
-            ),
+              bottomRight: Radius.circular(14)),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
                 showCheckboxColumn: false,
-                headingRowColor: WidgetStateProperty.all(_dark),
+                headingRowColor:
+                    WidgetStateProperty.all(_dark),
                 headingTextStyle: GoogleFonts.poppins(
                     color: Colors.white,
                     fontWeight: FontWeight.w600, fontSize: 12),
@@ -333,18 +345,14 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
                           width: 32, height: 32,
                           decoration: BoxDecoration(
                             color: _accent.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Center(
-                            child: Text(
-                              (p['nombre'] as String)
-                                  .substring(0, 1)
-                                  .toUpperCase(),
-                              style: GoogleFonts.poppins(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13, color: _accent),
-                            ),
-                          ),
+                            borderRadius: BorderRadius.circular(8)),
+                          child: Center(child: Text(
+                            (p['nombre'] as String)
+                                .substring(0, 1).toUpperCase(),
+                            style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13, color: _accent),
+                          )),
                         ),
                         const SizedBox(width: 10),
                         Text(p['nombre'] ?? '',
@@ -352,12 +360,15 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
                               fontWeight: FontWeight.w600)),
                       ])),
                       DataCell(Text(p['nit'] ?? '—')),
-                      DataCell(Text(p['telefono']?.isNotEmpty == true
-                          ? p['telefono'] : '—')),
-                      DataCell(Text(p['ciudad']?.isNotEmpty == true
-                          ? p['ciudad'] : '—')),
-                      DataCell(Text(p['email']?.isNotEmpty == true
-                          ? p['email'] : '—',
+                      DataCell(Text(
+                          p['telefono']?.isNotEmpty == true
+                              ? p['telefono'] : '—')),
+                      DataCell(Text(
+                          p['ciudad']?.isNotEmpty == true
+                              ? p['ciudad'] : '—')),
+                      DataCell(Text(
+                          p['email']?.isNotEmpty == true
+                              ? p['email'] : '—',
                         style: GoogleFonts.poppins(
                             color: p['email']?.isNotEmpty == true
                                 ? Colors.blue.shade600
@@ -395,21 +406,22 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
 
   void _abrirFormulario(BuildContext context,
       {Map<String, dynamic>? proveedor}) {
-    final esEdicion = proveedor != null;
-    final _nombre   = TextEditingController(
-        text: proveedor?['nombre']   ?? '');
-    final _nit      = TextEditingController(
-        text: proveedor?['nit']      ?? '');
-    final _telefono = TextEditingController(
-        text: proveedor?['telefono'] ?? '');
-    final _email    = TextEditingController(
-        text: proveedor?['email']    ?? '');
-    final _direccion = TextEditingController(
+    final esEdicion   = proveedor != null;
+    final cNombre     = TextEditingController(
+        text: proveedor?['nombre']    ?? '');
+    final cNit        = TextEditingController(
+        text: proveedor?['nit']       ?? '');
+    final cTelefono   = TextEditingController(
+        text: proveedor?['telefono']  ?? '');
+    final cEmail      = TextEditingController(
+        text: proveedor?['email']     ?? '');
+    final cDireccion  = TextEditingController(
         text: proveedor?['direccion'] ?? '');
-    final _ciudad   = TextEditingController(
-        text: proveedor?['ciudad']   ?? '');
-    final _formKey  = GlobalKey<FormState>();
+    final cCiudad     = TextEditingController(
+        text: proveedor?['ciudad']    ?? '');
+    final formKey     = GlobalKey<FormState>();
 
+    // ✅ FIX: disponer controllers cuando el dialog se cierra
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -430,14 +442,13 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
         content: SizedBox(
           width: 520,
           child: Form(
-            key: _formKey,
+            key: formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Fila 1 — nombre y NIT
                 Row(children: [
                   Expanded(child: _campo(
-                    ctrl:  _nombre,
+                    ctrl:  cNombre,
                     label: 'Nombre *',
                     icon:  Icons.business_rounded,
                     validator: (v) => v == null || v.isEmpty
@@ -445,39 +456,36 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
                   )),
                   const SizedBox(width: 12),
                   Expanded(child: _campo(
-                    ctrl:  _nit,
+                    ctrl:  cNit,
                     label: 'NIT',
                     icon:  Icons.badge_rounded,
                   )),
                 ]),
                 const SizedBox(height: 12),
-                // Fila 2 — teléfono y ciudad
                 Row(children: [
                   Expanded(child: _campo(
-                    ctrl:        _telefono,
-                    label:       'Teléfono',
-                    icon:        Icons.phone_rounded,
-                    inputType:   TextInputType.phone,
+                    ctrl:      cTelefono,
+                    label:     'Teléfono',
+                    icon:      Icons.phone_rounded,
+                    inputType: TextInputType.phone,
                   )),
                   const SizedBox(width: 12),
                   Expanded(child: _campo(
-                    ctrl:  _ciudad,
+                    ctrl:  cCiudad,
                     label: 'Ciudad',
                     icon:  Icons.location_city_rounded,
                   )),
                 ]),
                 const SizedBox(height: 12),
-                // Fila 3 — email
                 _campo(
-                  ctrl:      _email,
+                  ctrl:      cEmail,
                   label:     'Email',
                   icon:      Icons.email_rounded,
                   inputType: TextInputType.emailAddress,
                 ),
                 const SizedBox(height: 12),
-                // Fila 4 — dirección
                 _campo(
-                  ctrl:  _direccion,
+                  ctrl:  cDireccion,
                   label: 'Dirección',
                   icon:  Icons.map_rounded,
                 ),
@@ -497,15 +505,15 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
                   ? null
                   : () => _guardar(
                         ctx,
-                        formKey:    _formKey,
-                        esEdicion:  esEdicion,
-                        id:         proveedor?['id'],
-                        nombre:     _nombre.text,
-                        nit:        _nit.text,
-                        telefono:   _telefono.text,
-                        email:      _email.text,
-                        direccion:  _direccion.text,
-                        ciudad:     _ciudad.text,
+                        formKey:   formKey,
+                        esEdicion: esEdicion,
+                        id:        proveedor?['id'],
+                        nombre:    cNombre.text,
+                        nit:       cNit.text,
+                        telefono:  cTelefono.text,
+                        email:     cEmail.text,
+                        direccion: cDireccion.text,
+                        ciudad:    cCiudad.text,
                       ),
               icon: p.guardando
                   ? const SizedBox(
@@ -534,7 +542,15 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
           ),
         ],
       ),
-    );
+    ).whenComplete(() {
+      // ✅ FIX: dispose de los 6 controllers al cerrar el dialog
+      cNombre.dispose();
+      cNit.dispose();
+      cTelefono.dispose();
+      cEmail.dispose();
+      cDireccion.dispose();
+      cCiudad.dispose();
+    });
   }
 
   Future<void> _guardar(
@@ -561,13 +577,15 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
     };
 
     final prov = context.read<ProveedoresProvider>();
-    final ok = esEdicion
+    final ok   = esEdicion
         ? await prov.editarProveedor(id!, data)
         : await prov.crearProveedor(data);
 
     if (!ctx.mounted) return;
     Navigator.pop(ctx);
 
+    // ✅ FIX: verificar mounted del screen padre antes del SnackBar
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(
         ok
@@ -576,8 +594,9 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
                 : 'Proveedor creado correctamente'
             : 'Ocurrió un error, intenta de nuevo',
         style: GoogleFonts.poppins(color: Colors.white)),
-      backgroundColor: ok ? Colors.green.shade600 : Colors.red.shade600,
-      behavior:        SnackBarBehavior.floating,
+      backgroundColor: ok
+          ? Colors.green.shade600 : Colors.red.shade600,
+      behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10)),
       margin: const EdgeInsets.all(16),
@@ -630,9 +649,7 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                 content: Text(
-                  ok
-                      ? 'Proveedor desactivado'
-                      : 'Error al desactivar',
+                  ok ? 'Proveedor desactivado' : 'Error al desactivar',
                   style: GoogleFonts.poppins(color: Colors.white)),
                 backgroundColor: ok
                     ? Colors.orange.shade600
@@ -669,10 +686,10 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
     String? Function(String?)?     validator,
   }) =>
     TextFormField(
-      controller:  ctrl,
+      controller:   ctrl,
       keyboardType: inputType,
-      validator:   validator,
-      style:       GoogleFonts.poppins(fontSize: 13),
+      validator:    validator,
+      style:        GoogleFonts.poppins(fontSize: 13),
       decoration: InputDecoration(
         labelText:  label,
         labelStyle: GoogleFonts.poppins(fontSize: 12),
@@ -681,20 +698,16 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
         fillColor:  const Color(0xFFF4F6FA),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide:   const BorderSide(color: Color(0xFFE0E0E0)),
-        ),
+          borderSide:   const BorderSide(color: Color(0xFFE0E0E0))),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide:   const BorderSide(color: Color(0xFFE0E0E0)),
-        ),
+          borderSide:   const BorderSide(color: Color(0xFFE0E0E0))),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide:   const BorderSide(color: _accent, width: 1.5),
-        ),
+          borderSide:   const BorderSide(color: _accent, width: 1.5)),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide:   BorderSide(color: Colors.red.shade400),
-        ),
+          borderSide:   BorderSide(color: Colors.red.shade400)),
         contentPadding: const EdgeInsets.symmetric(
             horizontal: 14, vertical: 12),
       ),
@@ -708,8 +721,7 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
       border: Border.all(
           color: activo
               ? Colors.green.shade200
-              : Colors.grey.shade300),
-    ),
+              : Colors.grey.shade300)),
     child: Text(
       activo ? 'Activo' : 'Inactivo',
       style: GoogleFonts.poppins(
@@ -717,14 +729,13 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
         fontWeight: FontWeight.w600,
         color: activo
             ? Colors.green.shade700
-            : Colors.grey.shade500,
-      )),
+            : Colors.grey.shade500)),
   );
 
   Widget _accionBtn({
-    required IconData icon,
-    required Color    color,
-    required String   tooltip,
+    required IconData     icon,
+    required Color        color,
+    required String       tooltip,
     required VoidCallback onTap,
   }) =>
     Tooltip(
@@ -736,8 +747,7 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
           padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
             color:        color.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(8),
-          ),
+            borderRadius: BorderRadius.circular(8)),
           child: Icon(icon, size: 16, color: color),
         ),
       ),

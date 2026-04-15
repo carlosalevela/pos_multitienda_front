@@ -1,27 +1,60 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../core/api_client.dart';
 import '../models/sesion_caja.dart';
 import '../models/resumen_cierre.dart';
 
 class CajaService {
 
+  // ── Helper extractor de errores ────────────────────────
+  // ✅ FIX: maneja listas de validación {'monto_inicial': ['...']}
+  String _extractError(DioException e, String fallback) {
+    final data = e.response?.data;
+    if (data == null) return fallback;
+    if (data is Map) {
+      if (data.containsKey('error'))  return data['error'].toString();
+      if (data.containsKey('detail')) return data['detail'].toString();
+      final msgs = data.values
+          .expand((v) => v is List ? v : [v])
+          .join(', ');
+      return msgs.isNotEmpty ? msgs : fallback;
+    }
+    return fallback;
+  }
+
+  // ── Sesión activa ──────────────────────────────────────
+
   Future<SesionCaja?> getSesionActiva(int tiendaId) async {
     if (tiendaId <= 0) return null;
     try {
       final r = await ApiClient.instance.get('/caja/activa/$tiendaId/');
       return SesionCaja.fromJson(r.data);
-    } catch (_) { return null; }
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      debugPrint('❌ getSesionActiva error: ${e.response?.data}');
+      return null;
+    } catch (e) {
+      debugPrint('❌ getSesionActiva error: $e');
+      return null;
+    }
   }
+
+  // ── Resumen pre-cierre ─────────────────────────────────
 
   Future<ResumenCierre?> getResumenCierre(int sesionId) async {
     try {
       final r = await ApiClient.instance.get('/caja/$sesionId/resumen-cierre/');
       return ResumenCierre.fromJson(r.data);
+    } on DioException catch (e) {
+      debugPrint('❌ getResumenCierre error: ${e.response?.data}');
+      return null;
     } catch (e) {
-      print('❌ getResumenCierre error: $e');
+      debugPrint('❌ getResumenCierre error: $e');
       return null;
     }
   }
+
+  // ── Abrir caja ─────────────────────────────────────────
 
   Future<Map<String, dynamic>> abrirCaja({
     required double saldoInicial,
@@ -30,12 +63,14 @@ class CajaService {
       final r = await ApiClient.instance.post(
         '/caja/abrir/',
         data: {'monto_inicial': saldoInicial},
-        options: Options(headers: {'Content-Type': 'application/json'}),
       );
       return {'success': true, 'data': r.data};
     } on DioException catch (e) {
       if (e.response?.statusCode == 400) {
-        final data     = e.response?.data as Map<String, dynamic>?;
+        // ✅ FIX: cast seguro — evita CastError si data es String o List
+        final raw  = e.response?.data;
+        final data = raw is Map ? Map<String, dynamic>.from(raw) : null;
+
         final sesionId = data?['sesion_id'];
         if (sesionId != null) {
           return {
@@ -45,50 +80,18 @@ class CajaService {
             'error':      data?['error'] ?? 'La caja ya está abierta',
           };
         }
-        return {'success': false, 'error': data?['error'] ?? 'Error al abrir la caja'};
+        return {
+          'success': false,
+          'error':   data?['error'] ?? 'Error al abrir la caja',
+        };
       }
-      return {'success': false, 'error': 'Error de conexión'};
+      return {'success': false, 'error': _extractError(e, 'Error de conexión')};
+    } catch (e) {
+      return {'success': false, 'error': 'Error inesperado'};
     }
   }
 
-  // ✅ Ahora parsea efectivo y transferencia del breakdown
-  Future<AbonosCierre> getAbonosSesion(DateTime fechaApertura) async {
-    try {
-      final fecha = fechaApertura.toLocal().toString().substring(0, 10);
-      final resp  = await ApiClient.instance.get(
-        '/clientes/abonos/',
-        queryParameters: {'fecha': fecha},
-      );
-
-      final data   = resp.data as Map<String, dynamic>;
-      final lista  = (data['abonos'] as List? ?? []);
-
-      // Suma por método de pago iterando la lista
-      double totalEfectivo      = 0;
-      double totalTransferencia = 0;
-      double totalGeneral       = 0;
-
-      for (final a in lista) {
-        final monto  = double.tryParse(a['monto']?.toString() ?? '0') ?? 0.0;
-        final metodo = a['metodo_pago']?.toString() ?? '';
-        totalGeneral += monto;
-        if (metodo == 'efectivo')      totalEfectivo      += monto;
-        if (metodo == 'transferencia') totalTransferencia += monto;
-      }
-
-      // Si el backend ya retorna el total directamente úsalo, si no usa la suma
-      final totalBackend = double.tryParse(data['total']?.toString() ?? '0') ?? 0.0;
-
-      return AbonosCierre(
-        total:         totalBackend > 0 ? totalBackend : totalGeneral,
-        efectivo:      totalEfectivo,
-        transferencia: totalTransferencia,
-        cantidad:      lista.length,
-      );
-    } catch (_) {
-      return AbonosCierre.vacio();
-    }
-  }
+  // ── Cerrar caja ────────────────────────────────────────
 
   Future<Map<String, dynamic>> cerrarCaja(
     int sesionId, {
@@ -105,10 +108,36 @@ class CajaService {
       );
       return {'success': true, 'data': r.data};
     } on DioException catch (e) {
-      final msg = (e.response?.data as Map?)?['error'] ?? 'Error al cerrar la caja';
-      return {'success': false, 'error': msg};
-    } catch (_) {
-      return {'success': false, 'error': 'Error al cerrar la caja'};
+      return {'success': false, 'error': _extractError(e, 'Error al cerrar la caja')};
+    } catch (e) {
+      return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
+
+  // ── Historial de sesiones ──────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getHistorialSesiones({
+    int?    tiendaId,
+    String? estado,
+    String? fecha,
+  }) async {
+    try {
+      final r = await ApiClient.instance.get(
+        '/caja/sesiones/',
+        queryParameters: {
+          if (tiendaId != null) 'tienda_id': tiendaId.toString(),
+          if (estado   != null) 'estado':    estado,
+          if (fecha    != null) 'fecha':     fecha,
+        },
+      );
+      final List data = r.data is List ? r.data : r.data['results'] ?? [];
+      return List<Map<String, dynamic>>.from(data);
+    } on DioException catch (e) {
+      debugPrint('❌ getHistorialSesiones error: ${e.response?.data}');
+      return [];
+    } catch (e) {
+      debugPrint('❌ getHistorialSesiones error: $e');
+      return [];
     }
   }
 }

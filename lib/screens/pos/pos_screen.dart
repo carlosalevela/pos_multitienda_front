@@ -1,3 +1,6 @@
+// lib/screens/pos/pos_screen.dart
+
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -10,32 +13,35 @@ import '../../models/cliente.dart';
 import '../../core/constants.dart';
 import '../../providers/caja_provider.dart';
 
-
 class PosScreen extends StatefulWidget {
   const PosScreen({super.key});
   @override
   State<PosScreen> createState() => _PosScreenState();
 }
 
-
 class _PosScreenState extends State<PosScreen> {
   final _searchCtrl        = TextEditingController();
   final _montoCtrl         = TextEditingController();
   final _clienteSearchCtrl = TextEditingController();
-  final _descuentoCtrl     = TextEditingController(); // ✅ DESCUENTO
+  final _descuentoCtrl     = TextEditingController();
   final _searchFocus       = FocusNode();
 
   Cliente?  _clienteSeleccionado;
   DateTime? _fechaLimite;
   bool      _buscandoCliente = false;
 
+  // ✅ FIX: debounce para evitar race condition en búsqueda de cliente
+  Timer? _debounceCliente;
+
   @override
   void dispose() {
     _searchCtrl.dispose();
     _montoCtrl.dispose();
     _clienteSearchCtrl.dispose();
-    _descuentoCtrl.dispose(); // ✅ DESCUENTO
+    _descuentoCtrl.dispose();
     _searchFocus.dispose();
+    // ✅ FIX: cancelar timer al destruir
+    _debounceCliente?.cancel();
     super.dispose();
   }
 
@@ -134,7 +140,8 @@ class _PosScreenState extends State<PosScreen> {
           Icon(Icons.search_rounded, size: 64, color: Colors.grey.shade300),
           const SizedBox(height: 12),
           Text('Busca un producto para agregarlo al carrito',
-            style: GoogleFonts.poppins(color: Colors.grey.shade400, fontSize: 14)),
+            style: GoogleFonts.poppins(
+                color: Colors.grey.shade400, fontSize: 14)),
         ],
       ));
     }
@@ -145,7 +152,8 @@ class _PosScreenState extends State<PosScreen> {
           Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey.shade300),
           const SizedBox(height: 12),
           Text('No se encontraron productos',
-            style: GoogleFonts.poppins(color: Colors.grey.shade400, fontSize: 14)),
+            style: GoogleFonts.poppins(
+                color: Colors.grey.shade400, fontSize: 14)),
         ],
       ));
     }
@@ -185,7 +193,8 @@ class _PosScreenState extends State<PosScreen> {
                   : const Color(Constants.primaryColor).withOpacity(0.1),
               borderRadius: BorderRadius.circular(8)),
             child: Icon(Icons.inventory_2_rounded,
-              color: sinStock ? Colors.grey : const Color(Constants.primaryColor),
+              color: sinStock
+                  ? Colors.grey : const Color(Constants.primaryColor),
               size: 22),
           ),
           const SizedBox(width: 10),
@@ -196,14 +205,18 @@ class _PosScreenState extends State<PosScreen> {
               Text(producto.nombre,
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w600, fontSize: 13,
-                  color: sinStock ? Colors.grey : const Color(0xFF1A1A2E)),
+                  color: sinStock
+                      ? Colors.grey : const Color(0xFF1A1A2E)),
                 maxLines: 1, overflow: TextOverflow.ellipsis),
               Text('\$${producto.precio.toStringAsFixed(0)}',
                 style: GoogleFonts.poppins(
-                  color: sinStock ? Colors.grey : const Color(Constants.primaryColor),
+                  color: sinStock
+                      ? Colors.grey : const Color(Constants.primaryColor),
                   fontWeight: FontWeight.bold, fontSize: 14)),
               Text(
-                sinStock ? 'Sin stock' : 'Stock: ${producto.stockActual.toStringAsFixed(0)}',
+                sinStock
+                    ? 'Sin stock'
+                    : 'Stock: ${producto.stockActual.toStringAsFixed(0)}',
                 style: GoogleFonts.poppins(
                     fontSize: 10,
                     color: sinStock ? Colors.red : Colors.grey)),
@@ -227,6 +240,7 @@ class _PosScreenState extends State<PosScreen> {
             blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(children: [
+
         // ── Cabecera ──────────────────────────────────────
         Container(
           padding: const EdgeInsets.all(16),
@@ -234,11 +248,13 @@ class _PosScreenState extends State<PosScreen> {
             color: Color(0xFF1A1A2E),
             borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
           child: Row(children: [
-            const Icon(Icons.shopping_cart_rounded, color: Colors.white, size: 20),
+            const Icon(Icons.shopping_cart_rounded,
+                color: Colors.white, size: 20),
             const SizedBox(width: 8),
             Text('Carrito',
               style: GoogleFonts.poppins(
-                  color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold, fontSize: 16)),
             const Spacer(),
             if (pos.carrito.isNotEmpty)
               GestureDetector(
@@ -253,7 +269,8 @@ class _PosScreenState extends State<PosScreen> {
                 borderRadius: BorderRadius.circular(20)),
               child: Text('${pos.carrito.length}',
                 style: GoogleFonts.poppins(
-                    color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                    color: Colors.white,
+                    fontSize: 12, fontWeight: FontWeight.bold)),
             ),
           ]),
         ),
@@ -268,12 +285,14 @@ class _PosScreenState extends State<PosScreen> {
                         size: 48, color: Colors.grey.shade300),
                     const SizedBox(height: 8),
                     Text('Carrito vacío',
-                      style: GoogleFonts.poppins(color: Colors.grey.shade400)),
+                      style: GoogleFonts.poppins(
+                          color: Colors.grey.shade400)),
                   ]))
               : ListView.separated(
                   padding: const EdgeInsets.all(12),
                   itemCount: pos.carrito.length,
-                  separatorBuilder: (_, __) => Divider(color: Colors.grey.shade100),
+                  separatorBuilder: (_, __) =>
+                      Divider(color: Colors.grey.shade100),
                   itemBuilder: (_, i) {
                     final item = pos.carrito[i];
                     return Row(children: [
@@ -283,7 +302,8 @@ class _PosScreenState extends State<PosScreen> {
                           Text(item.producto.nombre,
                             style: GoogleFonts.poppins(
                                 fontWeight: FontWeight.w600, fontSize: 13),
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
                           Text('\$${item.subtotal.toStringAsFixed(0)}',
                             style: GoogleFonts.poppins(
                               color: const Color(Constants.primaryColor),
@@ -291,13 +311,15 @@ class _PosScreenState extends State<PosScreen> {
                         ],
                       )),
                       Row(children: [
-                        _qtyBtn(Icons.remove_rounded, () => pos.decrementar(i)),
+                        _qtyBtn(Icons.remove_rounded,
+                            () => pos.decrementar(i)),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 10),
                           child: Text('${item.cantidad}',
                             style: GoogleFonts.poppins(
                                 fontWeight: FontWeight.bold, fontSize: 15))),
-                        _qtyBtn(Icons.add_rounded, () => pos.incrementar(i)),
+                        _qtyBtn(Icons.add_rounded,
+                            () => pos.incrementar(i)),
                       ]),
                     ]);
                   }),
@@ -312,7 +334,7 @@ class _PosScreenState extends State<PosScreen> {
               border: Border(top: BorderSide(color: Colors.grey.shade200))),
             child: Column(children: [
 
-              // ✅ DESCUENTO — Total bruto
+              // Subtotal
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -328,14 +350,13 @@ class _PosScreenState extends State<PosScreen> {
               ),
               const SizedBox(height: 10),
 
-              // ✅ DESCUENTO — Campo + botones %
               _buildDescuentoField(pos),
 
-              // ✅ DESCUENTO — Total final destacado
               if (pos.descuento > 0) ...[
                 const SizedBox(height: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     color: Colors.green.shade50,
                     borderRadius: BorderRadius.circular(8),
@@ -347,10 +368,12 @@ class _PosScreenState extends State<PosScreen> {
                         Icon(Icons.discount_rounded,
                             size: 14, color: Colors.green.shade700),
                         const SizedBox(width: 6),
-                        Text('Descuento: -\$${pos.descuento.toStringAsFixed(0)}',
+                        Text(
+                          'Descuento: -\$${pos.descuento.toStringAsFixed(0)}',
                           style: GoogleFonts.poppins(
                               color: Colors.green.shade700,
-                              fontSize: 12, fontWeight: FontWeight.w500)),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500)),
                       ]),
                       Text('\$${pos.totalConDescuento.toStringAsFixed(0)}',
                         style: GoogleFonts.poppins(
@@ -377,7 +400,7 @@ class _PosScreenState extends State<PosScreen> {
               ],
               const SizedBox(height: 12),
 
-              // Métodos de pago — 4 botones en grilla 2×2
+              // Métodos de pago
               GridView.count(
                 crossAxisCount: 2,
                 shrinkWrap: true,
@@ -386,19 +409,19 @@ class _PosScreenState extends State<PosScreen> {
                 mainAxisSpacing: 6,
                 childAspectRatio: 3.2,
                 children: [
-                  _metodoBtn('efectivo',      '💵 Efectivo',   pos),
-                  _metodoBtn('tarjeta',       '💳 Tarjeta',    pos),
-                  _metodoBtn('transferencia', '📲 Transfer.',  pos),
-                  _metodoBtn('separado',      '📦 Separado',   pos),
+                  _metodoBtn('efectivo',      '💵 Efectivo',  pos),
+                  _metodoBtn('tarjeta',       '💳 Tarjeta',   pos),
+                  _metodoBtn('transferencia', '📲 Transfer.', pos),
+                  _metodoBtn('separado',      '📦 Separado',  pos),
                 ],
               ),
               const SizedBox(height: 12),
 
-              // ── Efectivo: monto + vuelto ───────────────────
+              // ── Efectivo: monto + vuelto ─────────────────
               if (pos.metodoPago == 'efectivo') ...[
                 TextField(
-                  controller:   _montoCtrl,
-                  keyboardType: TextInputType.number,
+                  controller:      _montoCtrl,
+                  keyboardType:    TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: InputDecoration(
                     labelText:  'Monto recibido',
@@ -407,11 +430,13 @@ class _PosScreenState extends State<PosScreen> {
                     filled: true, fillColor: Colors.white,
                     border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(color: Colors.grey.shade300)),
+                        borderSide:
+                            BorderSide(color: Colors.grey.shade300)),
                     focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: const BorderSide(
-                            color: Color(Constants.primaryColor), width: 2)),
+                            color: Color(Constants.primaryColor),
+                            width: 2)),
                   ),
                   onChanged: (v) =>
                       pos.setMontoRecibido(double.tryParse(v) ?? 0),
@@ -419,7 +444,8 @@ class _PosScreenState extends State<PosScreen> {
                 if (pos.montoRecibido > 0) ...[
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       color: Colors.green.shade50,
                       borderRadius: BorderRadius.circular(8),
@@ -434,7 +460,8 @@ class _PosScreenState extends State<PosScreen> {
                         Text('\$${pos.vuelto.toStringAsFixed(0)}',
                           style: GoogleFonts.poppins(
                               color: Colors.green.shade700,
-                              fontWeight: FontWeight.bold, fontSize: 16)),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16)),
                       ],
                     ),
                   ),
@@ -442,7 +469,7 @@ class _PosScreenState extends State<PosScreen> {
                 const SizedBox(height: 10),
               ],
 
-              // ── Separado: buscar cliente + fecha límite ────
+              // ── Separado: cliente + fecha ────────────────
               if (esSeparado) ...[
                 _buildClienteSearch(),
                 const SizedBox(height: 10),
@@ -458,7 +485,7 @@ class _PosScreenState extends State<PosScreen> {
 
               const SizedBox(height: 8),
 
-              // ── Botón principal ────────────────────────────
+              // ── Botón principal ──────────────────────────
               SizedBox(
                 width: double.infinity, height: 50,
                 child: esSeparado
@@ -471,14 +498,17 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  // ✅ DESCUENTO — campo + botones de porcentaje rápido
+  // ── Campo descuento + botones % ────────────────────────
   Widget _buildDescuentoField(PosProvider pos) {
     return Row(children: [
       Expanded(
         child: TextField(
-          controller:      _descuentoCtrl,
-          keyboardType:    TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          controller:   _descuentoCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          // ✅ FIX: permite decimales — descuentos como $1500.50
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+          ],
           decoration: InputDecoration(
             labelText:  'Descuento',
             labelStyle: GoogleFonts.poppins(fontSize: 12),
@@ -517,7 +547,6 @@ class _PosScreenState extends State<PosScreen> {
     ]);
   }
 
-  // ✅ DESCUENTO — botón de % rápido
   Widget _pctBtn(PosProvider pos, int pct) => GestureDetector(
     onTap: () {
       pos.setDescuentoPorcentaje(pct);
@@ -528,13 +557,14 @@ class _PosScreenState extends State<PosScreen> {
       decoration: BoxDecoration(
         color: const Color(Constants.primaryColor).withOpacity(0.1),
         borderRadius: BorderRadius.circular(8)),
-      child: Text('$pct%', style: GoogleFonts.poppins(
-        fontSize: 11, fontWeight: FontWeight.w600,
-        color: const Color(Constants.primaryColor))),
+      child: Text('$pct%',
+        style: GoogleFonts.poppins(
+          fontSize: 11, fontWeight: FontWeight.w600,
+          color: const Color(Constants.primaryColor))),
     ),
   );
 
-  // ── Búsqueda de cliente para separado ──────────────────
+  // ── Búsqueda de cliente ────────────────────────────────
   Widget _buildClienteSearch() {
     final clienteProv = context.watch<ClienteProvider>();
 
@@ -582,7 +612,8 @@ class _PosScreenState extends State<PosScreen> {
                 _clienteSeleccionado = null;
                 _clienteSearchCtrl.clear();
               }),
-              child: const Icon(Icons.close_rounded, size: 18, color: Colors.grey)),
+              child: const Icon(Icons.close_rounded,
+                  size: 18, color: Colors.grey)),
           ]),
         )
       else ...[
@@ -612,11 +643,15 @@ class _PosScreenState extends State<PosScreen> {
                 borderSide: const BorderSide(
                     color: Color(Constants.primaryColor))),
           ),
-          onChanged: (v) async {
+          onChanged: (v) {
             if (v.length < 2) return;
+            // ✅ FIX: debounce 350ms — evita race condition de respuestas
+            _debounceCliente?.cancel();
             setState(() => _buscandoCliente = true);
-            await context.read<ClienteProvider>().cargarClientesSimple(q: v);
-            setState(() => _buscandoCliente = false);
+            _debounceCliente = Timer(const Duration(milliseconds: 350), () async {
+              await context.read<ClienteProvider>().cargarClientesSimple(q: v);
+              if (mounted) setState(() => _buscandoCliente = false);
+            });
           },
         ),
 
@@ -660,7 +695,8 @@ class _PosScreenState extends State<PosScreen> {
                   onTap: () => setState(() {
                     _clienteSeleccionado = c;
                     _clienteSearchCtrl.clear();
-                    context.read<ClienteProvider>().cargarClientesSimple(q: '');
+                    context.read<ClienteProvider>()
+                        .cargarClientesSimple(q: '');
                   }),
                 );
               },
@@ -715,34 +751,40 @@ class _PosScreenState extends State<PosScreen> {
           if (_fechaLimite != null)
             GestureDetector(
               onTap: () => setState(() => _fechaLimite = null),
-              child: const Icon(Icons.close_rounded, size: 16, color: Colors.grey)),
+              child: const Icon(Icons.close_rounded,
+                  size: 16, color: Colors.grey)),
         ]),
       ),
     );
   }
 
-  // ── Botón cobrar normal ─────────────────────────────────
+  // ── Botón cobrar ────────────────────────────────────────
   Widget _botonCobrar(PosProvider pos, AuthProvider auth) {
     return ElevatedButton.icon(
       icon: pos.procesando
           ? const SizedBox(width: 18, height: 18,
-              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              child: CircularProgressIndicator(
+                  color: Colors.white, strokeWidth: 2))
           : const Icon(Icons.check_circle_rounded),
       label: Text(pos.procesando ? 'Procesando...' : 'COBRAR',
-        style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
+        style: GoogleFonts.poppins(
+            fontSize: 16, fontWeight: FontWeight.bold)),
       onPressed: pos.procesando ? null : () {
         _montoCtrl.clear();
+        // ✅ FIX: limpiar descuento al cobrar
+        _descuentoCtrl.clear();
         pos.cobrar(context.read<AuthProvider>().tiendaId);
       },
       style: ElevatedButton.styleFrom(
         backgroundColor: Colors.green.shade600,
         foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
         elevation: 0),
     );
   }
 
-  // ── Botón crear separado ────────────────────────────────
+  // ── Botón separado ──────────────────────────────────────
   Widget _botonSeparado(PosProvider pos, AuthProvider auth) {
     final clienteProv = context.read<ClienteProvider>();
     final habilitado  = _clienteSeleccionado != null && !pos.procesando;
@@ -750,23 +792,28 @@ class _PosScreenState extends State<PosScreen> {
     return ElevatedButton.icon(
       icon: pos.procesando
           ? const SizedBox(width: 18, height: 18,
-              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              child: CircularProgressIndicator(
+                  color: Colors.white, strokeWidth: 2))
           : const Icon(Icons.bookmark_add_rounded),
       label: Text(pos.procesando ? 'Guardando...' : 'CREAR SEPARADO',
-        style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.bold)),
+        style: GoogleFonts.poppins(
+            fontSize: 15, fontWeight: FontWeight.bold)),
       onPressed: habilitado
           ? () => _crearSeparado(pos, auth, clienteProv) : null,
       style: ElevatedButton.styleFrom(
-        backgroundColor: habilitado ? Colors.orange.shade600 : Colors.grey.shade300,
+        backgroundColor: habilitado
+            ? Colors.orange.shade600 : Colors.grey.shade300,
         foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
         elevation: 0),
     );
   }
 
   // ── Lógica crear separado ───────────────────────────────
   Future<void> _crearSeparado(
-      PosProvider pos, AuthProvider auth, ClienteProvider clienteProv) async {
+      PosProvider pos, AuthProvider auth,
+      ClienteProvider clienteProv) async {
     if (_clienteSeleccionado == null) return;
 
     final cajaAbierta = context.read<CajaProvider>().cajaAbierta;
@@ -784,9 +831,13 @@ class _PosScreenState extends State<PosScreen> {
     final data = {
       'tienda':  auth.tiendaId,
       'cliente': _clienteSeleccionado!.id,
+      // ✅ FIX: descuento incluido en el payload del separado
+      if (pos.descuento > 0) 'descuento': pos.descuento,
       if (_fechaLimite != null)
         'fecha_limite':
-            '${_fechaLimite!.year}-${_fechaLimite!.month.toString().padLeft(2, '0')}-${_fechaLimite!.day.toString().padLeft(2, '0')}',
+            '${_fechaLimite!.year}-'
+            '${_fechaLimite!.month.toString().padLeft(2, '0')}-'
+            '${_fechaLimite!.day.toString().padLeft(2, '0')}',
       'detalles': pos.carrito.map((item) => {
         'producto':        item.producto.id,
         'cantidad':        item.cantidad,
@@ -801,7 +852,7 @@ class _PosScreenState extends State<PosScreen> {
         _clienteSeleccionado = null;
         _fechaLimite         = null;
         _clienteSearchCtrl.clear();
-        _descuentoCtrl.clear(); // ✅ DESCUENTO
+        _descuentoCtrl.clear();
       });
       pos.limpiarCarrito();
       pos.setMetodoPago('efectivo');
@@ -822,7 +873,8 @@ class _PosScreenState extends State<PosScreen> {
       decoration: BoxDecoration(
         color: const Color(Constants.primaryColor).withOpacity(0.1),
         borderRadius: BorderRadius.circular(6)),
-      child: Icon(icon, size: 16, color: const Color(Constants.primaryColor)),
+      child: Icon(icon, size: 16,
+          color: const Color(Constants.primaryColor)),
     ),
   );
 
@@ -889,7 +941,8 @@ class _PosScreenState extends State<PosScreen> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
         title: Text('¿Limpiar carrito?',
             style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
         content: Text('Se eliminarán todos los productos del carrito.',
@@ -902,7 +955,7 @@ class _PosScreenState extends State<PosScreen> {
             onPressed: () {
               pos.limpiarCarrito();
               _montoCtrl.clear();
-              _descuentoCtrl.clear(); // ✅ DESCUENTO
+              _descuentoCtrl.clear();
               setState(() {
                 _clienteSeleccionado = null;
                 _fechaLimite         = null;

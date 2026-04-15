@@ -1,21 +1,48 @@
+// lib/services/contabilidad_service.dart
+
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../core/api_client.dart';
 import '../models/contabilidad_models.dart';
-import 'package:flutter/foundation.dart';
 
 
 class ContabilidadService {
 
-  Future<ResumenDiario?> getResumenDiario({int? tiendaId, String? fecha}) async {
+  // ── Helper extractor de errores ────────────────────────
+  String _extractError(DioException e, String fallback) {
+    final data = e.response?.data;
+    if (data == null) return fallback;
+    if (data is Map) {
+      if (data.containsKey('error'))  return data['error'].toString();
+      if (data.containsKey('detail')) return data['detail'].toString();
+      final msgs = data.values
+          .expand((v) => v is List ? v : [v])
+          .join(', ');
+      return msgs.isNotEmpty ? msgs : fallback;
+    }
+    return fallback;
+  }
+
+  // ── Reportes ───────────────────────────────────────────
+
+  // Sin cambios en la llamada — el backend ya devuelve
+  // total_devoluciones, total_neto, devoluciones_por_metodo
+  // Solo necesita que ResumenDiario.fromJson los parsee ✅
+  Future<ResumenDiario?> getResumenDiario({
+    int? tiendaId, String? fecha,
+  }) async {
     try {
-      final params = <String, dynamic>{};
-      if (tiendaId != null) params['tienda_id'] = tiendaId;
-      if (fecha != null)    params['fecha']      = fecha;
       final r = await ApiClient.instance.get(
         '/contabilidad/reportes/diario/',
-        queryParameters: params,
+        queryParameters: {
+          if (tiendaId != null) 'tienda_id': tiendaId,
+          if (fecha    != null) 'fecha':     fecha,
+        },
       );
       return ResumenDiario.fromJson(r.data);
+    } on DioException catch (e) {
+      debugPrint('❌ getResumenDiario error: ${e.response?.data}');
+      return null;
     } catch (e) {
       debugPrint('❌ getResumenDiario error: $e');
       return null;
@@ -23,19 +50,22 @@ class ContabilidadService {
   }
 
   Future<ResumenMensual?> getResumenMensual({
-    int? tiendaId, int? anio, int? mes}) async {
+    int? tiendaId, int? anio, int? mes,
+  }) async {
     try {
       final now = DateTime.now();
-      final params = <String, dynamic>{
-        'anio': anio ?? now.year,
-        'mes':  mes  ?? now.month,
-      };
-      if (tiendaId != null) params['tienda_id'] = tiendaId;
       final r = await ApiClient.instance.get(
         '/contabilidad/reportes/mensual/',
-        queryParameters: params,
+        queryParameters: {
+          'anio': anio ?? now.year,
+          'mes':  mes  ?? now.month,
+          if (tiendaId != null) 'tienda_id': tiendaId,
+        },
       );
       return ResumenMensual.fromJson(r.data);
+    } on DioException catch (e) {
+      debugPrint('❌ getResumenMensual error: ${e.response?.data}');
+      return null;
     } catch (e) {
       debugPrint('❌ getResumenMensual error: $e');
       return null;
@@ -43,70 +73,112 @@ class ContabilidadService {
   }
 
   Future<Map<String, dynamic>?> getResumenAnual({
-    int? tiendaId, required int anio}) async {
+    int? tiendaId, required int anio,
+  }) async {
     try {
-      final params = <String, dynamic>{'anio': anio};
-      if (tiendaId != null) params['tienda_id'] = tiendaId;
       final r = await ApiClient.instance.get(
         '/contabilidad/reportes/anual/',
-        queryParameters: params,
+        queryParameters: {
+          'anio': anio,
+          if (tiendaId != null) 'tienda_id': tiendaId,
+        },
       );
       return Map<String, dynamic>.from(r.data);
+    } on DioException catch (e) {
+      debugPrint('❌ getResumenAnual error: ${e.response?.data}');
+      return null;
     } catch (e) {
       debugPrint('❌ getResumenAnual error: $e');
       return null;
     }
   }
 
-  Future<List<TopProducto>> getTopProductos({
-    int? tiendaId, String? fechaIni, String? fechaFin}) async {
+  // ── Devoluciones del día ✅ NUEVO ──────────────────────
+  // Trae la LISTA para mostrar en la tabla de reportes
+
+  Future<List<Map<String, dynamic>>> getDevolucionesDia(
+    String fecha, int? tiendaId,
+  ) async {
     try {
-      final params = <String, dynamic>{};
-      if (tiendaId != null) params['tienda_id'] = tiendaId;
-      if (fechaIni != null) params['fecha_ini']  = fechaIni;
-      if (fechaFin != null) params['fecha_fin']  = fechaFin;
+      final r = await ApiClient.instance.get(
+        '/devoluciones/lista/',
+        queryParameters: {
+          'fecha':  fecha,
+          'estado': 'procesada',
+          if (tiendaId != null) 'tienda_id': tiendaId,
+        },
+      );
+      final data = r.data;
+      // ✅ soporta lista directa o paginado { results: [...] }
+      final lista = data is List
+          ? data
+          : (data['results'] ?? data);
+      return List<Map<String, dynamic>>.from(lista);
+    } on DioException catch (e) {
+      debugPrint('❌ getDevolucionesDia error: ${e.response?.data}');
+      return [];
+    } catch (e) {
+      debugPrint('❌ getDevolucionesDia error: $e');
+      return [];
+    }
+  }
+
+  // ── Top productos ──────────────────────────────────────
+
+  Future<List<TopProducto>> getTopProductos({
+    int? tiendaId, String? fechaIni, String? fechaFin,
+  }) async {
+    try {
       final r = await ApiClient.instance.get(
         '/productos/top-productos/',
-        queryParameters: params,
+        queryParameters: {
+          if (tiendaId != null) 'tienda_id': tiendaId,
+          if (fechaIni != null) 'fecha_ini': fechaIni,
+          if (fechaFin != null) 'fecha_fin': fechaFin,
+        },
       );
       return (r.data as List).map((e) => TopProducto.fromJson(e)).toList();
+    } on DioException catch (e) {
+      debugPrint('❌ getTopProductos error: ${e.response?.data}');
+      return [];
     } catch (e) {
       debugPrint('❌ getTopProductos error: $e');
       return [];
     }
   }
 
-  // ✅ ACTUALIZADO — soporta fecha exacta, rango y filtros nuevos
+  // ── Gastos ─────────────────────────────────────────────
+
   Future<List<Gasto>> getGastos({
     int?    tiendaId,
     String? fecha,
-    String? fechaIni,      // ✅ NUEVO
-    String? fechaFin,      // ✅ NUEVO
-    String? categoria,     // ✅ NUEVO
-    String? visibilidad,   // ✅ NUEVO — 'todos' | 'solo_admin'
+    String? fechaIni,
+    String? fechaFin,
+    String? categoria,
+    String? visibilidad,
   }) async {
     try {
-      final params = <String, dynamic>{};
-      if (tiendaId    != null) params['tienda_id']  = tiendaId;
-      if (fecha       != null) params['fecha']       = fecha;
-      if (fechaIni    != null) params['fecha_ini']   = fechaIni;
-      if (fechaFin    != null) params['fecha_fin']   = fechaFin;
-      if (categoria   != null) params['categoria']   = categoria;
-      if (visibilidad != null) params['visibilidad'] = visibilidad;
-
       final r = await ApiClient.instance.get(
         '/contabilidad/gastos/',
-        queryParameters: params,
+        queryParameters: {
+          if (tiendaId    != null) 'tienda_id':  tiendaId,
+          if (fecha       != null) 'fecha':       fecha,
+          if (fechaIni    != null) 'fecha_ini':   fechaIni,
+          if (fechaFin    != null) 'fecha_fin':   fechaFin,
+          if (categoria   != null) 'categoria':   categoria,
+          if (visibilidad != null) 'visibilidad': visibilidad,
+        },
       );
       return (r.data as List).map((e) => Gasto.fromJson(e)).toList();
+    } on DioException catch (e) {
+      debugPrint('❌ getGastos error: ${e.response?.data}');
+      return [];
     } catch (e, stack) {
-      debugPrint('❌ getGastos error: $e');
-      debugPrint('$stack');
+      debugPrint('❌ getGastos error: $e\n$stack');
       return [];
     }
   }
 
-  // ✅ NUEVO — resumen de gastos por rango para admin
   Future<Map<String, dynamic>?> getGastosResumenRango({
     required String fechaIni,
     required String fechaFin,
@@ -114,58 +186,76 @@ class ContabilidadService {
     String? categoria,
   }) async {
     try {
-      final params = <String, dynamic>{
-        'fecha_ini': fechaIni,
-        'fecha_fin': fechaFin,
-      };
-      if (tiendaId  != null) params['tienda_id'] = tiendaId;
-      if (categoria != null) params['categoria'] = categoria;
-
       final r = await ApiClient.instance.get(
         '/contabilidad/gastos/resumen-rango/',
-        queryParameters: params,
+        queryParameters: {
+          'fecha_ini': fechaIni,
+          'fecha_fin': fechaFin,
+          if (tiendaId  != null) 'tienda_id': tiendaId,
+          if (categoria != null) 'categoria': categoria,
+        },
       );
       return Map<String, dynamic>.from(r.data);
+    } on DioException catch (e) {
+      debugPrint('❌ getGastosResumenRango error: ${e.response?.data}');
+      return null;
     } catch (e) {
       debugPrint('❌ getGastosResumenRango error: $e');
       return null;
     }
   }
 
+  // ── Crear / eliminar gasto ─────────────────────────────
+
   Future<Map<String, dynamic>> crearGasto(Map<String, dynamic> data) async {
     try {
+      data.remove('empresa');
       final r = await ApiClient.instance.post(
-        '/contabilidad/gastos/',
-        data: data,
-      );
+          '/contabilidad/gastos/', data: data);
       return {'success': true, 'data': r.data};
     } on DioException catch (e) {
-      final msg = (e.response?.data as Map?)?['detail'] ?? 'Error al registrar gasto';
-      return {'success': false, 'error': msg};
+      return {'success': false,
+          'error': _extractError(e, 'Error al registrar gasto')};
     } catch (e) {
-      return {'success': false, 'error': 'Error al registrar gasto'};
+      return {'success': false, 'error': 'Error inesperado'};
     }
   }
 
-  Future<bool> eliminarGasto(int id) async {
+  Future<Map<String, dynamic>> eliminarGasto(int id) async {
     try {
-      await ApiClient.instance.delete('/contabilidad/gastos/$id/');
-      return true;
-    } catch (_) {
-      return false;
+      final r = await ApiClient.instance.delete(
+          '/contabilidad/gastos/$id/');
+      return {'success': true,
+          'detail': r.data?['detail'] ?? 'Gasto eliminado'};
+    } on DioException catch (e) {
+      return {'success': false,
+          'error': _extractError(e, 'Error al eliminar gasto')};
+    } catch (e) {
+      return {'success': false, 'error': 'Error inesperado'};
     }
   }
+
+  // ── Abonos y separados del día ─────────────────────────
 
   Future<List<Map<String, dynamic>>> getAbonosDia(
       String fecha, int? tiendaId) async {
     try {
-      final params = <String, dynamic>{'fecha': fecha};
-      if (tiendaId != null) params['tienda_id'] = tiendaId.toString();
       final r = await ApiClient.instance.get(
         '/clientes/abonos/',
-        queryParameters: params,
+        queryParameters: {
+          'fecha': fecha,
+          if (tiendaId != null) 'tienda_id': tiendaId.toString(),
+        },
       );
-      return List<Map<String, dynamic>>.from(r.data['abonos'] ?? []);
+      final raw = r.data;
+      if (raw is Map && raw.containsKey('abonos')) {
+        return List<Map<String, dynamic>>.from(raw['abonos']);
+      }
+      if (raw is List) return List<Map<String, dynamic>>.from(raw);
+      return [];
+    } on DioException catch (e) {
+      debugPrint('❌ getAbonosDia error: ${e.response?.data}');
+      return [];
     } catch (e) {
       debugPrint('❌ getAbonosDia error: $e');
       return [];
@@ -175,15 +265,19 @@ class ContabilidadService {
   Future<List<Map<String, dynamic>>> getSeparadosDia(
       String fecha, int? tiendaId) async {
     try {
-      final params = <String, dynamic>{'fecha_creacion': fecha};
-      if (tiendaId != null) params['tienda_id'] = tiendaId.toString();
       final r = await ApiClient.instance.get(
         '/clientes/separados/',
-        queryParameters: params,
+        queryParameters: {
+          'fecha_creacion': fecha,
+          if (tiendaId != null) 'tienda_id': tiendaId.toString(),
+        },
       );
-      final data  = r.data;
+      final data = r.data;
       final lista = data is List ? data : (data['results'] ?? data);
       return List<Map<String, dynamic>>.from(lista);
+    } on DioException catch (e) {
+      debugPrint('❌ getSeparadosDia error: ${e.response?.data}');
+      return [];
     } catch (e) {
       debugPrint('❌ getSeparadosDia error: $e');
       return [];

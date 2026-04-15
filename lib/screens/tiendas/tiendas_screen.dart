@@ -1,3 +1,5 @@
+// lib/screens/tiendas/tiendas_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -8,7 +10,6 @@ import '../../services/tienda_service.dart';
 
 class TiendasScreen extends StatefulWidget {
   const TiendasScreen({super.key});
-
   @override
   State<TiendasScreen> createState() => _TiendasScreenState();
 }
@@ -46,8 +47,8 @@ class _TiendasScreenState extends State<TiendasScreen> {
             const SizedBox(width: 12),
             Text('Tiendas',
               style: GoogleFonts.poppins(
-                fontSize: 22, fontWeight: FontWeight.bold,
-                color: const Color(0xFF1A1A2E))),
+                  fontSize: 22, fontWeight: FontWeight.bold,
+                  color: const Color(0xFF1A1A2E))),
             const Spacer(),
             ElevatedButton.icon(
               icon:  const Icon(Icons.add_rounded, size: 18),
@@ -69,13 +70,13 @@ class _TiendasScreenState extends State<TiendasScreen> {
           // ── KPIs ────────────────────────────────────────
           Row(children: [
             _kpiCard('Total tiendas',  '${prov.tiendas.length}',
-                Icons.store_rounded,       Colors.blue),
+                Icons.store_rounded,        Colors.blue),
             const SizedBox(width: 12),
             _kpiCard('Activas',        '${prov.totalActivas}',
                 Icons.check_circle_rounded, Colors.green),
             const SizedBox(width: 12),
             _kpiCard('Inactivas',      '${prov.totalInactivas}',
-                Icons.cancel_rounded,      Colors.red),
+                Icons.cancel_rounded,       Colors.red),
           ]),
           const SizedBox(height: 16),
 
@@ -89,8 +90,8 @@ class _TiendasScreenState extends State<TiendasScreen> {
                         onRefresh: prov.cargarTiendas,
                         child: ListView.builder(
                           itemCount: prov.tiendas.length,
-                          itemBuilder: (_, i) =>
-                              _tiendaCard(context, prov, prov.tiendas[i]),
+                          itemBuilder: (_, i) => _tiendaCard(
+                              context, prov, prov.tiendas[i]),
                         ),
                       ),
           ),
@@ -100,7 +101,8 @@ class _TiendasScreenState extends State<TiendasScreen> {
   }
 
   // ── KPI card ──────────────────────────────────────────
-  Widget _kpiCard(String label, String valor, IconData icon, Color color) =>
+  Widget _kpiCard(
+      String label, String valor, IconData icon, Color color) =>
     Expanded(
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -133,7 +135,8 @@ class _TiendasScreenState extends State<TiendasScreen> {
     );
 
   // ── Tienda card ───────────────────────────────────────
-  Widget _tiendaCard(BuildContext context, TiendaProvider prov, Tienda t) =>
+  Widget _tiendaCard(
+      BuildContext context, TiendaProvider prov, Tienda t) =>
     Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -168,7 +171,8 @@ class _TiendasScreenState extends State<TiendasScreen> {
                 fontWeight: FontWeight.w600, fontSize: 14)),
           const SizedBox(width: 8),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
               color: t.activo
                   ? Colors.green.shade50
@@ -211,27 +215,25 @@ class _TiendasScreenState extends State<TiendasScreen> {
           ],
         ),
         trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-          // Ver empleados
           IconButton(
             tooltip: 'Ver empleados',
             icon: Icon(Icons.people_rounded,
                 color: Colors.blue.shade400, size: 20),
             onPressed: () => _verEmpleados(context, t),
           ),
-          // Editar
           IconButton(
             tooltip: 'Editar',
             icon: Icon(Icons.edit_rounded,
                 color: Colors.orange.shade400, size: 20),
             onPressed: () => _abrirFormTienda(context, tienda: t),
           ),
-          // Desactivar
           if (t.activo)
             IconButton(
               tooltip: 'Desactivar',
               icon: Icon(Icons.remove_circle_outline_rounded,
                   color: Colors.red.shade300, size: 20),
-              onPressed: () => _confirmarDesactivar(context, prov, t),
+              onPressed: () =>
+                  _confirmarDesactivar(context, prov, t),
             ),
         ]),
       ),
@@ -239,7 +241,8 @@ class _TiendasScreenState extends State<TiendasScreen> {
 
   // ── Empty state ───────────────────────────────────────
   Widget _emptyState() => Center(
-    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+    child: Column(
+        mainAxisAlignment: MainAxisAlignment.center, children: [
       Icon(Icons.store_rounded, size: 64, color: Colors.grey.shade300),
       const SizedBox(height: 12),
       Text('No hay tiendas registradas',
@@ -254,116 +257,149 @@ class _TiendasScreenState extends State<TiendasScreen> {
 
   // ── Form crear/editar tienda ──────────────────────────
   void _abrirFormTienda(BuildContext context, {Tienda? tienda}) {
-    final editando = tienda != null;
+    final editando      = tienda != null;
+    final nombreCtrl    = TextEditingController(
+        text: tienda?.nombre    ?? '');
+    final direccionCtrl = TextEditingController(
+        text: tienda?.direccion ?? '');
+    final telefonoCtrl  = TextEditingController(
+        text: tienda?.telefono  ?? '');
+    final ciudadCtrl    = TextEditingController(
+        text: tienda?.ciudad    ?? '');
+    final nitCtrl       = TextEditingController(
+        text: tienda?.nit       ?? '');
 
-    final nombreCtrl    = TextEditingController(text: tienda?.nombre    ?? '');
-    final direccionCtrl = TextEditingController(text: tienda?.direccion ?? '');
-    final telefonoCtrl  = TextEditingController(text: tienda?.telefono  ?? '');
-    final ciudadCtrl    = TextEditingController(text: tienda?.ciudad    ?? '');
-    final nitCtrl       = TextEditingController(text: tienda?.nit       ?? '');
-
+    // ✅ FIX: dispose controllers cuando el dialog se cierra
     showDialog(
       context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setS) {
-          final prov = context.watch<TiendaProvider>();
-          return AlertDialog(
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16)),
-            titlePadding: EdgeInsets.zero,
-            title: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: Color(0xFF1A1A2E),
-                borderRadius: BorderRadius.vertical(
-                    top: Radius.circular(16))),
-              child: Row(children: [
-                const Icon(Icons.store_rounded, color: Colors.white),
-                const SizedBox(width: 10),
-                Text(
-                  editando ? 'Editar Tienda' : 'Nueva Tienda',
-                  style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16)),
-              ]),
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        titlePadding: EdgeInsets.zero,
+        title: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: const BoxDecoration(
+            color: Color(0xFF1A1A2E),
+            borderRadius: BorderRadius.vertical(
+                top: Radius.circular(16))),
+          child: Row(children: [
+            const Icon(Icons.store_rounded, color: Colors.white),
+            const SizedBox(width: 10),
+            Text(
+              editando ? 'Editar Tienda' : 'Nueva Tienda',
+              style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16)),
+          ]),
+        ),
+        content: SizedBox(
+          width: 440,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 8),
+                _field('Nombre de la tienda *', nombreCtrl),
+                _field('Dirección',  direccionCtrl),
+                _field('Teléfono',   telefonoCtrl),
+                _field('Ciudad',     ciudadCtrl),
+                _field('NIT',        nitCtrl),
+              ],
             ),
-            content: SizedBox(
-              width: 440,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(height: 8),
-                    _field('Nombre de la tienda *', nombreCtrl),
-                    _field('Dirección', direccionCtrl),
-                    _field('Teléfono', telefonoCtrl),
-                    _field('Ciudad', ciudadCtrl),
-                    _field('NIT', nitCtrl),
-                  ],
-                ),
-              ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancelar',
+                style: GoogleFonts.poppins(
+                    color: Colors.grey))),
+          // ✅ FIX: Consumer en lugar de context.watch del screen
+          Consumer<TiendaProvider>(
+            builder: (_, prov, __) => ElevatedButton.icon(
+              icon: prov.guardando
+                  ? const SizedBox(
+                      width: 16, height: 16,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2))
+                  : const Icon(Icons.save_rounded, size: 18),
+              label: Text(
+                editando ? 'Guardar cambios' : 'Crear tienda',
+                style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600)),
+              onPressed: prov.guardando ? null : () async {
+                if (nombreCtrl.text.trim().isEmpty) return;
+                final data = {
+                  'nombre':    nombreCtrl.text.trim(),
+                  'direccion': direccionCtrl.text.trim(),
+                  'telefono':  telefonoCtrl.text.trim(),
+                  'ciudad':    ciudadCtrl.text.trim(),
+                  'nit':       nitCtrl.text.trim(),
+                };
+                final ok = editando
+                    ? await prov.editarTienda(tienda!.id, data)
+                    : await prov.crearTienda(data);
+                if (ok && context.mounted) {
+                  Navigator.pop(context);
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor:
+                    const Color(Constants.primaryColor),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8))),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text('Cancelar',
-                    style: GoogleFonts.poppins(color: Colors.grey))),
-              ElevatedButton.icon(
-                icon: prov.guardando
-                    ? const SizedBox(width: 16, height: 16,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2))
-                    : const Icon(Icons.save_rounded, size: 18),
-                label: Text(editando ? 'Guardar cambios' : 'Crear tienda',
-                    style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w600)),
-                onPressed: prov.guardando ? null : () async {
-                  if (nombreCtrl.text.trim().isEmpty) return;
-                  final data = {
-                    'nombre':    nombreCtrl.text.trim(),
-                    'direccion': direccionCtrl.text.trim(),
-                    'telefono':  telefonoCtrl.text.trim(),
-                    'ciudad':    ciudadCtrl.text.trim(),
-                    'nit':       nitCtrl.text.trim(),
-                  };
-                  final ok = editando
-                      ? await prov.editarTienda(tienda!.id, data)
-                      : await prov.crearTienda(data);
-                  if (ok && ctx.mounted) Navigator.pop(ctx);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(Constants.primaryColor),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8))),
-              ),
-            ],
-          );
-        },
+          ),
+        ],
       ),
-    );
+    ).whenComplete(() {
+      // ✅ FIX: dispose de los 5 controllers al cerrar el dialog
+      nombreCtrl.dispose();
+      direccionCtrl.dispose();
+      telefonoCtrl.dispose();
+      ciudadCtrl.dispose();
+      nitCtrl.dispose();
+    });
   }
 
   // ── Ver empleados de la tienda ────────────────────────
-  void _verEmpleados(BuildContext context, Tienda t) async {
-    final service = context.read<TiendaProvider>();
-    // ignore: unused_local_variable
+  Future<void> _verEmpleados(BuildContext context, Tienda t) async {
+    // ✅ FIX: eliminada variable 'service' no usada
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
+      builder: (_) =>
+          const Center(child: CircularProgressIndicator()),
     );
 
-    // ignore: use_build_context_synchronously
-    final data = await context
-        .read<TiendaProvider>()
-        ._getEmpleados(t.id);
+    // ✅ FIX: try/catch — si falla la red el loading no queda infinito
+    Map<String, dynamic>? data;
+    try {
+      data = await TiendaService().getEmpleadosPorTienda(t.id);
+    } catch (_) {
+      data = null;
+    }
 
     if (!context.mounted) return;
     Navigator.pop(context); // cierra loading
 
-    final empleados = (data?['empleados'] as List?) ?? [];
+    // ✅ FIX: si hubo error, mostrar SnackBar en lugar de dialog vacío
+    if (data == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Error al cargar los empleados',
+            style: GoogleFonts.poppins(color: Colors.white)),
+        backgroundColor: Colors.red.shade600,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(16),
+      ));
+      return;
+    }
+
+    final empleados = (data['empleados'] as List?) ?? [];
 
     showDialog(
       context: context,
@@ -375,26 +411,27 @@ class _TiendasScreenState extends State<TiendasScreen> {
           padding: const EdgeInsets.all(20),
           decoration: const BoxDecoration(
             color: Color(0xFF1A1A2E),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+            borderRadius: BorderRadius.vertical(
+                top: Radius.circular(16))),
           child: Row(children: [
             const Icon(Icons.people_rounded, color: Colors.white),
             const SizedBox(width: 10),
             Expanded(
               child: Text('Empleados — ${t.nombre}',
                 style: GoogleFonts.poppins(
-                    color: Colors.white, fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
                     fontSize: 15),
                 overflow: TextOverflow.ellipsis),
             ),
           ]),
         ),
         content: SizedBox(
-          width: 400,
-          height: 300,
+          width: 400, height: 300,
           child: empleados.isEmpty
-              ? Center(
-                  child: Text('Sin empleados asignados',
-                    style: GoogleFonts.poppins(color: Colors.grey)))
+              ? Center(child: Text('Sin empleados asignados',
+                  style: GoogleFonts.poppins(
+                      color: Colors.grey)))
               : ListView.builder(
                   itemCount: empleados.length,
                   itemBuilder: (_, i) {
@@ -413,7 +450,8 @@ class _TiendasScreenState extends State<TiendasScreen> {
                       title: Text(
                         '${e['nombre'] ?? ''} ${e['apellido'] ?? ''}',
                         style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w600, fontSize: 13)),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13)),
                       subtitle: Text(
                         (e['rol'] ?? '').toUpperCase(),
                         style: GoogleFonts.poppins(
@@ -425,7 +463,8 @@ class _TiendasScreenState extends State<TiendasScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Cerrar', style: GoogleFonts.poppins())),
+            child: Text('Cerrar',
+                style: GoogleFonts.poppins())),
         ],
       ),
     );
@@ -440,19 +479,22 @@ class _TiendasScreenState extends State<TiendasScreen> {
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14)),
         title: Text('¿Desactivar tienda?',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+            style: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold)),
         content: Text(
-          'La tienda "${t.nombre}" quedará inactiva.\n¿Deseas continuar?',
+          'La tienda "${t.nombre}" quedará inactiva.\n'
+          '¿Deseas continuar?',
           style: GoogleFonts.poppins(fontSize: 14)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text('Cancelar',
-                style: GoogleFonts.poppins(color: Colors.grey))),
+                style: GoogleFonts.poppins(
+                    color: Colors.grey))),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              prov.desactivarTienda(t.id);
+              await prov.desactivarTienda(t.id);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red.shade600,
@@ -473,26 +515,23 @@ class _TiendasScreenState extends State<TiendasScreen> {
       child: TextField(
         controller: ctrl,
         decoration: InputDecoration(
-          labelText: label,
+          labelText:  label,
           labelStyle: GoogleFonts.poppins(fontSize: 13),
           filled: true, fillColor: Colors.grey.shade50,
           border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.grey.shade300)),
+              borderSide:   BorderSide(
+                  color: Colors.grey.shade300)),
           enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.grey.shade300)),
+              borderSide:   BorderSide(
+                  color: Colors.grey.shade300)),
           focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(
-                  color: const Color(Constants.primaryColor), width: 2)),
+              borderSide:   const BorderSide(
+                  color: Color(Constants.primaryColor),
+                  width: 2)),
         ),
       ),
     );
-}
-
-// ── Extensión privada del provider para esta pantalla ──
-extension _TiendaProviderExt on TiendaProvider {
-  Future<Map<String, dynamic>?> _getEmpleados(int id) =>
-      TiendaService().getEmpleadosPorTienda(id);
 }

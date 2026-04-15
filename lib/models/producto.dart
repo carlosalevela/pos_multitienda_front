@@ -1,7 +1,7 @@
 class Producto {
   final int    id;
   String nombre;
-  String referencia;    // ← viene como codigo_barras
+  String referencia;
   String descripcion;
   double precio;
   double precioCompra;
@@ -27,15 +27,30 @@ class Producto {
 
   factory Producto.fromJson(Map<String, dynamic> json) => Producto(
     id:           json['id'],
-    nombre:       json['nombre']          ?? '',
-    referencia:   json['codigo_barras']   ?? '',  // ← corregido
-    descripcion:  json['descripcion']     ?? '',
+    nombre:       json['nombre']           ?? '',
+    referencia:   json['codigo_barras']    ?? '',
+    descripcion:  json['descripcion']      ?? '',
     precio:       double.parse((json['precio_venta']  ?? 0).toString()),
     precioCompra: double.parse((json['precio_compra'] ?? 0).toString()),
     categoria:    json['categoria_nombre'] ?? 'Sin categoría',
-    unidadMedida: json['unidad_medida']   ?? 'unidad',
+    unidadMedida: json['unidad_medida']    ?? 'unidad',
     stockActual:  double.parse((json['stock_actual']  ?? 0).toString()),
     stockMinimo:  double.parse((json['stock_minimo']  ?? 0).toString()),
-    activo:       json['activo']          ?? true,
+    activo:       json['activo']           ?? true,
   );
+
+  // ✅ NUEVO — mapea de vuelta a los nombres que espera el backend
+  Map<String, dynamic> toJson() => {
+    'id':              id,
+    'nombre':          nombre,
+    'codigo_barras':   referencia,
+    'descripcion':     descripcion,
+    'precio_venta':    precio.toString(),
+    'precio_compra':   precioCompra.toString(),
+    'categoria_nombre': categoria,
+    'unidad_medida':   unidadMedida,
+    'stock_actual':    stockActual.toString(),
+    'stock_minimo':    stockMinimo.toString(),
+    'activo':          activo,
+  };
 }

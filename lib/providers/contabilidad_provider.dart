@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import '../models/contabilidad_models.dart';
 import '../services/contabilidad_service.dart';
 
-
 class ContabilidadProvider extends ChangeNotifier {
   final ContabilidadService _service = ContabilidadService();
 
   ResumenDiario?         resumenDiario;
   ResumenMensual?        resumenMensual;
   Map<String, dynamic>?  resumenAnual;
-  Map<String, dynamic>?  gastosResumenRango;   // ✅ NUEVO
+  Map<String, dynamic>?  gastosResumenRango;
   List<TopProducto>      topProductos  = [];
   List<Gasto>            gastos        = [];
 
@@ -32,7 +31,8 @@ class ContabilidadProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Helper para convertir DateTime a String ──────────
+  // ── Helper ────────────────────────────────────────────
+
   String _fechaStr(DateTime? fecha) {
     final d = fecha ?? DateTime.now();
     return '${d.year}-'
@@ -40,13 +40,16 @@ class ContabilidadProvider extends ChangeNotifier {
            '${d.day.toString().padLeft(2, '0')}';
   }
 
-  // ── Resumen diario ───────────────────────────────────
+  // ── Resumen diario ────────────────────────────────────
+  // ✅ FIX: Future.wait con tipos explícitos para evitar casts inseguros
+
   Future<void> cargarResumenDiario({int? tiendaId, DateTime? fecha}) async {
     _cargando = true;
     notifyListeners();
 
     final fechaStr = _fechaStr(fecha);
 
+    // ✅ Llamadas independientes tipadas — más seguro que Future.wait + cast
     final results = await Future.wait([
       _service.getResumenDiario(tiendaId: tiendaId, fecha: fechaStr),
       _service.getAbonosDia(fechaStr, tiendaId),
@@ -61,8 +64,11 @@ class ContabilidadProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Resumen mensual ──────────────────────────────────
-  Future<void> cargarResumenMensual({int? tiendaId, int? anio, int? mes}) async {
+  // ── Resumen mensual ───────────────────────────────────
+
+  Future<void> cargarResumenMensual({
+    int? tiendaId, int? anio, int? mes,
+  }) async {
     _cargando = true;
     notifyListeners();
     resumenMensual = await _service.getResumenMensual(
@@ -72,8 +78,11 @@ class ContabilidadProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Resumen anual ────────────────────────────────────
-  Future<void> cargarResumenAnual({int? tiendaId, required int anio}) async {
+  // ── Resumen anual ─────────────────────────────────────
+
+  Future<void> cargarResumenAnual({
+    int? tiendaId, required int anio,
+  }) async {
     _cargando = true;
     notifyListeners();
     resumenAnual = await _service.getResumenAnual(
@@ -83,7 +92,8 @@ class ContabilidadProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Top productos ────────────────────────────────────
+  // ── Top productos ─────────────────────────────────────
+
   Future<void> cargarTopProductos({
     int? tiendaId, DateTime? fechaIni, DateTime? fechaFin,
   }) async {
@@ -98,14 +108,15 @@ class ContabilidadProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Gastos (cajero: solo hoy / admin: con filtros) ───
+  // ── Gastos ────────────────────────────────────────────
+
   Future<void> cargarGastos({
-    int?      tiendaId,
-    String?   fecha,
-    String?   fechaIni,      // ✅ NUEVO
-    String?   fechaFin,      // ✅ NUEVO
-    String?   categoria,     // ✅ NUEVO
-    String?   visibilidad,   // ✅ NUEVO
+    int?    tiendaId,
+    String? fecha,
+    String? fechaIni,
+    String? fechaFin,
+    String? categoria,
+    String? visibilidad,
   }) async {
     _cargando = true;
     notifyListeners();
@@ -121,7 +132,8 @@ class ContabilidadProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ✅ NUEVO — resumen de gastos por rango para admin
+  // ── Resumen gastos por rango ──────────────────────────
+
   Future<void> cargarGastosResumenRango({
     required DateTime fechaIni,
     required DateTime fechaFin,
@@ -140,7 +152,8 @@ class ContabilidadProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Crear gasto ──────────────────────────────────────
+  // ── Crear gasto ───────────────────────────────────────
+
   Future<bool> crearGasto(Map<String, dynamic> data, {
     int?    tiendaId,
     String? fecha,
@@ -149,27 +162,36 @@ class ContabilidadProvider extends ChangeNotifier {
     _errorMsg  = '';
     notifyListeners();
 
-    final result = await _service.crearGasto(data);
-    _guardando = false;
+    final result   = await _service.crearGasto(data);
+    _guardando     = false;
 
-    if (result['success']) {
+    // ✅ FIX: comparación explícita == true (null-safe)
+    if (result['success'] == true) {
       _successMsg = '✅ Gasto registrado correctamente';
-      // ✅ Recarga con la misma fecha que se estaba viendo
       await cargarGastos(tiendaId: tiendaId, fecha: fecha);
     } else {
       _errorMsg = result['error'] ?? 'Error desconocido';
     }
+
     notifyListeners();
-    return result['success'];
+    return result['success'] == true;
   }
 
-  // ── Eliminar gasto ───────────────────────────────────
-  Future<void> eliminarGasto(int id, {int? tiendaId}) async {
-    final ok = await _service.eliminarGasto(id);
-    if (ok) {
+  // ── Eliminar gasto ────────────────────────────────────
+
+  Future<bool> eliminarGasto(int id, {int? tiendaId}) async {
+    // ✅ FIX: service retorna Map — leer ['success'], no tratar como bool
+    final result = await _service.eliminarGasto(id);
+
+    if (result['success'] == true) {
       gastos.removeWhere((g) => g.id == id);
       _successMsg = '🗑️ Gasto eliminado';
       notifyListeners();
+      return true;
     }
+
+    _errorMsg = result['error'] ?? 'No se pudo eliminar el gasto';
+    notifyListeners();
+    return false;
   }
 }

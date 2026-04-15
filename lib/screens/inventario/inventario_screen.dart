@@ -18,11 +18,13 @@ class InventarioScreen extends StatefulWidget {
 }
 
 class _InventarioScreenState extends State<InventarioScreen> {
-  final _searchCtrl = TextEditingController();
+  final _searchCtrl     = TextEditingController();
+  // ✅ FIX: service como campo — no instanciar en cada llamada
+  final _empleadoService = EmpleadoService();
 
-  List<Map<String, dynamic>> _tiendas      = [];
+  List<Map<String, dynamic>> _tiendas       = [];
   int?                        _tiendaFiltro;
-  final Set<String>           _abiertas    = {};
+  final Set<String>           _abiertas     = {};
   String                      _activoFiltro = 'true';
 
   static const _colores = [
@@ -42,11 +44,13 @@ class _InventarioScreenState extends State<InventarioScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       final auth = context.read<AuthProvider>();
       final inv  = context.read<InventarioProvider>();
 
       if (auth.rol == 'admin') {
-        final tiendas = await EmpleadoService().getTiendas();
+        final tiendas = await _empleadoService.getTiendas();
+        if (!mounted) return;
         setState(() {
           _tiendas      = tiendas;
           _tiendaFiltro = tiendas.isNotEmpty ? tiendas.first['id'] : null;
@@ -72,8 +76,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
     if (auth.rol == 'admin') return _tiendaFiltro;
     return auth.tiendaId == 0 ? null : auth.tiendaId;
   }
-
-  // ✅ _recargar() ELIMINADO — era unused_element
 
   Map<String, List<Producto>> _agrupar(List<Producto> lista) {
     final map = <String, List<Producto>>{};
@@ -146,7 +148,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
                     onChanged: (val) {
                       setState(() => _tiendaFiltro = val);
                       context.read<InventarioProvider>().cargarProductos(
-                        tiendaId: val, activo: _activoFiltro);
+                          tiendaId: val, activo: _activoFiltro);
                       _searchCtrl.clear();
                     },
                   ),
@@ -185,8 +187,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
             _banner(inv.successMsg!,
                 isError: false, onClose: inv.limpiarMensajes),
           if (inv.errorMsg != null)
-            _banner(inv.errorMsg!,
-                isError: true, onClose: inv.limpiarMensajes),
+            _banner(inv.errorMsg!, isError: true, onClose: inv.limpiarMensajes),
 
           // ── Buscador ────────────────────────────────
           TextField(
@@ -211,7 +212,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
             ),
             onChanged: (val) => context.read<InventarioProvider>()
                 .cargarProductos(
-                  q: val, tiendaId: _tiendaActiva, activo: _activoFiltro),
+                    q: val, tiendaId: _tiendaActiva, activo: _activoFiltro),
           ),
           const SizedBox(height: 12),
 
@@ -254,21 +255,18 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
         return Padding(
           padding: const EdgeInsets.only(right: 8),
-          // ✅ FIX: AnimatedContainer sin propiedades animadas → Container normal
           child: InkWell(
             onTap: () {
               setState(() => _activoFiltro = valor);
               context.read<InventarioProvider>().cargarProductos(
-                tiendaId: _tiendaActiva, activo: valor);
+                  tiendaId: _tiendaActiva, activo: valor);
             },
             borderRadius: BorderRadius.circular(20),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
-                color: seleccionado
-                    ? color.withOpacity(0.12)
-                    : Colors.white,
+                color: seleccionado ? color.withOpacity(0.12) : Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: seleccionado ? color : Colors.grey.shade200,
@@ -286,7 +284,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
                           fontSize:   12,
                           fontWeight: seleccionado
                               ? FontWeight.w600 : FontWeight.normal,
-                          color: seleccionado ? color : Colors.grey.shade500)),
+                          color: seleccionado
+                              ? color : Colors.grey.shade500)),
                 ],
               ),
             ),
@@ -310,8 +309,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
             '$numCats categoría${numCats != 1 ? 's' : ''}',
             const Color(Constants.primaryColor)),
         _chip(Icons.inventory_2_rounded,
-            '${productos.length} productos',
-            const Color(0xFF1A1A2E)),
+            '${productos.length} productos', const Color(0xFF1A1A2E)),
         if (bajo > 0)
           _chip(Icons.warning_amber_rounded,
               '$bajo stock bajo', Colors.orange.shade700),
@@ -488,7 +486,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   Widget _filaProducto(Producto p, InventarioProvider inv,
       bool esCajero, bool esAdmin, {required bool isLast}) {
-
     final esInactivo = _activoFiltro == 'false';
     final agotado    = p.stockActual <= 0;
     final bajo       = !agotado && p.stockActual <= p.stockMinimo;
@@ -506,7 +503,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
         : bajo        ? Colors.orange.shade50
         : Colors.green.shade50;
 
-    // ✅ FIX: color y border juntos en decoration → ya NO hay crash
     return Container(
       decoration: BoxDecoration(
         color: esInactivo ? Colors.grey.shade50 : Colors.white,
@@ -517,8 +513,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
         child: Row(children: [
-
-          // Nombre
           Expanded(
             flex: 3,
             child: Text(p.nombre,
@@ -527,16 +521,12 @@ class _InventarioScreenState extends State<InventarioScreen> {
                     color: esInactivo
                         ? Colors.grey.shade400 : Colors.black87)),
           ),
-
-          // Referencia
           Expanded(
             flex: 2,
             child: Text(p.referencia.isEmpty ? '—' : p.referencia,
                 style: GoogleFonts.poppins(
                     fontSize: 13, color: Colors.grey.shade500)),
           ),
-
-          // Precio
           Expanded(
             flex: 2,
             child: Text('\$${p.precio.toStringAsFixed(0)}',
@@ -545,8 +535,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
                     color: esInactivo
                         ? Colors.grey.shade400 : Colors.black87)),
           ),
-
-          // Stock
           Expanded(
             flex: 1,
             child: Text(p.stockActual.toStringAsFixed(0),
@@ -559,18 +547,14 @@ class _InventarioScreenState extends State<InventarioScreen> {
                         : bajo    ? Colors.orange.shade700
                         : Colors.black87)),
           ),
-
-          // Estado badge
           Expanded(
             flex: 2,
             child: Align(
               alignment: Alignment.centerLeft,
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 9, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                 decoration: BoxDecoration(
-                    color:        estadoBg,
-                    borderRadius: BorderRadius.circular(20)),
+                    color: estadoBg, borderRadius: BorderRadius.circular(20)),
                 child: Text(estadoText,
                     style: GoogleFonts.poppins(
                         color: estadoColor, fontSize: 11,
@@ -578,8 +562,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
               ),
             ),
           ),
-
-          // Acciones
           if (!esCajero)
             SizedBox(
               width: 80,
@@ -594,8 +576,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
                         tooltip:     'Reactivar',
                         padding:     EdgeInsets.zero,
                         constraints: const BoxConstraints(),
-                        onPressed: () =>
-                            _confirmarReactivar(context, inv, p),
+                        onPressed:   () => _confirmarReactivar(context, inv, p),
                       ),
                   ] else ...[
                     IconButton(
@@ -604,8 +585,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
                       tooltip:     'Editar',
                       padding:     EdgeInsets.zero,
                       constraints: const BoxConstraints(),
-                      onPressed: () =>
-                          _abrirFormulario(context, inv, producto: p),
+                      onPressed:   () => _abrirFormulario(context, inv, producto: p),
                     ),
                     const SizedBox(width: 10),
                     IconButton(
@@ -614,8 +594,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
                       tooltip:     'Desactivar',
                       padding:     EdgeInsets.zero,
                       constraints: const BoxConstraints(),
-                      onPressed: () =>
-                          _confirmarEliminar(context, inv, p),
+                      onPressed:   () => _confirmarEliminar(context, inv, p),
                     ),
                   ],
                 ],
@@ -632,15 +611,18 @@ class _InventarioScreenState extends State<InventarioScreen> {
     showDialog(
       context: context,
       builder: (_) => ProductoFormDialog(
-        producto:  producto,
-        tiendaId:  _tiendaActiva ?? 0,
+        producto: producto,
+        tiendaId: _tiendaActiva ?? 0,
+        // ✅ FIX: eliminado guardando — ya no existe en el dialog
         onGuardar: (data) async {
           final ok = producto == null
               ? await inv.crearProducto(data)
               : await inv.editarProducto(producto.id, data);
-          if (ok && context.mounted) Navigator.pop(context);
+
+          // ✅ FIX: lanza si falla → dialog desbloquea botón y no hace pop
+          // ✅ FIX: eliminado Navigator.pop → el dialog lo hace al éxito
+          if (!ok) throw Exception(inv.errorMsg ?? 'Error al guardar');
         },
-        guardando: inv.guardando,
       ),
     );
   }
@@ -650,8 +632,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('¿Desactivar producto?',
             style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
         content: Text(
@@ -700,8 +681,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('¿Reactivar producto?',
             style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
         content: Text(

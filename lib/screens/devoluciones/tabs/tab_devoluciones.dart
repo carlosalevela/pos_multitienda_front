@@ -9,11 +9,12 @@ import 'package:pos_multitienda_app/providers/devoluciones_provider.dart';
 import 'package:pos_multitienda_app/providers/auth_provider.dart';
 import 'package:pos_multitienda_app/models/devolucion_model.dart';
 import 'package:pos_multitienda_app/core/constants.dart';
-import 'package:pos_multitienda_app/screens/devoluciones/tabs/form_devolucion.dart';
-
+// ✅ import inventario_service eliminado — el sheet lo maneja internamente
+import 'package:pos_multitienda_app/screens/devoluciones/forms/form_devolucion.dart';
+import 'package:pos_multitienda_app/screens/devoluciones/widgets/devolucion_tipo_sheet.dart';
+import 'package:pos_multitienda_app/screens/devoluciones/widgets/devolucion_producto_sheet.dart';
 
 enum _Rango { hoy, semana, mes, custom }
-
 
 class TabDevoluciones extends StatefulWidget {
   final NumberFormat fmt;
@@ -33,13 +34,14 @@ class TabDevoluciones extends StatefulWidget {
   State<TabDevoluciones> createState() => _TabDevolucionesState();
 }
 
-
 class _TabDevolucionesState extends State<TabDevoluciones> {
 
   _Rango   _rangoSel  = _Rango.hoy;
   String?  _estadoSel;
   DateTime _customIni = DateTime.now();
   DateTime _customFin = DateTime.now();
+
+  // ✅ _inventarioService eliminado — ya no se usa en el tab
 
   @override
   void initState() {
@@ -100,6 +102,157 @@ class _TabDevolucionesState extends State<TabDevoluciones> {
     }
   }
 
+  // ── Flujo nueva devolución ────────────────────────────
+  Future<void> _iniciarDevolucion() async {
+    // Paso 1: elegir modalidad (sin total aún, se calculará en el form)
+    final tipo = await DevolucionTipoSheet.show(context, 0);
+    if (tipo == null || !mounted) return;
+
+    if (tipo == 'efectivo') {
+      _abrirFormEfectivo();
+    } else if (tipo == 'producto') {
+      // ✅ FIX — firma correcta: auth (no tiendaId suelto)
+      final result = await DevolucionProductoSheet.show(
+        context,
+        totalDevuelto: 0,       // el sheet calcula el crédito real
+        auth:          widget.auth,  // ✅ corregido
+      );
+
+      if (result == null || !mounted) return;
+      _procesarCambioProducto(result);
+    }
+  }
+
+  // ── Flujo efectivo ────────────────────────────────────
+  void _abrirFormEfectivo() {
+    showModalBottomSheet(
+      context:            context,
+      isScrollControlled: true,
+      backgroundColor:    Colors.transparent,
+      builder: (_) => FormDevolucion(
+        auth:     widget.auth,
+        tiendaId: widget.tiendaId,
+        onCreada: _aplicarFiltro,
+      ),
+    );
+  }
+
+  // ── Flujo producto: resumen y confirmación ────────────
+  void _procesarCambioProducto(Map<String, dynamic> result) {
+    final diferencia = (result['diferencia']  as num).toDouble();
+    final totalNuevo = (result['total_nuevo'] as num).toDouble();
+    final productos  = result['productos'] as List;
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        title: Text('Resumen del cambio',
+            style: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold, fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _resumenFila(
+              Icons.shopping_bag_outlined,
+              '${productos.length} producto${productos.length != 1 ? 's' : ''} elegidos',
+              Colors.grey.shade600,
+            ),
+            const SizedBox(height: 8),
+            _resumenFila(
+              Icons.receipt_outlined,
+              'Total nuevos: \$${_fmtNum(totalNuevo)}',
+              Colors.grey.shade600,
+            ),
+            const Divider(height: 20),
+            if (diferencia > 0)
+              _resumenFila(
+                Icons.payments_outlined,
+                'Cliente paga: \$${_fmtNum(diferencia)}',
+                const Color(0xFFE65100),
+                bold: true,
+              )
+            else if (diferencia < 0)
+              _resumenFila(
+                Icons.price_check_rounded,
+                'Vuelto al cliente: \$${_fmtNum(-diferencia)}',
+                const Color(0xFF2E7D32),
+                bold: true,
+              )
+            else
+              _resumenFila(
+                Icons.check_circle_outline_rounded,
+                '¡Cambio exacto!',
+                const Color(0xFF1565C0),
+                bold: true,
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancelar',
+                style: GoogleFonts.poppins(color: Colors.grey.shade600)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+
+              final prov = context.read<DevolucionesProvider>();
+              final resp = await prov.crearCambioProducto(result);
+
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(
+                  resp['success'] == true
+                      ? 'Cambio registrado ✅'
+                      : prov.error ?? 'Error al registrar',
+                  style: GoogleFonts.poppins(fontSize: 13),
+                ),
+                backgroundColor: resp['success'] == true
+                    ? Colors.green.shade600
+                    : Colors.red.shade600,
+                behavior: SnackBarBehavior.floating,
+              ));
+
+              if (resp['success'] == true) _aplicarFiltro();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(Constants.primaryColor),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('Confirmar',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _resumenFila(IconData icon, String texto, Color color,
+      {bool bold = false}) =>
+    Row(children: [
+      Icon(icon, size: 16, color: color),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(texto,
+          style: GoogleFonts.poppins(
+              fontSize: 13,
+              color: color,
+              fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
+      ),
+    ]);
+
+  String _fmtNum(double v) => v
+      .toStringAsFixed(0)
+      .replaceAllMapped(
+          RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]}.');
+
   // ── Rango custom ──────────────────────────────────────
   Future<void> _elegirRangoCustom() async {
     DateTime? inicioTemp = _customIni;
@@ -125,7 +278,7 @@ class _TabDevolucionesState extends State<TabDevoluciones> {
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: const Color(Constants.primaryColor)
-                          .withOpacity(0.1),
+                          .withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(Icons.date_range_rounded,
@@ -262,7 +415,7 @@ class _TabDevolucionesState extends State<TabDevoluciones> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: activo
-              ? const Color(Constants.primaryColor).withOpacity(0.08)
+              ? const Color(Constants.primaryColor).withValues(alpha: 0.08)
               : Colors.grey.shade50,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
@@ -307,6 +460,7 @@ class _TabDevolucionesState extends State<TabDevoluciones> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+
             // ── Header ──────────────────────────────────
             Row(children: [
               Expanded(child: Column(
@@ -326,7 +480,7 @@ class _TabDevolucionesState extends State<TabDevoluciones> {
                 ],
               )),
               ElevatedButton.icon(
-                onPressed: () => _mostrarFormCrear(context),
+                onPressed: _iniciarDevolucion,
                 icon: const Icon(Icons.add_rounded, size: 18),
                 label: Text('Nueva',
                     style: GoogleFonts.poppins(
@@ -522,7 +676,7 @@ class _TabDevolucionesState extends State<TabDevoluciones> {
                     color: Colors.grey.shade400, fontSize: 15)),
             const SizedBox(height: 16),
             TextButton.icon(
-              onPressed: () => _mostrarFormCrear(context),
+              onPressed: _iniciarDevolucion,
               icon: const Icon(Icons.add_rounded),
               label: Text('Registrar devolución',
                   style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
@@ -551,12 +705,10 @@ class _TabDevolucionesState extends State<TabDevoluciones> {
         border: cancelada ? Border.all(color: Colors.grey.shade200) : null,
         boxShadow: cancelada
             ? null
-            : [
-                BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2))
-              ],
+            : [BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2))],
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(
@@ -660,7 +812,9 @@ class _TabDevolucionesState extends State<TabDevoluciones> {
         style: GoogleFonts.poppins(
             fontSize: 10,
             fontWeight: FontWeight.w600,
-            color: esCancel ? Colors.grey.shade500 : Colors.green.shade700),
+            color: esCancel
+                ? Colors.grey.shade500
+                : Colors.green.shade700),
       ),
     );
   }
@@ -669,11 +823,11 @@ class _TabDevolucionesState extends State<TabDevoluciones> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(20)),
       child: Text(label,
           style: GoogleFonts.poppins(
-              fontSize: 10, fontWeight: FontWeight.w600, color: color)),
+              fontSize: 10, fontWeight: FontWeight.bold, color: color)),
     );
   }
 
@@ -682,7 +836,7 @@ class _TabDevolucionesState extends State<TabDevoluciones> {
     switch (m) {
       case 'transferencia': return 'Transferencia';
       case 'tarjeta':       return 'Tarjeta';
-      case 'notacredito':   return 'Nota Crédito';  // ✅ corregido
+      case 'notacredito':   return 'Nota Crédito';
       default:              return 'Efectivo';
     }
   }
@@ -691,7 +845,7 @@ class _TabDevolucionesState extends State<TabDevoluciones> {
     switch (m) {
       case 'transferencia': return Colors.blue.shade600;
       case 'tarjeta':       return Colors.purple.shade600;
-      case 'notacredito':   return Colors.teal.shade600;  // ✅ corregido
+      case 'notacredito':   return Colors.teal.shade600;
       default:              return Colors.green.shade600;
     }
   }
@@ -724,7 +878,7 @@ class _TabDevolucionesState extends State<TabDevoluciones> {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
-              final ok = await prov.cancelarDevolucion(id:dev.id);
+              final ok = await prov.cancelarDevolucion(dev.id);
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content: Text(
@@ -733,10 +887,12 @@ class _TabDevolucionesState extends State<TabDevoluciones> {
                         : prov.error ?? 'Error al cancelar',
                     style: GoogleFonts.poppins(fontSize: 13),
                   ),
-                  backgroundColor:
-                      ok ? Colors.green.shade600 : Colors.red.shade600,
+                  backgroundColor: ok
+                      ? Colors.green.shade600
+                      : Colors.red.shade600,
                   behavior: SnackBarBehavior.floating,
                 ));
+                if (ok) _aplicarFiltro();
               }
             },
             style: ElevatedButton.styleFrom(
@@ -756,28 +912,13 @@ class _TabDevolucionesState extends State<TabDevoluciones> {
   // ── Detalle ───────────────────────────────────────────
   void _mostrarDetalle(BuildContext context, DevolucionModel dev) {
     showModalBottomSheet(
-      context: context,
+      context:            context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor:    Colors.transparent,
       builder: (_) => _DetalleSheet(dev: dev, fmt: widget.fmt),
     );
   }
-
-  // ── Formulario crear ──────────────────────────────────
-  void _mostrarFormCrear(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => FormDevolucion(
-        auth:     widget.auth,
-        tiendaId: widget.tiendaId,
-        onCreada: _aplicarFiltro,
-      ),
-    );
-  }
 }
-
 
 // ═══════════════════════════════════════════════════════
 // Sheet de detalle
@@ -800,7 +941,6 @@ class _DetalleSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Handle
           Center(
             child: Container(
               width: 40, height: 4,
@@ -810,7 +950,6 @@ class _DetalleSheet extends StatelessWidget {
                   borderRadius: BorderRadius.circular(2)),
             ),
           ),
-          // Título
           Row(children: [
             Text('DEV-${dev.id}',
                 style: GoogleFonts.poppins(
@@ -948,7 +1087,7 @@ class _DetalleSheet extends StatelessWidget {
     switch (m) {
       case 'transferencia': return 'Transferencia';
       case 'tarjeta':       return 'Tarjeta';
-      case 'notacredito':   return 'Nota Crédito';  // ✅ corregido
+      case 'notacredito':   return 'Nota Crédito';
       default:              return 'Efectivo';
     }
   }

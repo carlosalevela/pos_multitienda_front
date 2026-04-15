@@ -1,3 +1,5 @@
+// lib/screens/login/login_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -12,22 +14,24 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _formKey      = GlobalKey<FormState>();
-  final _emailCtrl    = TextEditingController();
-  final _passwordCtrl = TextEditingController();
-  final _passwordFocus = FocusNode(); // ✅ FocusNode para saltar entre campos
-  bool  _obscurePass  = true;
+  final _formKey       = GlobalKey<FormState>();
+  final _emailCtrl     = TextEditingController();
+  final _passwordCtrl  = TextEditingController();
+  final _passwordFocus = FocusNode();
+  bool  _obscurePass   = true;
 
   @override
   void dispose() {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
-    _passwordFocus.dispose(); // ✅ limpiar
+    _passwordFocus.dispose();
     super.dispose();
   }
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
+    // ✅ FIX: limpia error previo antes del nuevo intento
+    context.read<AuthProvider>().clearError();
     await context.read<AuthProvider>().login(
       _emailCtrl.text.trim(),
       _passwordCtrl.text.trim(),
@@ -64,23 +68,16 @@ class _LoginScreenState extends State<LoginScreen> {
                     const Icon(Icons.store_rounded,
                         size: 100, color: Colors.white),
                     const SizedBox(height: 24),
-                    Text(
-                      'POS Multitienda',
+                    Text('POS Multitienda',
                       style: GoogleFonts.poppins(
-                        fontSize:   32,
-                        fontWeight: FontWeight.bold,
-                        color:      Colors.white,
-                      ),
-                    ),
+                        fontSize: 32, fontWeight: FontWeight.bold,
+                        color: Colors.white)),
                     const SizedBox(height: 12),
                     Text(
                       'Sistema de punto de venta\npara múltiples tiendas',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        color:    Colors.white70,
-                      ),
-                    ),
+                          fontSize: 16, color: Colors.white70)),
                   ],
                 ),
               ),
@@ -100,45 +97,35 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
 
                         // Título
-                        Text(
-                          'Bienvenido 👋',
+                        Text('Bienvenido 👋',
                           style: GoogleFonts.poppins(
-                            fontSize:   28,
-                            fontWeight: FontWeight.bold,
-                            color:      const Color(0xFF1A1A2E),
-                          ),
-                        ),
+                            fontSize: 28, fontWeight: FontWeight.bold,
+                            color: const Color(0xFF1A1A2E))),
                         const SizedBox(height: 8),
-                        Text(
-                          'Ingresa tus credenciales para continuar',
+                        Text('Ingresa tus credenciales para continuar',
                           style: GoogleFonts.poppins(
-                              fontSize: 14, color: Colors.grey),
-                        ),
+                              fontSize: 14, color: Colors.grey)),
                         const SizedBox(height: 40),
 
                         // ── Email ──────────────────────────────
                         Text('Email',
                           style: GoogleFonts.poppins(
                             fontWeight: FontWeight.w600,
-                            color:      const Color(0xFF1A1A2E),
-                          ),
-                        ),
+                            color: const Color(0xFF1A1A2E))),
                         const SizedBox(height: 8),
                         TextFormField(
                           controller:      _emailCtrl,
                           keyboardType:    TextInputType.emailAddress,
-                          autofocus:       true,                    // ✅ foco automático
-                          textInputAction: TextInputAction.next,    // ✅ botón "Siguiente"
-                          onFieldSubmitted: (_) =>                  // ✅ Enter → contraseña
-                              FocusScope.of(context)
-                                  .requestFocus(_passwordFocus),
+                          autofocus:       true,
+                          textInputAction: TextInputAction.next,
+                          onFieldSubmitted: (_) =>
+                              FocusScope.of(context).requestFocus(_passwordFocus),
                           decoration: _inputDecoration(
                             hint: 'correo@ejemplo.com',
                             icon: Icons.email_outlined,
                           ),
                           validator: (v) {
-                            if (v == null || v.isEmpty)
-                              return 'Ingresa tu email';
+                            if (v == null || v.isEmpty) return 'Ingresa tu email';
                             if (!v.contains('@')) return 'Email inválido';
                             return null;
                           },
@@ -149,16 +136,17 @@ class _LoginScreenState extends State<LoginScreen> {
                         Text('Contraseña',
                           style: GoogleFonts.poppins(
                             fontWeight: FontWeight.w600,
-                            color:      const Color(0xFF1A1A2E),
-                          ),
-                        ),
+                            color: const Color(0xFF1A1A2E))),
                         const SizedBox(height: 8),
                         TextFormField(
                           controller:      _passwordCtrl,
                           obscureText:     _obscurePass,
-                          focusNode:       _passwordFocus,          // ✅ recibe el foco
-                          textInputAction: TextInputAction.done,    // ✅ botón "Listo"
-                          onFieldSubmitted: (_) => _login(),        // ✅ Enter → login
+                          focusNode:       _passwordFocus,
+                          textInputAction: TextInputAction.done,
+                          // ✅ FIX: guard isLoading — evita doble llamada con Enter
+                          onFieldSubmitted: (_) {
+                            if (!auth.isLoading) _login();
+                          },
                           decoration: _inputDecoration(
                             hint: '••••••••',
                             icon: Icons.lock_outline,
@@ -170,8 +158,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                     : Icons.visibility_outlined,
                                 color: Colors.grey,
                               ),
-                              onPressed: () => setState(
-                                  () => _obscurePass = !_obscurePass),
+                              onPressed: () =>
+                                  setState(() => _obscurePass = !_obscurePass),
                             ),
                           ),
                           validator: (v) {
@@ -197,17 +185,13 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             child: Row(children: [
                               const Icon(Icons.error_outline,
-                                  color: Color(Constants.errorColor),
-                                  size: 18),
+                                  color: Color(Constants.errorColor), size: 18),
                               const SizedBox(width: 8),
                               Expanded(
-                                child: Text(
-                                  auth.errorMsg,
+                                child: Text(auth.errorMsg,
                                   style: GoogleFonts.poppins(
                                     color:    const Color(Constants.errorColor),
-                                    fontSize: 13,
-                                  ),
-                                ),
+                                    fontSize: 13)),
                               ),
                             ]),
                           ),
@@ -235,8 +219,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 : Text('Ingresar',
                                     style: GoogleFonts.poppins(
                                       fontSize:   16,
-                                      fontWeight: FontWeight.w600,
-                                    )),
+                                      fontWeight: FontWeight.w600)),
                           ),
                         ),
                       ],
@@ -276,8 +259,7 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide:   const BorderSide(
-            color: Color(Constants.errorColor)),
+        borderSide:   const BorderSide(color: Color(Constants.errorColor)),
       ),
     );
   }

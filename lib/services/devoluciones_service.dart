@@ -1,11 +1,27 @@
-// lib/services/devoluciones_service.dart
-
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../core/api_client.dart';
 import '../models/devolucion_model.dart';
 
 class DevolucionesService {
 
-  // ── GET /api/devoluciones/lista/ ──────────────────
+  // ── Helper extractor de errores ────────────────────────
+  String _extractError(DioException e, String fallback) {
+    final data = e.response?.data;
+    if (data == null) return fallback;
+    if (data is Map) {
+      if (data.containsKey('error'))  return data['error'].toString();
+      if (data.containsKey('detail')) return data['detail'].toString();
+      final msgs = data.values
+          .expand((v) => v is List ? v : [v])
+          .join(', ');
+      return msgs.isNotEmpty ? msgs : fallback;
+    }
+    return fallback;
+  }
+
+  // ── Listar devoluciones ────────────────────────────────
+
   Future<List<DevolucionModel>> getDevoluciones({
     int?    tiendaId,
     String? fecha,
@@ -28,18 +44,38 @@ class DevolucionesService {
           ? response.data
           : response.data['results'] ?? [];
       return data.map((e) => DevolucionModel.fromJson(e)).toList();
+    } on DioException catch (e) {
+      debugPrint('❌ getDevoluciones error: ${e.response?.data}');
+      return [];
     } catch (e) {
-      rethrow;
+      debugPrint('❌ getDevoluciones error: $e');
+      return [];
     }
   }
 
-  // ── POST /api/devoluciones/ ───────────────────────
-  Future<Map<String, dynamic>?> crearDevolucion({  // ✅ era Future<DevolucionModel?>
+  // ── Detalle de devolución ──────────────────────────────
+
+  Future<DevolucionModel?> getDevolucion(int id) async {
+    try {
+      final response = await ApiClient.instance.get('/devoluciones/$id/');
+      return DevolucionModel.fromJson(response.data);
+    } on DioException catch (e) {
+      debugPrint('❌ getDevolucion error: ${e.response?.data}');
+      return null;
+    } catch (e) {
+      debugPrint('❌ getDevolucion error: $e');
+      return null;
+    }
+  }
+
+  // ── Crear devolución ───────────────────────────────────
+  // ✅ tienda_id NO se envía — el backend la inyecta desde el token
+
+  Future<Map<String, dynamic>> crearDevolucion({
     required int                        ventaId,
     required String                     metodoPago,
     required List<Map<String, dynamic>> detalles,
     String? observaciones,
-    int?    tiendaId,
   }) async {
     try {
       final response = await ApiClient.instance.post(
@@ -50,66 +86,38 @@ class DevolucionesService {
           'detalles':          detalles,
           if (observaciones != null && observaciones.isNotEmpty)
             'observaciones': observaciones,
-          if (tiendaId != null) 'tienda_id': tiendaId,
+          // ✅ tienda_id eliminado — backend lo toma del token
         },
       );
-      return response.data as Map<String, dynamic>;  // ✅ era DevolucionModel.fromJson(...)
+      return {'success': true, 'data': response.data};
+    } on DioException catch (e) {
+      return {'success': false, 'error': _extractError(e, 'Error al registrar devolución')};
     } catch (e) {
-      rethrow;
+      return {'success': false, 'error': 'Error inesperado'};
     }
   }
 
-  // ── GET /api/devoluciones/<id>/ ───────────────────
-  Future<DevolucionModel> getDevolucion(int id) async {
+  // ── Cancelar devolución ────────────────────────────────
+
+    Future<Map<String, dynamic>> cancelarDevolucion(int id) async {
     try {
-      final response =
-          await ApiClient.instance.get('/devoluciones/$id/');
-      return DevolucionModel.fromJson(response.data);
+      final r = await ApiClient.instance.post('/devoluciones/$id/cancelar/');
+      // ✅ FIX: null-safe
+      return {
+        'success': true,
+        'detail':  r.data?['detail'] ?? 'Devolución cancelada',
+      };
+    } on DioException catch (e) {
+      return {'success': false, 'error': _extractError(e, 'Error al cancelar devolución')};
     } catch (e) {
-      rethrow;
+      return {'success': false, 'error': 'Error inesperado'};
     }
   }
 
-  // ── POST /api/devoluciones/<id>/cancelar/ ─────────
-  Future<bool> cancelarDevolucion({required int id}) async {
-    try {
-      await ApiClient.instance.post('/devoluciones/$id/cancelar/');
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  // ── GET /api/ventas/lista/ ────────────────────────
-  Future<List<dynamic>> listarVentasPorFecha({
-    String? fecha,
-    int?    tiendaId,
-  }) async {
-    try {
-      final response = await ApiClient.instance.get(
-        '/ventas/lista/',
-        queryParameters: {
-          if (fecha    != null) 'fecha':     fecha,
-          if (tiendaId != null && tiendaId != 0)
-            'tienda_id': tiendaId.toString(),
-        },
-      );
-      final data = response.data;
-      return data is List ? data : (data['results'] ?? []);
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  // ── GET /api/ventas/<id>/disponible-devolucion/ ───
-  Future<Map<String, dynamic>> ventaDisponible(int ventaId) async {
-    try {
-      final response = await ApiClient.instance.get(
-        '/ventas/$ventaId/disponible-devolucion/',
-      );
-      return response.data as Map<String, dynamic>;
-    } catch (e) {
-      rethrow;
-    }
-  }
+  // ── Ventas disponibles ─────────────────────────────────
+  // ✅ estos métodos usan VentaService — no duplicar aquí
+  //
+  //  En el provider o screen:
+  //    final ventas = await VentaService().listarVentas(tiendaId: id, fecha: f);
+  //    final disp   = await VentaService().ventaDisponibleDevolucion(ventaId);
 }

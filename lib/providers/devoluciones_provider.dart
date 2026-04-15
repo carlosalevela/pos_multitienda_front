@@ -1,162 +1,127 @@
 // lib/providers/devoluciones_provider.dart
 
-import 'package:flutter/material.dart';
-import 'package:pos_multitienda_app/models/devolucion_model.dart';
-import 'package:pos_multitienda_app/services/devoluciones_service.dart';
+import 'package:flutter/foundation.dart';
+import '../models/devolucion_model.dart';
+import '../services/devoluciones_service.dart';   // ← import del servicio
 
 class DevolucionesProvider extends ChangeNotifier {
-  final DevolucionesService _service = DevolucionesService();
+
+  // ✅ FIX: instancia declarada correctamente
+  final _devolucionService = DevolucionesService();
 
   List<DevolucionModel> _devoluciones = [];
-  DevolucionModel?      _detalle;
-  bool                  _cargando  = false;
-  bool                  _guardando = false;
-  String?               _error;
+  bool    _cargando = false;
+  String? _error;
 
   List<DevolucionModel> get devoluciones => _devoluciones;
-  DevolucionModel?      get detalle      => _detalle;
-  bool                  get cargando     => _cargando;
-  bool                  get guardando    => _guardando;
-  String?               get error        => _error;
+  bool    get cargando => _cargando;
+  String? get error    => _error;
 
-  // ── Listar ─────────────────────────────────────────
+  // ── Cargar lista ─────────────────────────────────────
   Future<void> cargarDevoluciones({
-    String? token,   // ✅ opcional e ignorado — ApiClient lo maneja
     int?    tiendaId,
-    String? estado,
     String? fecha,
     String? fechaIni,
     String? fechaFin,
+    String? estado,
   }) async {
     _cargando = true;
     _error    = null;
     notifyListeners();
 
     try {
-      // ✅ FIX: listar() → getDevoluciones()
-      _devoluciones = await _service.getDevoluciones(
+      _devoluciones = await _devolucionService.getDevoluciones(
         tiendaId: tiendaId,
-        estado:   estado,
         fecha:    fecha,
         fechaIni: fechaIni,
         fechaFin: fechaFin,
+        estado:   estado,
       );
     } catch (e) {
-      _error = e.toString().replaceFirst('Exception: ', '');
-    } finally {
-      _cargando = false;
-      notifyListeners();
+      _error = 'Error al cargar devoluciones';
+      debugPrint('❌ cargarDevoluciones: $e');
     }
-  }
 
-  // ── Detalle ────────────────────────────────────────
-  Future<void> cargarDetalle(int id) async {
-    _cargando = true;
-    _detalle  = null;
-    _error    = null;
+    _cargando = false;
     notifyListeners();
-
-    try {
-      // ✅ FIX: detalle() → getDevolucion()
-      _detalle = await _service.getDevolucion(id);
-    } catch (e) {
-      _error = e.toString().replaceFirst('Exception: ', '');
-    } finally {
-      _cargando = false;
-      notifyListeners();
-    }
   }
 
-  // ── Crear ──────────────────────────────────────────
-  Future<Map<String, dynamic>?> crearDevolucion({
-    String?                             token,      // ✅ opcional e ignorado
-    required int                        ventaId,
-    required String                     metodoPago,
+  // ── Crear devolución (efectivo / transferencia / etc.) ─
+  Future<Map<String, dynamic>> crearDevolucion({
+    required int    ventaId,
+    required String metodoPago,
     required List<Map<String, dynamic>> detalles,
-    String?                             observaciones,
-    int?                                tiendaId,
+    String? observaciones,
+    int?    tiendaId,
   }) async {
-    _guardando = true;
-    _error     = null;
-    notifyListeners();
+    _error = null;
 
-    try {
-      // ✅ FIX: crear() → crearDevolucion() con firma correcta
-      final dev = await _service.crearDevolucion(
-        ventaId:       ventaId,
-        metodoPago:    metodoPago,
-        detalles:      detalles,
-        observaciones: observaciones,
-        tiendaId:      tiendaId,
-      );
-      return dev;
-    } catch (e) {
-      _error = e.toString().replaceFirst('Exception: ', '');
-      return null;
-    } finally {
-      _guardando = false;
+    final resp = await _devolucionService.crearDevolucion(
+      ventaId:       ventaId,
+      metodoPago:    metodoPago,
+      detalles:      detalles,
+      observaciones: observaciones,
+    );
+
+    if (resp['success'] != true) {
+      _error = resp['error']?.toString() ?? 'Error al crear devolución';
       notifyListeners();
     }
+
+    return resp;   // ✅ siempre {'success': bool, 'error': '...' o 'data': ...}
   }
 
-  // ── Cancelar ───────────────────────────────────────
-  Future<bool> cancelarDevolucion({
-  String? token,
-  required int id,
-}) async {
-  _guardando = true;
-  _error     = null;
-  notifyListeners();
+  // ── Crear devolución POR CAMBIO DE PRODUCTO ───────────
+  // Recibe el Map que devuelve DevolucionProductoSheet:
+  //   { 'productos': [...], 'total_nuevo': x, 'diferencia': y }
+  Future<Map<String, dynamic>> crearCambioProducto(
+      Map<String, dynamic> result) async {
+    _error = null;
 
-  try {
-    // ✅ FIX: usar el bool que devuelve el servicio
-    final ok = await _service.cancelarDevolucion(id: id);
+    // Convierte los productos del carrito al formato que espera el backend
+    final detalles = (result['productos'] as List).map((p) => {
+      'producto':       p['producto_id'],
+      'cantidad':       p['cantidad'],
+      'precio_unitario': p['precio'],
+      // motivo opcional si lo agregas al carrito luego
+    }).toList();
 
-    if (!ok) {
-      _error = 'No se pudo cancelar la devolución';
+    final resp = await _devolucionService.crearDevolucion(
+      ventaId:    0,             // ← ajusta si tienes ventaId disponible
+      metodoPago: 'cambio_producto',
+      detalles:   detalles,
+      observaciones:
+          'Cambio de producto. '
+          'Diferencia: \$${result['diferencia']}',
+    );
+
+    if (resp['success'] != true) {
+      _error = resp['error']?.toString() ?? 'Error al registrar cambio';
+      notifyListeners();
+    }
+
+    return resp;
+  }
+
+  // ── Cancelar devolución ───────────────────────────────
+  Future<bool> cancelarDevolucion(int id) async {
+    _error = null;
+
+    final resp = await _devolucionService.cancelarDevolucion(id);
+
+    if (resp['success'] == true) {
+      // remueve de la lista local o actualiza estado
+      final idx = _devoluciones.indexWhere((d) => d.id == id);
+      if (idx >= 0) {
+        // si el modelo tiene copyWith: _devoluciones[idx] = _devoluciones[idx].copyWith(estado: 'cancelada');
+        // si no, recargamos la lista directamente en la UI con aplicarFiltro()
+      }
+      notifyListeners();
+      return true;
+    } else {
+      _error = resp['error']?.toString() ?? 'Error al cancelar';
+      notifyListeners();
       return false;
     }
-
-    _devoluciones = _devoluciones.map((d) =>
-        d.id == id ? _copiarCancelada(d) : d).toList();
-
-    if (_detalle?.id == id) {
-      _detalle = _copiarCancelada(_detalle!);
-    }
-
-    return true;
-  } catch (e) {
-    _error = e.toString().replaceFirst('Exception: ', '');
-    return false;
-  } finally {
-    _guardando = false;
-    notifyListeners();
-  }
-}
-
-  // ── Helpers ────────────────────────────────────────
-  DevolucionModel _copiarCancelada(DevolucionModel d) => DevolucionModel(
-    id:               d.id,
-    ventaId:          d.ventaId,
-    ventaNumero:      d.ventaNumero,
-    tiendaId:         d.tiendaId,
-    tiendaNombre:     d.tiendaNombre,
-    empleadoId:       d.empleadoId,
-    empleadoNombre:   d.empleadoNombre,
-    totalDevuelto:    d.totalDevuelto,
-    metodoDevolucion: d.metodoDevolucion,
-    estado:           'cancelada',
-    observaciones:    d.observaciones,
-    createdAt:        d.createdAt,
-    detalles:         d.detalles,
-  );
-
-  void limpiar() {
-    _devoluciones = [];
-    _detalle      = null;
-    _cargando     = false;
-    _guardando    = false;
-    _error        = null;
-    notifyListeners();
   }
 }

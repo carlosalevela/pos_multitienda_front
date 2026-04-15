@@ -14,18 +14,16 @@ import 'tabs/tab_top_productos.dart';
 import 'tabs/tab_gastos.dart';
 import 'tabs/tab_anual.dart';
 
-
 class ContabilidadScreen extends StatefulWidget {
   const ContabilidadScreen({super.key});
   @override
   State<ContabilidadScreen> createState() => _ContabilidadScreenState();
 }
 
-
 class _ContabilidadScreenState extends State<ContabilidadScreen>
     with SingleTickerProviderStateMixin {
 
-  TabController? _tabCtrl;
+  late TabController _tabCtrl;
   final _fmt = NumberFormat('#,##0', 'es_CO');
 
   int _anioSel   = DateTime.now().year;
@@ -35,20 +33,19 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
   final _meses = ['Ene','Feb','Mar','Abr','May','Jun',
                    'Jul','Ago','Sep','Oct','Nov','Dic'];
 
-  List<Map<String, dynamic>> _tiendas    = [];
+  List<Map<String, dynamic>> _tiendas   = [];
   int?                        _tiendaAdmin;
 
-  // ✅ Key para forzar rebuild de TabGastos cuando cambia la tienda
   Key _gastosKey = UniqueKey();
 
   // ── LIFECYCLE ──────────────────────────────────────
+
   @override
   void initState() {
     super.initState();
     final auth  = context.read<AuthProvider>();
     final esCaj = auth.rol == 'cajero';
 
-    // cajero: 3 tabs | admin/supervisor: 5 tabs
     _tabCtrl = TabController(length: esCaj ? 3 : 5, vsync: this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -56,9 +53,14 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
       final cont = context.read<ContabilidadProvider>();
       final tid  = auth.tiendaId == 0 ? null : auth.tiendaId;
 
+      // ✅ Fix: try-catch en getTiendas
       if (auth.rol == 'admin') {
-        final tiendas = await EmpleadoService().getTiendas();
-        if (mounted) setState(() => _tiendas = tiendas);
+        try {
+          final tiendas = await EmpleadoService().getTiendas();
+          if (mounted) setState(() => _tiendas = tiendas);
+        } catch (e) {
+          debugPrint('❌ Error cargando tiendas: $e');
+        }
       }
 
       final tiendaEfectiva = auth.rol == 'admin' ? _tiendaAdmin : tid;
@@ -68,24 +70,26 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
 
   @override
   void dispose() {
-    _tabCtrl?.dispose();
+    _tabCtrl.dispose();
     super.dispose();
   }
 
   // ── HELPERS ────────────────────────────────────────
+
   int? get _tiendaId {
     final auth = context.read<AuthProvider>();
     if (auth.rol == 'admin') return _tiendaAdmin;
     return auth.tiendaId == 0 ? null : auth.tiendaId;
   }
 
-  void _cargarTodo(ContabilidadProvider cont, AuthProvider auth, int? tiendaId) {
+  void _cargarTodo(
+      ContabilidadProvider cont, AuthProvider auth, int? tiendaId) {
     final esCaj = auth.rol == 'cajero';
     cont.cargarResumenDiario(tiendaId: tiendaId);
     cont.cargarTopProductos(tiendaId: tiendaId);
-    // ✅ gastos ya no se cargan aquí — TabGastos lo hace en su initState
     if (!esCaj) {
-      cont.cargarResumenMensual(tiendaId: tiendaId, anio: _anioSel, mes: _mesSel);
+      cont.cargarResumenMensual(
+          tiendaId: tiendaId, anio: _anioSel, mes: _mesSel);
       cont.cargarResumenAnual(tiendaId: tiendaId, anio: _anioAnual);
     }
   }
@@ -93,21 +97,17 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
   void _recargarTodo() {
     final cont = context.read<ContabilidadProvider>();
     final auth = context.read<AuthProvider>();
-    // ✅ Fuerza rebuild de TabGastos para que recargue con la nueva tienda
     setState(() => _gastosKey = UniqueKey());
     _cargarTodo(cont, auth, _tiendaId);
   }
 
   // ── BUILD ──────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     final cont  = context.watch<ContabilidadProvider>();
     final auth  = context.watch<AuthProvider>();
     final esCaj = auth.rol == 'cajero';
-
-    if (_tabCtrl == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -130,26 +130,32 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              boxShadow: [BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              )],
+              boxShadow: [
+                BoxShadow(
+                  // ✅ Fix: withValues en lugar de withOpacity
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                )
+              ],
             ),
             child: TabBar(
               controller: _tabCtrl,
               labelStyle: GoogleFonts.poppins(
                   fontWeight: FontWeight.w600, fontSize: 13),
-              unselectedLabelStyle: GoogleFonts.poppins(fontSize: 13),
-              labelColor:           const Color(Constants.primaryColor),
+              unselectedLabelStyle:
+                  GoogleFonts.poppins(fontSize: 13),
+              labelColor: const Color(Constants.primaryColor),
               unselectedLabelColor: Colors.grey.shade500,
               indicator: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
-                color: const Color(Constants.primaryColor).withOpacity(0.1),
+                // ✅ Fix: withValues en lugar de withOpacity
+                color: const Color(Constants.primaryColor)
+                    .withValues(alpha: 0.1),
               ),
               indicatorSize: TabBarIndicatorSize.tab,
-              padding:       const EdgeInsets.all(4),
-              tabs:          _buildTabs(esCaj),
+              padding: const EdgeInsets.all(4),
+              tabs: _buildTabs(esCaj),
             ),
           ),
           const SizedBox(height: 16),
@@ -166,12 +172,15 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
   }
 
   // ── HEADER ─────────────────────────────────────────
+
   Widget _buildHeader(AuthProvider auth) {
     return Row(children: [
       Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: const Color(Constants.primaryColor).withOpacity(0.1),
+          // ✅ Fix: withValues en lugar de withOpacity
+          color: const Color(Constants.primaryColor)
+              .withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(10),
         ),
         child: const Icon(Icons.bar_chart_rounded,
@@ -188,19 +197,24 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
       // Selector de tienda (solo admin)
       if (auth.rol == 'admin' && _tiendas.isNotEmpty)
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: Colors.grey.shade200),
-            boxShadow: [BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            )],
+            boxShadow: [
+              BoxShadow(
+                // ✅ Fix: withValues en lugar de withOpacity
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              )
+            ],
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.store_rounded, size: 15, color: Colors.grey.shade500),
+            Icon(Icons.store_rounded,
+                size: 15, color: Colors.grey.shade500),
             const SizedBox(width: 4),
             DropdownButtonHideUnderline(
               child: DropdownButton<int?>(
@@ -213,27 +227,34 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
                 items: [
                   DropdownMenuItem<int?>(
                     value: null,
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(Icons.public_rounded,
-                          size: 14, color: Color(Constants.primaryColor)),
-                      const SizedBox(width: 6),
-                      Text('Todas las tiendas',
-                          style: GoogleFonts.poppins(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(Constants.primaryColor))),
-                    ]),
+                    child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.public_rounded,
+                              size: 14,
+                              color: Color(Constants.primaryColor)),
+                          const SizedBox(width: 6),
+                          Text('Todas las tiendas',
+                              style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(
+                                      Constants.primaryColor))),
+                        ]),
                   ),
                   ..._tiendas.map((t) => DropdownMenuItem<int?>(
-                    value: t['id'] as int?,
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(Icons.storefront_rounded,
-                          size: 14, color: Colors.grey),
-                      const SizedBox(width: 6),
-                      Text(t['nombre'] ?? '',
-                          style: GoogleFonts.poppins(fontSize: 13)),
-                    ]),
-                  )),
+                        value: t['id'] as int?,
+                        child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.storefront_rounded,
+                                  size: 14, color: Colors.grey),
+                              const SizedBox(width: 6),
+                              Text(t['nombre'] ?? '',
+                                  style: GoogleFonts.poppins(
+                                      fontSize: 13)),
+                            ]),
+                      )),
                 ],
                 onChanged: (val) {
                   setState(() => _tiendaAdmin = val);
@@ -249,6 +270,7 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
   // ── TABS — etiquetas ───────────────────────────────
   // cajero : [0]Hoy  [1]Top  [2]Gastos
   // otros  : [0]Hoy  [1]Mensual  [2]Top  [3]Gastos  [4]Anual
+
   List<Tab> _buildTabs(bool esCaj) {
     const all = [
       Tab(icon: Icon(Icons.today_rounded,          size: 18), text: 'Hoy'),
@@ -261,6 +283,7 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
   }
 
   // ── TABS — contenido ───────────────────────────────
+
   List<Widget> _buildViews(
       bool esCaj, ContabilidadProvider cont, AuthProvider auth) {
 
@@ -270,7 +293,6 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
     final tabTop = TabTopProductos(
       cont: cont, fmt: _fmt,
     );
-    // ✅ Key para forzar recarga cuando cambia la tienda
     final tabGastos = TabGastos(
       key:      _gastosKey,
       cont:     cont,
@@ -289,7 +311,8 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
         anio: _anioSel, mes: _mesSel, meses: _meses,
         onCambiarMes: (a, m) {
           setState(() { _anioSel = a; _mesSel = m; });
-          cont.cargarResumenMensual(tiendaId: _tiendaId, anio: a, mes: m);
+          cont.cargarResumenMensual(
+              tiendaId: _tiendaId, anio: a, mes: m);
         },
       ),
       tabTop,
@@ -306,42 +329,49 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
   }
 
   // ── BANNER éxito / error ───────────────────────────
+
   Widget _banner(String msg,
-      {required bool isError, required VoidCallback onClose}) =>
-    Container(
-      margin:  const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: isError
-            ? const Color(Constants.errorColor).withOpacity(0.1)
-            : Colors.green.shade50,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isError
-              ? const Color(Constants.errorColor).withOpacity(0.3)
-              : Colors.green.shade200,
-        ),
-      ),
-      child: Row(children: [
-        Icon(
-          isError ? Icons.error_outline : Icons.check_circle_outline,
+          {required bool isError, required VoidCallback onClose}) =>
+      Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          // ✅ Fix: withValues en lugar de withOpacity
           color: isError
               ? const Color(Constants.errorColor)
-              : Colors.green.shade700,
-          size: 18,
+                  .withValues(alpha: 0.1)
+              : Colors.green.shade50,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isError
+                ? const Color(Constants.errorColor)
+                    .withValues(alpha: 0.3)
+                : Colors.green.shade200,
+          ),
         ),
-        const SizedBox(width: 10),
-        Expanded(child: Text(msg,
-            style: GoogleFonts.poppins(
-                color: isError
-                    ? const Color(Constants.errorColor)
-                    : Colors.green.shade700,
-                fontSize: 13))),
-        IconButton(
-          icon: const Icon(Icons.close_rounded, size: 16),
-          onPressed: onClose,
-          color: Colors.grey,
-        ),
-      ]),
-    );
+        child: Row(children: [
+          Icon(
+              isError
+                  ? Icons.error_outline
+                  : Icons.check_circle_outline,
+              color: isError
+                  ? const Color(Constants.errorColor)
+                  : Colors.green.shade700,
+              size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+              child: Text(msg,
+                  style: GoogleFonts.poppins(
+                      color: isError
+                          ? const Color(Constants.errorColor)
+                          : Colors.green.shade700,
+                      fontSize: 13))),
+          IconButton(
+            icon: const Icon(Icons.close_rounded, size: 16),
+            onPressed: onClose,
+            color: Colors.grey,
+          ),
+        ]),
+      );
 }

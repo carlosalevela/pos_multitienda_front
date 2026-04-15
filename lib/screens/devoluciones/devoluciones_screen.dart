@@ -10,43 +10,20 @@ import 'package:pos_multitienda_app/providers/devoluciones_provider.dart';
 import 'package:pos_multitienda_app/core/constants.dart';
 import 'package:pos_multitienda_app/screens/devoluciones/tabs/tab_devoluciones.dart';
 
-
-class DevolucionesScreen extends StatefulWidget {
+class DevolucionesScreen extends StatelessWidget {       // ✅ FIX #2: StatelessWidget
   const DevolucionesScreen({super.key});
 
   @override
-  State<DevolucionesScreen> createState() => _DevolucionesScreenState();
-}
-
-class _DevolucionesScreenState extends State<DevolucionesScreen> {
-  // ✅ El provider se crea UNA sola vez y vive con el State
-  late final DevolucionesProvider _devolucionesProvider;
-  late final AuthProvider         _auth;
-  late final NumberFormat         _fmt;
-  late final int?                 _tiendaId;
-  late final bool                 _esCajero;
-
-  @override
-  void initState() {
-    super.initState();
-    _devolucionesProvider = DevolucionesProvider();
-    _auth     = context.read<AuthProvider>();
-    _fmt      = NumberFormat.currency(locale: 'es_CO', symbol: '\$');
-    _tiendaId = _auth.tiendaId;
-    _esCajero = _auth.rol == 'cajero';
-  }
-
-  @override
-  void dispose() {
-    _devolucionesProvider.dispose(); // ✅ limpia al salir de la pantalla
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider.value(
-      // ✅ .value porque ya existe la instancia, no la crea de nuevo
-      value: _devolucionesProvider,
+    final auth     = context.read<AuthProvider>();
+    // ✅ FIX #1: sin symbol — es_CO ya usa '$'
+    final fmt      = NumberFormat.currency(locale: 'es_CO', symbol: r'$');
+    final tiendaId = auth.tiendaId;
+    final esCajero = auth.rol == 'cajero';
+
+    return ChangeNotifierProvider(
+      // ✅ FIX #2: create en lugar de .value — Provider gestiona el ciclo de vida
+      create: (_) => DevolucionesProvider(),
       child: Scaffold(
         backgroundColor: const Color(Constants.backgroundColor),
         appBar: AppBar(
@@ -65,10 +42,10 @@ class _DevolucionesScreenState extends State<DevolucionesScreen> {
         body: Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
           child: TabDevoluciones(
-            fmt:      _fmt,
-            tiendaId: _tiendaId,
-            esCajero: _esCajero,
-            auth:     _auth,
+            fmt:      fmt,
+            tiendaId: tiendaId,
+            esCajero: esCajero,
+            auth:     auth,
           ),
         ),
       ),
