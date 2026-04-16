@@ -1,5 +1,3 @@
-// lib/models/devolucion_model.dart
-
 class DevolucionModel {
   final int    id;
   final int    ventaId;
@@ -10,9 +8,13 @@ class DevolucionModel {
   final String empleadoNombre;
   final double totalDevuelto;
   final String metodoDevolucion;
+  final String tipo;
   final String estado;
   final String observaciones;
   final DateTime createdAt;
+  final int? productoReemplazoId;
+  final String? productoReemplazoNombre;
+  final double? cantidadReemplazo;
   final List<DetalleDevolucionModel> detalles;
 
   const DevolucionModel({
@@ -25,26 +27,77 @@ class DevolucionModel {
     required this.empleadoNombre,
     required this.totalDevuelto,
     required this.metodoDevolucion,
+    required this.tipo,
     required this.estado,
     required this.observaciones,
     required this.createdAt,
+    this.productoReemplazoId,
+    this.productoReemplazoNombre,
+    this.cantidadReemplazo,
     required this.detalles,
   });
 
+  // ← agregado
+  DevolucionModel copyWith({
+    int?    id,
+    int?    ventaId,
+    String? ventaNumero,
+    int?    tiendaId,
+    String? tiendaNombre,
+    int?    empleadoId,
+    String? empleadoNombre,
+    double? totalDevuelto,
+    String? metodoDevolucion,
+    String? tipo,
+    String? estado,
+    String? observaciones,
+    DateTime? createdAt,
+    int? productoReemplazoId,
+    String? productoReemplazoNombre,
+    double? cantidadReemplazo,
+    List<DetalleDevolucionModel>? detalles,
+  }) {
+    return DevolucionModel(
+      id:               id               ?? this.id,
+      ventaId:          ventaId          ?? this.ventaId,
+      ventaNumero:      ventaNumero      ?? this.ventaNumero,
+      tiendaId:         tiendaId         ?? this.tiendaId,
+      tiendaNombre:     tiendaNombre     ?? this.tiendaNombre,
+      empleadoId:       empleadoId       ?? this.empleadoId,
+      empleadoNombre:   empleadoNombre   ?? this.empleadoNombre,
+      totalDevuelto:    totalDevuelto    ?? this.totalDevuelto,
+      metodoDevolucion: metodoDevolucion ?? this.metodoDevolucion,
+      tipo: tipo ?? this.tipo,
+      estado:           estado           ?? this.estado,
+      observaciones:    observaciones    ?? this.observaciones,
+      createdAt:        createdAt        ?? this.createdAt,
+      productoReemplazoId: productoReemplazoId ?? this.productoReemplazoId,
+      productoReemplazoNombre: productoReemplazoNombre ?? this.productoReemplazoNombre,
+      cantidadReemplazo: cantidadReemplazo ?? this.cantidadReemplazo,
+      detalles:         detalles         ?? this.detalles,
+    );
+  }
+
   factory DevolucionModel.fromJson(Map<String, dynamic> j) =>
       DevolucionModel(
-        id:               j['id']              as int,
-        ventaId:          j['venta']           as int,
-        ventaNumero:      j['venta_numero']    as String? ?? '',
-        tiendaId:         j['tienda']          as int,
-        tiendaNombre:     j['tienda_nombre']   as String? ?? '',
-        empleadoId:       j['empleado']        as int?,
-        empleadoNombre:   j['empleado_nombre'] as String? ?? 'Sin empleado',
-        totalDevuelto:    double.tryParse(j['total_devuelto'].toString()) ?? 0,
+        id:               j['id']               as int,
+        ventaId:          j['venta']            as int,
+        ventaNumero:      j['venta_numero']     as String? ?? '',
+        tiendaId:         j['tienda']           as int,
+        tiendaNombre:     j['tienda_nombre']    as String? ?? '',
+        empleadoId:       j['empleado']         as int?,
+        empleadoNombre:   j['empleado_nombre']  as String? ?? 'Sin empleado',
+        totalDevuelto:    double.tryParse(j['total_devuelto'].toString())    ?? 0,
         metodoDevolucion: j['metodo_devolucion'] as String? ?? 'efectivo',
-        estado:           j['estado']          as String? ?? 'procesada',
-        observaciones:    j['observaciones']   as String? ?? '',
+        tipo: j['tipo'] as String? ?? 'devolucion',
+        estado:           j['estado']           as String? ?? 'procesada',
+        observaciones:    j['observaciones']    as String? ?? '',
         createdAt:        DateTime.parse(j['created_at'] as String),
+        productoReemplazoId: j['producto_reemplazo'] as int?,
+        productoReemplazoNombre: j['producto_reemplazo_nombre'] as String?,
+        cantidadReemplazo: j['cantidad_reemplazo'] != null
+            ? double.tryParse(j['cantidad_reemplazo'].toString())
+            : null,
         detalles:         (j['detalles'] as List? ?? [])
             .map((d) => DetalleDevolucionModel.fromJson(d))
             .toList(),
@@ -70,6 +123,27 @@ class DetalleDevolucionModel {
     required this.subtotal,
     required this.motivo,
   });
+
+  // ← agregado
+  DetalleDevolucionModel copyWith({
+    int?    id,
+    int?    productoId,
+    String? productoNombre,
+    double? cantidad,
+    double? precioUnitario,
+    double? subtotal,
+    String? motivo,
+  }) {
+    return DetalleDevolucionModel(
+      id:             id             ?? this.id,
+      productoId:     productoId     ?? this.productoId,
+      productoNombre: productoNombre ?? this.productoNombre,
+      cantidad:       cantidad       ?? this.cantidad,
+      precioUnitario: precioUnitario ?? this.precioUnitario,
+      subtotal:       subtotal       ?? this.subtotal,
+      motivo:         motivo         ?? this.motivo,
+    );
+  }
 
   factory DetalleDevolucionModel.fromJson(Map<String, dynamic> j) =>
       DetalleDevolucionModel(

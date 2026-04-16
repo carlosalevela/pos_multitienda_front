@@ -1,41 +1,39 @@
-// lib/providers/devoluciones_provider.dart
 
 import 'package:flutter/foundation.dart';
 import '../models/devolucion_model.dart';
-import '../services/devoluciones_service.dart';   // ← import del servicio
+import '../services/devoluciones_service.dart';
 
 class DevolucionesProvider extends ChangeNotifier {
-
-  // ✅ FIX: instancia declarada correctamente
   final _devolucionService = DevolucionesService();
 
   List<DevolucionModel> _devoluciones = [];
-  bool    _cargando = false;
+  bool _cargando = false;
   String? _error;
 
   List<DevolucionModel> get devoluciones => _devoluciones;
-  bool    get cargando => _cargando;
-  String? get error    => _error;
+  bool get cargando => _cargando;
+  String? get error => _error;
 
-  // ── Cargar lista ─────────────────────────────────────
+  // ── Cargar lista ──────────────────────────────────────
+
   Future<void> cargarDevoluciones({
-    int?    tiendaId,
+    int? tiendaId,
     String? fecha,
     String? fechaIni,
     String? fechaFin,
     String? estado,
   }) async {
     _cargando = true;
-    _error    = null;
+    _error = null;
     notifyListeners();
 
     try {
       _devoluciones = await _devolucionService.getDevoluciones(
         tiendaId: tiendaId,
-        fecha:    fecha,
+        fecha: fecha,
         fechaIni: fechaIni,
         fechaFin: fechaFin,
-        estado:   estado,
+        estado: estado,
       );
     } catch (e) {
       _error = 'Error al cargar devoluciones';
@@ -46,20 +44,20 @@ class DevolucionesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Crear devolución (efectivo / transferencia / etc.) ─
+  // ── Crear devolución ──────────────────────────────────
+
   Future<Map<String, dynamic>> crearDevolucion({
-    required int    ventaId,
+    required int ventaId,
     required String metodoPago,
     required List<Map<String, dynamic>> detalles,
     String? observaciones,
-    int?    tiendaId,
   }) async {
     _error = null;
 
     final resp = await _devolucionService.crearDevolucion(
-      ventaId:       ventaId,
-      metodoPago:    metodoPago,
-      detalles:      detalles,
+      ventaId: ventaId,
+      metodoPago: metodoPago,
+      detalles: detalles,
       observaciones: observaciones,
     );
 
@@ -68,53 +66,73 @@ class DevolucionesProvider extends ChangeNotifier {
       notifyListeners();
     }
 
-    return resp;   // ✅ siempre {'success': bool, 'error': '...' o 'data': ...}
+    return resp;
   }
 
-  // ── Crear devolución POR CAMBIO DE PRODUCTO ───────────
-  // Recibe el Map que devuelve DevolucionProductoSheet:
-  //   { 'productos': [...], 'total_nuevo': x, 'diferencia': y }
-  Future<Map<String, dynamic>> crearCambioProducto(
-      Map<String, dynamic> result) async {
+  // ── Crear cambio con mensaje personalizado ──────────────
+
+  Future<Map<String, dynamic>> crearCambio({
+    required int ventaId,
+    required String metodoPago,
+    required List<Map<String, dynamic>> detalles,
+    required int productoReemplazoId,
+    required double cantidadReemplazo,
+    String? observaciones,
+  }) async {
     _error = null;
 
-    // Convierte los productos del carrito al formato que espera el backend
-    final detalles = (result['productos'] as List).map((p) => {
-      'producto':       p['producto_id'],
-      'cantidad':       p['cantidad'],
-      'precio_unitario': p['precio'],
-      // motivo opcional si lo agregas al carrito luego
-    }).toList();
-
-    final resp = await _devolucionService.crearDevolucion(
-      ventaId:    0,             // ← ajusta si tienes ventaId disponible
-      metodoPago: 'cambio_producto',
-      detalles:   detalles,
-      observaciones:
-          'Cambio de producto. '
-          'Diferencia: \$${result['diferencia']}',
+    final resp = await _devolucionService.crearCambio(
+      ventaId: ventaId,
+      metodoPago: metodoPago,
+      detalles: detalles,
+      productoReemplazoId: productoReemplazoId,
+      cantidadReemplazo: cantidadReemplazo,
+      observaciones: observaciones,
     );
 
-    if (resp['success'] != true) {
-      _error = resp['error']?.toString() ?? 'Error al registrar cambio';
+    if (resp['success'] == true) {
+      final data = resp['data'];
+
+      // ← Generar mensaje inteligente para cambio
+      resp['mensaje_ui'] = _generarMensajeCambio(data);
+
+      // ← Refrescar lista para mostrar el cambio recién creado
+      await cargarDevoluciones();
+    } else {
+      _error = resp['error']?.toString() ?? 'Error al procesar cambio';
       notifyListeners();
     }
 
     return resp;
   }
 
+  // ← Helper para generar mensaje correcto del cambio
+  String _generarMensajeCambio(Map<String, dynamic> data) {
+    final diferencia = double.tryParse(data['diferencia'].toString()) ?? 0;
+    final tipoDiferencia = data['tipo_diferencia']?.toString() ?? 'exacto';
+    final prodNombre = data['producto_reemplazo']?['nombre']?.toString() ?? 'producto';
+    final prodCantidad = data['producto_reemplazo']?['cantidad']?.toString() ?? '';
+
+    if (tipoDiferencia == 'exacto') {
+      return 'Cambio realizado ✅ $prodCantidad x $prodNombre, sin diferencia de dinero';
+    } else if (tipoDiferencia == 'cobrar') {
+      return 'Cambio realizado ✅ $prodCantidad x $prodNombre. Faltan ${data['diferencia']} por pagar';
+    } else {
+      return 'Cambio realizado ✅ $prodCantidad x $prodNombre. Devolver ${data['diferencia']} al cliente';
+    }
+  }
+
   // ── Cancelar devolución ───────────────────────────────
+
   Future<bool> cancelarDevolucion(int id) async {
     _error = null;
 
     final resp = await _devolucionService.cancelarDevolucion(id);
 
     if (resp['success'] == true) {
-      // remueve de la lista local o actualiza estado
       final idx = _devoluciones.indexWhere((d) => d.id == id);
       if (idx >= 0) {
-        // si el modelo tiene copyWith: _devoluciones[idx] = _devoluciones[idx].copyWith(estado: 'cancelada');
-        // si no, recargamos la lista directamente en la UI con aplicarFiltro()
+        _devoluciones[idx] = _devoluciones[idx].copyWith(estado: 'cancelada');
       }
       notifyListeners();
       return true;
