@@ -1,4 +1,3 @@
-
 import 'package:flutter/foundation.dart';
 import '../models/devolucion_model.dart';
 import '../services/devoluciones_service.dart';
@@ -13,8 +12,6 @@ class DevolucionesProvider extends ChangeNotifier {
   List<DevolucionModel> get devoluciones => _devoluciones;
   bool get cargando => _cargando;
   String? get error => _error;
-
-  // ── Cargar lista ──────────────────────────────────────
 
   Future<void> cargarDevoluciones({
     int? tiendaId,
@@ -44,8 +41,6 @@ class DevolucionesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Crear devolución ──────────────────────────────────
-
   Future<Map<String, dynamic>> crearDevolucion({
     required int ventaId,
     required String metodoPago,
@@ -69,8 +64,6 @@ class DevolucionesProvider extends ChangeNotifier {
     return resp;
   }
 
-  // ── Crear cambio con mensaje personalizado ──────────────
-
   Future<Map<String, dynamic>> crearCambio({
     required int ventaId,
     required String metodoPago,
@@ -78,6 +71,8 @@ class DevolucionesProvider extends ChangeNotifier {
     required int productoReemplazoId,
     required double cantidadReemplazo,
     String? observaciones,
+    String? metodoPagoDiferencia,
+    double? montoRecibido,
   }) async {
     _error = null;
 
@@ -88,15 +83,18 @@ class DevolucionesProvider extends ChangeNotifier {
       productoReemplazoId: productoReemplazoId,
       cantidadReemplazo: cantidadReemplazo,
       observaciones: observaciones,
+      metodoPagoDiferencia: metodoPagoDiferencia,
+      montoRecibido: montoRecibido,
     );
 
     if (resp['success'] == true) {
-      final data = resp['data'];
+      final rawData = resp['data'];
+      final data = rawData is Map<String, dynamic>
+          ? rawData
+          : Map<String, dynamic>.from(rawData as Map);
 
-      // ← Generar mensaje inteligente para cambio
       resp['mensaje_ui'] = _generarMensajeCambio(data);
 
-      // ← Refrescar lista para mostrar el cambio recién creado
       await cargarDevoluciones();
     } else {
       _error = resp['error']?.toString() ?? 'Error al procesar cambio';
@@ -106,23 +104,26 @@ class DevolucionesProvider extends ChangeNotifier {
     return resp;
   }
 
-  // ← Helper para generar mensaje correcto del cambio
   String _generarMensajeCambio(Map<String, dynamic> data) {
-    final diferencia = double.tryParse(data['diferencia'].toString()) ?? 0;
+    final diferencia = double.tryParse(data['diferencia']?.toString() ?? '') ?? 0;
     final tipoDiferencia = data['tipo_diferencia']?.toString() ?? 'exacto';
-    final prodNombre = data['producto_reemplazo']?['nombre']?.toString() ?? 'producto';
-    final prodCantidad = data['producto_reemplazo']?['cantidad']?.toString() ?? '';
+
+    final productoRaw = data['producto_reemplazo'];
+    final producto = productoRaw is Map<String, dynamic>
+        ? productoRaw
+        : (productoRaw is Map ? Map<String, dynamic>.from(productoRaw) : null);
+
+    final prodNombre = producto?['nombre']?.toString() ?? 'producto';
+    final prodCantidad = producto?['cantidad']?.toString() ?? '';
 
     if (tipoDiferencia == 'exacto') {
       return 'Cambio realizado ✅ $prodCantidad x $prodNombre, sin diferencia de dinero';
     } else if (tipoDiferencia == 'cobrar') {
-      return 'Cambio realizado ✅ $prodCantidad x $prodNombre. Faltan ${data['diferencia']} por pagar';
+      return 'Cambio realizado ✅ $prodCantidad x $prodNombre. Faltan $diferencia por pagar';
     } else {
-      return 'Cambio realizado ✅ $prodCantidad x $prodNombre. Devolver ${data['diferencia']} al cliente';
+      return 'Cambio realizado ✅ $prodCantidad x $prodNombre. Devolver $diferencia al cliente';
     }
   }
-
-  // ── Cancelar devolución ───────────────────────────────
 
   Future<bool> cancelarDevolucion(int id) async {
     _error = null;

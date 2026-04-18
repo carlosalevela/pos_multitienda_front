@@ -1,5 +1,3 @@
-// lib/screens/reportes/reportes_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/reportes_provider.dart';
@@ -15,14 +13,14 @@ import 'widgets/reporte_detalle_dialog.dart';
 
 class ReportesScreen extends StatefulWidget {
   const ReportesScreen({super.key});
+
   @override
   State<ReportesScreen> createState() => _ReportesScreenState();
 }
 
 class _ReportesScreenState extends State<ReportesScreen> {
-
-  DateTime _fecha      = DateTime.now();
-  final _ventaService  = VentaService();
+  DateTime _fecha = DateTime.now();
+  final _ventaService = VentaService();
 
   @override
   void initState() {
@@ -34,9 +32,9 @@ class _ReportesScreenState extends State<ReportesScreen> {
     if (!mounted) return;
     final auth = context.read<AuthProvider>();
     context.read<ReportesProvider>().cargarVentas(
-      tiendaId: auth.tiendaId,
-      fecha:    _fechaStr,
-    );
+          tiendaId: auth.tiendaId,
+          fecha: _fechaStr,
+        );
   }
 
   String get _fechaStr =>
@@ -46,10 +44,10 @@ class _ReportesScreenState extends State<ReportesScreen> {
 
   Future<void> _seleccionarFecha() async {
     final nueva = await showDatePicker(
-      context:     context,
+      context: context,
       initialDate: _fecha,
-      firstDate:   DateTime(2024),
-      lastDate:    DateTime(2030),
+      firstDate: DateTime(2024),
+      lastDate: DateTime(2030),
     );
     if (nueva == null || !mounted) return;
     setState(() => _fecha = nueva);
@@ -60,94 +58,138 @@ class _ReportesScreenState extends State<ReportesScreen> {
     try {
       final detalle = await _ventaService.obtenerVenta(ventaId);
       if (!ctx.mounted || detalle == null) return;
+
       showDialog(
         context: ctx,
         builder: (_) => ReporteDetalleDialog(detalle: detalle),
       );
     } catch (_) {
       if (!ctx.mounted) return;
-      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-        content: const Text('Error al cargar el detalle de la venta'),
-        backgroundColor: Colors.red.shade600,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(16),
-      ));
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        SnackBar(
+          content: const Text('Error al cargar el detalle de la venta'),
+          backgroundColor: Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          margin: const EdgeInsets.all(16),
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final rep  = context.watch<ReportesProvider>();
+    final rep = context.watch<ReportesProvider>();
     final auth = context.watch<AuthProvider>();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FA),
-      body: Column(children: [
+      body: SafeArea(
+        child: Column(
+          children: [
+            ReporteHeader(
+              rep: rep,
+              auth: auth,
+              fechaStr: _fechaStr,
+              cargando: rep.cargando,
+              onFecha: _seleccionarFecha,
+              onRecargar: _cargar,
+            ),
+            Expanded(
+              child: rep.cargando
+                  ? const Center(child: CircularProgressIndicator())
+                  : LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isWide = constraints.maxWidth >= 1100;
+                        final isMedium = constraints.maxWidth >= 760;
 
-        // ── 1. Header ──────────────────────────────────
-        ReporteHeader(
-          rep:        rep,
-          auth:       auth,
-          fechaStr:   _fechaStr,
-          cargando:   rep.cargando,
-          onFecha:    _seleccionarFecha,
-          onRecargar: _cargar,
-        ),
-
-        // ── 2. Contenido ───────────────────────────────
-        Expanded(
-          child: rep.cargando
-              ? const Center(child: CircularProgressIndicator())
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-
-                      // ── KPIs ──────────────────────────
-                      ReporteKpis(rep: rep),
-                      const SizedBox(height: 16),
-
-                      // ── Panel lateral + tabla ─────────
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-
-                          // columna izquierda (300px)
-                          SizedBox(
-                            width: 300,
-                            child: Column(children: [
-                              ReporteMetodosPago(rep: rep),
-                              if (rep.numDevoluciones > 0) ...[
-                                const SizedBox(height: 12),
-                                ReporteDevolucionesCard(rep: rep),
+                        return SingleChildScrollView(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isWide ? 20 : 14,
+                            vertical: 20,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ReporteKpis(rep: rep),
+                              const SizedBox(height: 16),
+                              if (isWide)
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    SizedBox(
+                                      width: 320,
+                                      child: Column(
+                                        children: [
+                                          ReporteMetodosPago(rep: rep),
+                                          if (rep.numDevoluciones > 0) ...[
+                                            const SizedBox(height: 12),
+                                            ReporteDevolucionesCard(rep: rep),
+                                          ],
+                                          const SizedBox(height: 12),
+                                          ReporteTopProductos(rep: rep),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: ReporteTabla(
+                                        rep: rep,
+                                        onTapVenta: (id) =>
+                                            _abrirDetalle(context, id),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              else ...[
+                                if (isMedium)
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          children: [
+                                            ReporteMetodosPago(rep: rep),
+                                            if (rep.numDevoluciones > 0) ...[
+                                              const SizedBox(height: 12),
+                                              ReporteDevolucionesCard(rep: rep),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: ReporteTopProductos(rep: rep),
+                                      ),
+                                    ],
+                                  )
+                                else ...[
+                                  ReporteMetodosPago(rep: rep),
+                                  if (rep.numDevoluciones > 0) ...[
+                                    const SizedBox(height: 12),
+                                    ReporteDevolucionesCard(rep: rep),
+                                  ],
+                                  const SizedBox(height: 12),
+                                  ReporteTopProductos(rep: rep),
+                                ],
+                                const SizedBox(height: 16),
+                                ReporteTabla(
+                                  rep: rep,
+                                  onTapVenta: (id) =>
+                                      _abrirDetalle(context, id),
+                                ),
                               ],
-                              const SizedBox(height: 12),
-                              ReporteTopProductos(rep: rep),
-                            ]),
+                            ],
                           ),
-
-                          const SizedBox(width: 16),
-
-                          // columna derecha (flexible)
-                          Expanded(
-                            child: ReporteTabla(
-                              rep:       rep,
-                              onTapVenta: (id) =>
-                                  _abrirDetalle(context, id),
-                            ),
-                          ),
-                        ],
-                      ),
-
-                    ],
-                  ),
-                ),
+                        );
+                      },
+                    ),
+            ),
+          ],
         ),
-
-      ]),
+      ),
     );
   }
 }

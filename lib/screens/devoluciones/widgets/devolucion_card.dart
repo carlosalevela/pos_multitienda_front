@@ -93,16 +93,74 @@ class DevolucionCard extends StatelessWidget {
         ),
         const SizedBox(width: 6),
         _ChipEstado(estado: dev.estado),
-        const SizedBox(width: 6),
-        Text(
-          fmt.format(dev.totalDevuelto),
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-            color: cancelada ? Colors.grey.shade400 : Colors.orange.shade700,
-          ),
-        ),
+        const SizedBox(width: 8),
+        _buildImpactoMonto(cancelada),
       ],
+    );
+  }
+
+  Widget _buildImpactoMonto(bool cancelada) {
+    if (cancelada) {
+      return Text(
+        fmt.format(dev.totalDevuelto),
+        style: GoogleFonts.poppins(
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+          color: Colors.grey.shade400,
+        ),
+      );
+    }
+
+    if (dev.tipo == 'devolucion') {
+      return Text(
+        '- ${fmt.format(dev.totalDevuelto)}',
+        style: GoogleFonts.poppins(
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+          color: Colors.orange.shade700,
+        ),
+      );
+    }
+
+    final tipoDif = (dev.tipoDiferencia ?? 'exacto').toLowerCase();
+    final diferencia = dev.diferencia ?? 0.0;
+
+    if (tipoDif == 'cobrar') {
+      return Text(
+        '+ ${fmt.format(diferencia)}',
+        style: GoogleFonts.poppins(
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+          color: Colors.green.shade700,
+        ),
+      );
+    }
+
+    if (tipoDif == 'devolver') {
+      return Text(
+        '- ${fmt.format(diferencia)}',
+        style: GoogleFonts.poppins(
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+          color: Colors.deepOrange.shade600,
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.blueGrey.shade50,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        'Exacto',
+        style: GoogleFonts.poppins(
+          fontWeight: FontWeight.w600,
+          fontSize: 10,
+          color: Colors.blueGrey.shade600,
+        ),
+      ),
     );
   }
 
@@ -135,8 +193,7 @@ class DevolucionCard extends StatelessWidget {
             ),
           ],
         ),
-        if (esCambio &&
-            (dev.productoReemplazoNombre?.isNotEmpty ?? false)) ...[
+        if (esCambio && (dev.productoReemplazoNombre?.isNotEmpty ?? false)) ...[
           const SizedBox(height: 6),
           Text(
             'Cambio por: ${dev.productoReemplazoNombre}'
@@ -147,6 +204,19 @@ class DevolucionCard extends StatelessWidget {
               fontSize: 11,
               fontWeight: FontWeight.w600,
               color: Colors.green.shade700,
+            ),
+          ),
+        ],
+        if (esCambio) ...[
+          const SizedBox(height: 4),
+          Text(
+            _detalleImpacto(),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+            style: GoogleFonts.poppins(
+              fontSize: 11,
+              color: _detalleImpactoColor(),
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -164,6 +234,26 @@ class DevolucionCard extends StatelessWidget {
         ],
       ],
     );
+  }
+
+  String _detalleImpacto() {
+    final tipoDif = (dev.tipoDiferencia ?? 'exacto').toLowerCase();
+    final diferencia = dev.diferencia ?? 0.0;
+
+    if (tipoDif == 'cobrar') {
+      return 'Cliente agregó ${fmt.format(diferencia)}';
+    }
+    if (tipoDif == 'devolver') {
+      return 'Se devolvieron ${fmt.format(diferencia)}';
+    }
+    return 'Cambio exacto sin diferencia';
+  }
+
+  Color _detalleImpactoColor() {
+    final tipoDif = (dev.tipoDiferencia ?? 'exacto').toLowerCase();
+    if (tipoDif == 'cobrar') return Colors.green.shade700;
+    if (tipoDif == 'devolver') return Colors.deepOrange.shade600;
+    return Colors.blueGrey.shade600;
   }
 
   Widget? _trailing(bool cancelada) {

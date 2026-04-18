@@ -104,6 +104,8 @@ class DevolucionesService {
     required int productoReemplazoId,
     required double cantidadReemplazo,
     String? observaciones,
+    String? metodoPagoDiferencia,
+    double? montoRecibido,
   }) async {
     try {
       final response = await ApiClient.instance.post(
@@ -114,6 +116,9 @@ class DevolucionesService {
           'detalles': detalles,
           'producto_reemplazo': productoReemplazoId,
           'cantidad_reemplazo': cantidadReemplazo,
+          if (metodoPagoDiferencia != null && metodoPagoDiferencia.isNotEmpty)
+            'metodo_pago_diferencia': metodoPagoDiferencia,
+          if (montoRecibido != null) 'monto_recibido': montoRecibido,
           if (observaciones != null && observaciones.isNotEmpty)
             'observaciones': observaciones,
         },

@@ -4,16 +4,18 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../core/api_client.dart';
 
+
 class VentaService {
 
   // ── Helper extractor de errores ────────────────────────
+
   String _extractError(DioException e, String fallback) {
     final data = e.response?.data;
     if (data == null) return fallback;
     if (data is Map) {
-      // ✅ FIX: detail primero — estándar DRF
       if (data.containsKey('detail')) return data['detail'].toString();
       if (data.containsKey('error'))  return data['error'].toString();
+      // Maneja errores anidados de DRF (ej: {"pagos": "Saldo insuficiente..."})
       final msgs = data.values
           .expand((v) => v is List ? v : [v])
           .join(', ');
@@ -21,6 +23,7 @@ class VentaService {
     }
     return fallback;
   }
+
 
   // ── Crear venta ────────────────────────────────────────
 
@@ -38,7 +41,6 @@ class VentaService {
         data: {
           'tienda':          tiendaId,
           'metodo_pago':     metodoPago,
-          // ✅ FIX: números directos — no strings
           'monto_recibido':  montoRecibido,
           'descuento_total': descuento,
           if (clienteId != null) 'cliente': clienteId,
@@ -52,6 +54,7 @@ class VentaService {
       return {'success': false, 'error': 'Error inesperado'};
     }
   }
+
 
   // ── Listar ventas ──────────────────────────────────────
 
@@ -84,6 +87,7 @@ class VentaService {
     }
   }
 
+
   // ── Detalle de venta ───────────────────────────────────
 
   Future<Map<String, dynamic>?> obtenerVenta(int id) async {
@@ -99,6 +103,7 @@ class VentaService {
     }
   }
 
+
   // ── Anular venta ───────────────────────────────────────
 
   Future<Map<String, dynamic>> anularVenta(int id) async {
@@ -112,12 +117,12 @@ class VentaService {
     }
   }
 
+
   // ── Disponibilidad para devolución ─────────────────────
 
   Future<Map<String, dynamic>?> ventaDisponibleDevolucion(int id) async {
     try {
-      final r = await ApiClient.instance.get(
-          '/ventas/$id/disponible-devolucion/');
+      final r = await ApiClient.instance.get('/ventas/$id/disponible-devolucion/');
       return Map<String, dynamic>.from(r.data);
     } on DioException catch (e) {
       debugPrint('❌ ventaDisponibleDevolucion error: ${e.response?.data}');
@@ -125,6 +130,56 @@ class VentaService {
     } catch (e) {
       debugPrint('❌ ventaDisponibleDevolucion error: $e');
       return null;
+    }
+  }
+
+
+  // ── Cambio POS ─────────────────────────────────────────
+
+  /// Procesa un cambio POS completo.
+  ///
+  /// [sesionCajaId]       → ID de la sesión de caja abierta
+  /// [clienteId]          → ID del cliente (opcional)
+  /// [detallesDevueltos]  → productos que el cliente trae de vuelta
+  ///                        [ { "producto": 5, "cantidad": 1.0 }, ... ]
+  /// [productosNuevos]    → carrito de reemplazo
+  ///                        [ { "producto": 8, "cantidad": 1.0,
+  ///                            "precio_unitario": 50000.0, "descuento": 0.0 }, ... ]
+  /// [pagos]              → pagos adicionales en caja (puede ser lista vacía
+  ///                        si el valor devuelto cubre el total nuevo)
+  ///                        [ { "metodo": "efectivo", "monto": 10000.0 }, ... ]
+  /// [observaciones]      → texto libre (opcional)
+
+  Future<Map<String, dynamic>> procesarCambioPOS({
+    required int sesionCajaId,
+    int?         clienteId,
+    required List<Map<String, dynamic>> detallesDevueltos,
+    required List<Map<String, dynamic>> productosNuevos,
+    List<Map<String, dynamic>>          pagos         = const [],
+    String                              observaciones = '',
+  }) async {
+    try {
+      final r = await ApiClient.instance.post(
+        '/ventas/cambio-pos/',
+        data: {
+          'sesion_caja':         sesionCajaId,
+          if (clienteId != null) 'cliente': clienteId,
+          'detalles_devueltos':  detallesDevueltos,
+          'productos_nuevos':    productosNuevos,
+          'pagos':               pagos,
+          'observaciones':       observaciones,
+        },
+      );
+      return {'success': true, 'data': r.data};
+    } on DioException catch (e) {
+      debugPrint('❌ procesarCambioPOS error: ${e.response?.data}');
+      return {
+        'success': false,
+        'error': _extractError(e, 'Error al procesar el cambio POS'),
+      };
+    } catch (e) {
+      debugPrint('❌ procesarCambioPOS error: $e');
+      return {'success': false, 'error': 'Error inesperado'};
     }
   }
 }

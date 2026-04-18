@@ -132,6 +132,9 @@ class DevolucionDetalleSheet extends StatelessWidget {
         ? cantRep.toStringAsFixed(0)
         : cantRep.toStringAsFixed(2);
 
+    final precioRep = dev.precioReemplazo ?? 0;
+    final subtotalRep = dev.subtotalReemplazo ?? 0;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -152,43 +155,64 @@ class DevolucionDetalleSheet extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.green.shade200),
           ),
-          child: Row(children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: Colors.green.shade100,
-                borderRadius: BorderRadius.circular(8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.green.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.check_circle_rounded,
+                  size: 20,
+                  color: Colors.green.shade600,
+                ),
               ),
-              child: Icon(
-                Icons.check_circle_rounded,
-                size: 20,
-                color: Colors.green.shade600,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    dev.productoReemplazoNombre ?? 'Sin producto',
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      dev.productoReemplazoNombre ?? 'Sin producto',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                  Text(
-                    'Cantidad: $cantRepStr',
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      color: Colors.green.shade700,
+                    Text(
+                      'Cantidad: $cantRepStr',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Colors.green.shade700,
+                      ),
                     ),
-                  ),
-                ],
+                    if (dev.precioReemplazo != null)
+                      Text(
+                        'Precio: ${fmt.format(precioRep)}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: Colors.green.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    if (dev.subtotalReemplazo != null)
+                      Text(
+                        'Subtotal: ${fmt.format(subtotalRep)}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: Colors.green.shade800,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
         ),
       ],
     );
