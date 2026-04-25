@@ -1,18 +1,20 @@
 // lib/services/inventario_service.dart
 
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../core/api_client.dart';
 import '../models/producto.dart';
 
+
 class InventarioService {
+
 
   // ── Helper extractor de errores ────────────────────────
   String _extractError(DioException e, String fallback) {
     final data = e.response?.data;
     if (data == null) return fallback;
     if (data is Map) {
-      // ✅ FIX: detail primero — estándar DRF, consistente con EmpleadoService
       if (data.containsKey('detail')) return data['detail'].toString();
       if (data.containsKey('error'))  return data['error'].toString();
       final msgs = data.values
@@ -23,7 +25,9 @@ class InventarioService {
     return fallback;
   }
 
+
   // ── Productos ──────────────────────────────────────────
+
 
   Future<List<Producto>> getProductos({
     String? q,
@@ -52,11 +56,12 @@ class InventarioService {
     }
   }
 
+
   Future<Map<String, dynamic>> crearProducto(
       Map<String, dynamic> data) async {
     try {
-      // ✅ FIX: copia del mapa — no mutar el objeto del caller
-      final payload = Map<String, dynamic>.from(data)..remove('empresa');
+      // ✅ FIX: se eliminó ..remove('empresa') — el backend sí lo necesita
+      final payload = Map<String, dynamic>.from(data);
       final response = await ApiClient.instance.post(
           '/productos/', data: payload);
       return {'success': true, 'data': response.data};
@@ -67,11 +72,12 @@ class InventarioService {
     }
   }
 
+
   Future<Map<String, dynamic>> editarProducto(
       int id, Map<String, dynamic> data) async {
     try {
-      // ✅ FIX: copia del mapa — no mutar el objeto del caller
-      final payload = Map<String, dynamic>.from(data)..remove('empresa');
+      // ✅ FIX: se eliminó ..remove('empresa') — el backend sí lo necesita
+      final payload = Map<String, dynamic>.from(data);
       final response = await ApiClient.instance.patch(
           '/productos/$id/', data: payload);
       return {'success': true, 'data': response.data};
@@ -81,6 +87,7 @@ class InventarioService {
       return {'success': false, 'error': 'Error inesperado'};
     }
   }
+
 
   Future<Map<String, dynamic>> eliminarProducto(int id) async {
     try {
@@ -92,6 +99,7 @@ class InventarioService {
       return {'success': false, 'error': 'Error inesperado'};
     }
   }
+
 
   Future<Map<String, dynamic>> reactivarProducto(int id) async {
     try {
@@ -105,7 +113,9 @@ class InventarioService {
     }
   }
 
+
   // ── Inventario ─────────────────────────────────────────
+
 
   Future<List<Map<String, dynamic>>> getInventario({
     int?    tiendaId,
@@ -134,12 +144,14 @@ class InventarioService {
     }
   }
 
+
   // ── Ajustar stock ──────────────────────────────────────
+
 
   Future<Map<String, dynamic>> ajustarStock({
     required int    productoId,
     required int    tiendaId,
-    required int    cantidad,     // positivo = entrada, negativo = salida
+    required int    cantidad,
     required String motivo,
   }) async {
     try {
@@ -160,7 +172,9 @@ class InventarioService {
     }
   }
 
+
   // ── Categorías ─────────────────────────────────────────
+
 
   Future<List<Map<String, dynamic>>> getCategorias() async {
     try {

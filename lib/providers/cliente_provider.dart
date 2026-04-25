@@ -4,19 +4,24 @@ import '../models/separado.dart';
 import '../models/alerta_separado.dart';
 import '../services/cliente_service.dart';
 
+
 class ClienteProvider extends ChangeNotifier {
   final _service = ClienteService();
 
-  // ── Estado clientes ───────────────────────────────────
+  // ── Estado clientes ────────────────────────────────────────
   List<Cliente> clientes            = [];
   List<Cliente> clientesSimple      = [];
   Cliente?      clienteSeleccionado;
 
-  // ── Estado separados ──────────────────────────────────
-  List<Separado> separados             = [];
+  // ── Estado separados ───────────────────────────────────────
+  List<Separado> separados          = [];
   Separado?      separadoSeleccionado;
 
-  // ── Estado general ────────────────────────────────────
+  // ── Estado abonos por fecha ────────────────────────────────
+  List<Map<String, dynamic>> abonosPorFecha = [];  // ✅ nuevo
+  double totalAbonosPorFecha                = 0.0; // ✅ nuevo
+
+  // ── Estado general ─────────────────────────────────────────
   bool    _cargando  = false;
   bool    _guardando = false;
   String? error;
@@ -24,32 +29,59 @@ class ClienteProvider extends ChangeNotifier {
   bool get cargando  => _cargando;
   bool get guardando => _guardando;
 
-  // ── Clientes ──────────────────────────────────────────
+  // ── Alertas ────────────────────────────────────────────────
+  List<AlertaSeparado> _vencidos     = [];
+  List<AlertaSeparado> _porVencer    = [];
+  int                  _totalAlertas = 0;
+  int?                 _tiendaIdAlertas;
+
+  List<AlertaSeparado> get vencidos     => _vencidos;
+  List<AlertaSeparado> get porVencer    => _porVencer;
+  int                  get totalAlertas => _totalAlertas;
+
+
+  // ── Clientes ───────────────────────────────────────────────
 
   Future<void> cargarClientes({String? q}) async {
     _cargando = true;
     error     = null;
     notifyListeners();
 
-    clientes  = await _service.getClientes(q: q);
-
-    _cargando = false;
-    notifyListeners();
+    try {
+      clientes = await _service.getClientes(q: q);  // ✅ captura el rethrow
+    } catch (e) {
+      error    = 'Error al cargar clientes';
+      clientes = [];
+      debugPrint('❌ cargarClientes: $e');
+    } finally {
+      _cargando = false;
+      notifyListeners();
+    }
   }
 
   Future<void> cargarClientesSimple({String? q}) async {
-    clientesSimple = await _service.getClientesSimple(q: q);
-    notifyListeners();
+    try {
+      clientesSimple = await _service.getClientesSimple(q: q);  // ✅ captura el rethrow
+    } catch (e) {
+      clientesSimple = [];
+      debugPrint('❌ cargarClientesSimple: $e');
+    } finally {
+      notifyListeners();
+    }
   }
 
   Future<void> cargarCliente(int id) async {
     _cargando = true;
     notifyListeners();
 
-    clienteSeleccionado = await _service.getCliente(id);
-
-    _cargando = false;
-    notifyListeners();
+    try {
+      clienteSeleccionado = await _service.getCliente(id);
+    } catch (e) {
+      debugPrint('❌ cargarCliente: $e');
+    } finally {
+      _cargando = false;
+      notifyListeners();
+    }
   }
 
   Future<bool> crearCliente(Map<String, dynamic> data) async {
@@ -57,7 +89,6 @@ class ClienteProvider extends ChangeNotifier {
     error      = null;
     notifyListeners();
 
-    // ✅ Service retorna Map — no lanzará DioException
     final result = await _service.crearCliente(data);
     _guardando   = false;
 
@@ -78,8 +109,8 @@ class ClienteProvider extends ChangeNotifier {
     error      = null;
     notifyListeners();
 
-    final result    = await _service.editarCliente(id, data);
-    _guardando      = false;
+    final result = await _service.editarCliente(id, data);
+    _guardando   = false;
 
     if (result['success'] == true) {
       final actualizado = result['data'] as Cliente;
@@ -97,20 +128,37 @@ class ClienteProvider extends ChangeNotifier {
   }
 
   Future<bool> desactivarCliente(int id) async {
-    // ✅ Service retorna Map — extraer 'success'
     final result = await _service.desactivarCliente(id);
+
     if (result['success'] == true) {
       clientes = clientes.where((c) => c.id != id).toList();
       if (clienteSeleccionado?.id == id) clienteSeleccionado = null;
-      notifyListeners();
     } else {
       error = result['error'];
-      notifyListeners();
     }
+
+    notifyListeners();
     return result['success'] == true;
   }
 
-  // ── Separados ─────────────────────────────────────────
+  Future<bool> activarCliente(int id) async {   // ✅ nuevo
+    final result = await _service.activarCliente(id);
+
+    if (result['success'] == true) {
+      final actualizado = result['data'] as Cliente;
+      clientes = clientes
+          .map((c) => c.id == id ? actualizado : c)
+          .toList();
+    } else {
+      error = result['error'];
+    }
+
+    notifyListeners();
+    return result['success'] == true;
+  }
+
+
+  // ── Separados ──────────────────────────────────────────────
 
   Future<void> cargarSeparados({
     int? tiendaId, String? estado, int? clienteId,
@@ -119,24 +167,34 @@ class ClienteProvider extends ChangeNotifier {
     error     = null;
     notifyListeners();
 
-    separados = await _service.getSeparados(
-      tiendaId:  tiendaId,
-      estado:    estado,
-      clienteId: clienteId,
-    );
-
-    _cargando = false;
-    notifyListeners();
+    try {
+      separados = await _service.getSeparados(    // ✅ captura el rethrow
+        tiendaId:  tiendaId,
+        estado:    estado,
+        clienteId: clienteId,
+      );
+    } catch (e) {
+      error     = 'Error al cargar separados';
+      separados = [];
+      debugPrint('❌ cargarSeparados: $e');
+    } finally {
+      _cargando = false;
+      notifyListeners();
+    }
   }
 
   Future<void> cargarSeparado(int id) async {
     _cargando = true;
     notifyListeners();
 
-    separadoSeleccionado = await _service.getSeparado(id);
-
-    _cargando = false;
-    notifyListeners();
+    try {
+      separadoSeleccionado = await _service.getSeparado(id);
+    } catch (e) {
+      debugPrint('❌ cargarSeparado: $e');
+    } finally {
+      _cargando = false;
+      notifyListeners();
+    }
   }
 
   Future<bool> crearSeparado(Map<String, dynamic> data) async {
@@ -168,24 +226,23 @@ class ClienteProvider extends ChangeNotifier {
     final result = await _service.abonarSeparado(id, monto, metodoPago);
 
     if (result['success'] == true) {
-      // ✅ los campos reales vienen en result['data']
       final data = result['data'] as Map<String, dynamic>;
 
+      // ✅ copyWith en lugar de fromJson mezclado — más seguro y limpio
       separados = separados.map((s) {
         if (s.id != id) return s;
-        return Separado.fromJson({
-          ...s.toJsonUpdate(),
-          'abono_acumulado': data['abono_acumulado'],
-          'saldo_pendiente': data['saldo_pendiente'],
-          'estado':          data['estado'],
-        });
+        return s.copyWith(
+          abonoAcumulado: (data['abono_acumulado'] as num).toDouble(),
+          saldoPendiente: (data['saldo_pendiente'] as num).toDouble(),
+          estado:          data['estado'] as String,
+        );
       }).toList();
 
-      await cargarAlertas(tiendaId: _tiendaIdAlertas);
-
       if (separadoSeleccionado?.id == id) {
-        await cargarSeparado(id);
+        separadoSeleccionado = separados.firstWhere((s) => s.id == id);
       }
+
+      await cargarAlertas(tiendaId: _tiendaIdAlertas);
 
       _guardando = false;
       notifyListeners();
@@ -203,16 +260,18 @@ class ClienteProvider extends ChangeNotifier {
     error      = null;
     notifyListeners();
 
-    // ✅ Service retorna Map — extraer 'success'
     final result = await _service.cancelarSeparado(id);
 
     if (result['success'] == true) {
+      // ✅ copyWith en lugar de fromJson mezclado
       separados = separados.map((s) => s.id == id
-          ? Separado.fromJson({...s.toJsonUpdate(), 'estado': 'cancelado'})
+          ? s.copyWith(estado: 'cancelado')
           : s).toList();
+
       if (separadoSeleccionado?.id == id) {
-        separadoSeleccionado = await _service.getSeparado(id);
+        separadoSeleccionado = separados.firstWhere((s) => s.id == id);
       }
+
       await cargarAlertas(tiendaId: _tiendaIdAlertas);
     } else {
       error = result['error'] ?? 'Error al cancelar separado';
@@ -223,33 +282,59 @@ class ClienteProvider extends ChangeNotifier {
     return result['success'] == true;
   }
 
-  // ── Alertas de separados ──────────────────────────────
 
-  List<AlertaSeparado> _vencidos      = [];
-  List<AlertaSeparado> _porVencer     = [];
-  int                  _totalAlertas  = 0;
-  int?                 _tiendaIdAlertas;
-
-  List<AlertaSeparado> get vencidos     => _vencidos;
-  List<AlertaSeparado> get porVencer    => _porVencer;
-  int                  get totalAlertas => _totalAlertas;
+  // ── Alertas ────────────────────────────────────────────────
 
   Future<void> cargarAlertas({int? tiendaId}) async {
-    _tiendaIdAlertas = tiendaId;
+    _tiendaIdAlertas = tiendaId ?? _tiendaIdAlertas;
     try {
-      final data    = await _service.getAlertasSeparados(tiendaId: tiendaId);
+      final data = await _service.getAlertasSeparados(
+        tiendaId: _tiendaIdAlertas,
+      );
       _vencidos     = ((data['vencidos']   as List?) ?? [])
-          .map((e) => AlertaSeparado.fromJson(e)).toList();
+          .map((e) => AlertaSeparado.fromJson(e as Map<String, dynamic>))
+          .toList();
       _porVencer    = ((data['por_vencer'] as List?) ?? [])
-          .map((e) => AlertaSeparado.fromJson(e)).toList();
-      _totalAlertas = data['total_alertas'] ?? 0;
+          .map((e) => AlertaSeparado.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _totalAlertas = (data['total_alertas'] as int?) ?? 0;
       notifyListeners();
     } catch (e) {
-      debugPrint('❌ cargarAlertas error: $e');
+      debugPrint('❌ cargarAlertas: $e');
     }
   }
 
-  // ── Helpers ───────────────────────────────────────────
+
+  // ── Abonos por fecha ───────────────────────────────────────
+
+  Future<void> cargarAbonosPorFecha({             // ✅ nuevo
+    required String fecha,
+    int? tiendaId,
+  }) async {
+    _cargando = true;
+    notifyListeners();
+
+    try {
+      final data = await _service.getAbonosPorFecha(
+        fecha:    fecha,
+        tiendaId: tiendaId,
+      );
+      abonosPorFecha      = List<Map<String, dynamic>>.from(
+        (data['abonos'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)),
+      );
+      totalAbonosPorFecha = (data['total'] as num?)?.toDouble() ?? 0.0;
+    } catch (e) {
+      abonosPorFecha      = [];
+      totalAbonosPorFecha = 0.0;
+      debugPrint('❌ cargarAbonosPorFecha: $e');
+    } finally {
+      _cargando = false;
+      notifyListeners();
+    }
+  }
+
+
+  // ── Helpers ────────────────────────────────────────────────
 
   void limpiarError() {
     error = null;
@@ -263,6 +348,12 @@ class ClienteProvider extends ChangeNotifier {
 
   void seleccionarSeparado(Separado? s) {
     separadoSeleccionado = s;
+    notifyListeners();
+  }
+
+  void limpiarSeparados() {       // ✅ útil al cambiar de tienda
+    separados            = [];
+    separadoSeleccionado = null;
     notifyListeners();
   }
 }

@@ -4,9 +4,10 @@ import '../models/cliente.dart';
 import '../models/separado.dart';
 import '../core/api_client.dart';
 
+
 class ClienteService {
 
-  // ── Helper extractor de errores ────────────────────────
+  // ── Helper extractor de errores ────────────────────────────
   String _extractError(DioException e, String fallback) {
     final data = e.response?.data;
     if (data == null) return fallback;
@@ -21,7 +22,12 @@ class ClienteService {
     return fallback;
   }
 
-  // ── Clientes ───────────────────────────────────────────
+  // ── Helper para parsear lista o paginado ───────────────────
+  List _parseList(dynamic data) =>
+      data is List ? data : (data['results'] as List? ?? []);
+
+
+  // ── Clientes ───────────────────────────────────────────────
 
   Future<List<Cliente>> getClientes({String? q}) async {
     try {
@@ -29,15 +35,13 @@ class ClienteService {
         '/clientes/',
         queryParameters: {if (q != null && q.isNotEmpty) 'q': q},
       );
-      // ✅ FIX: soporta respuesta paginada y lista plana
-      final List data = r.data is List ? r.data : r.data['results'] ?? [];
-      return data.map((e) => Cliente.fromJson(e)).toList();
+      return _parseList(r.data)
+          .map((e) => Cliente.fromJson(e as Map<String, dynamic>))
+          .toList();
     } on DioException catch (e) {
-      debugPrint('❌ getClientes error: ${e.response?.data}');
-      return [];
-    } catch (e) {
-      debugPrint('❌ getClientes error: $e');
-      return [];
+      debugPrint('❌ getClientes: ${e.response?.data}');
+      // ✅ Relanza para que el provider muestre el error real
+      rethrow;
     }
   }
 
@@ -47,42 +51,37 @@ class ClienteService {
         '/clientes/simple/',
         queryParameters: {if (q != null && q.isNotEmpty) 'q': q},
       );
-      // ✅ FIX: mismo patrón seguro
-      final List data = r.data is List ? r.data : r.data['results'] ?? [];
-      return data.map((e) => Cliente.fromJson(e)).toList();
+      return _parseList(r.data)
+          .map((e) => Cliente.fromJson(e as Map<String, dynamic>))
+          .toList();
     } on DioException catch (e) {
-      debugPrint('❌ getClientesSimple error: ${e.response?.data}');
-      return [];
-    } catch (e) {
-      debugPrint('❌ getClientesSimple error: $e');
-      return [];
+      debugPrint('❌ getClientesSimple: ${e.response?.data}');
+      rethrow;
     }
   }
 
   Future<Cliente?> getCliente(int id) async {
     try {
       final r = await ApiClient.instance.get('/clientes/$id/');
-      return Cliente.fromJson(r.data);
+      return Cliente.fromJson(r.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      debugPrint('❌ getCliente error: ${e.response?.data}');
-      return null;
-    } catch (e) {
-      debugPrint('❌ getCliente error: $e');
+      debugPrint('❌ getCliente: ${e.response?.data}');
       return null;
     }
   }
 
-  // ── Crear / editar / desactivar ────────────────────────
+
+  // ── Crear / editar / desactivar ────────────────────────────
 
   Future<Map<String, dynamic>> crearCliente(
       Map<String, dynamic> data) async {
     try {
-      data.remove('empresa');
+      data.remove('empresa');   // empresa la inyecta el backend
       final r = await ApiClient.instance.post('/clientes/', data: data);
-      return {'success': true, 'data': Cliente.fromJson(r.data)};
+      return {'success': true, 'data': Cliente.fromJson(r.data as Map<String, dynamic>)};
     } on DioException catch (e) {
       return {'success': false, 'error': _extractError(e, 'Error al crear cliente')};
-    } catch (e) {
+    } catch (_) {
       return {'success': false, 'error': 'Error inesperado'};
     }
   }
@@ -92,10 +91,10 @@ class ClienteService {
     try {
       data.remove('empresa');
       final r = await ApiClient.instance.patch('/clientes/$id/', data: data);
-      return {'success': true, 'data': Cliente.fromJson(r.data)};
+      return {'success': true, 'data': Cliente.fromJson(r.data as Map<String, dynamic>)};
     } on DioException catch (e) {
       return {'success': false, 'error': _extractError(e, 'Error al editar cliente')};
-    } catch (e) {
+    } catch (_) {
       return {'success': false, 'error': 'Error inesperado'};
     }
   }
@@ -103,19 +102,34 @@ class ClienteService {
   Future<Map<String, dynamic>> desactivarCliente(int id) async {
     try {
       final r = await ApiClient.instance.delete('/clientes/$id/');
-      // ✅ FIX: null-safe en detail
       return {
         'success': true,
-        'detail':  r.data?['detail'] ?? 'Cliente desactivado',
+        'detail': r.data?['detail'] ?? 'Cliente desactivado',
       };
     } on DioException catch (e) {
       return {'success': false, 'error': _extractError(e, 'Error al desactivar cliente')};
-    } catch (e) {
+    } catch (_) {
       return {'success': false, 'error': 'Error inesperado'};
     }
   }
 
-  // ── Separados ──────────────────────────────────────────
+  // ✅ Reactivar cliente (PATCH activo: true)
+  Future<Map<String, dynamic>> activarCliente(int id) async {
+    try {
+      final r = await ApiClient.instance.patch(
+        '/clientes/$id/',
+        data: {'activo': true},
+      );
+      return {'success': true, 'data': Cliente.fromJson(r.data as Map<String, dynamic>)};
+    } on DioException catch (e) {
+      return {'success': false, 'error': _extractError(e, 'Error al activar cliente')};
+    } catch (_) {
+      return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
+
+
+  // ── Separados ──────────────────────────────────────────────
 
   Future<List<Separado>> getSeparados({
     int? tiendaId, String? estado, int? clienteId,
@@ -129,27 +143,21 @@ class ClienteService {
           if (clienteId != null) 'cliente_id':  clienteId,
         },
       );
-      // ✅ FIX: soporta paginación
-      final List data = r.data is List ? r.data : r.data['results'] ?? [];
-      return data.map((e) => Separado.fromJson(e)).toList();
+      return _parseList(r.data)
+          .map((e) => Separado.fromJson(e as Map<String, dynamic>))
+          .toList();
     } on DioException catch (e) {
-      debugPrint('❌ getSeparados error: ${e.response?.data}');
-      return [];
-    } catch (e) {
-      debugPrint('❌ getSeparados error: $e');
-      return [];
+      debugPrint('❌ getSeparados: ${e.response?.data}');
+      rethrow;
     }
   }
 
   Future<Separado?> getSeparado(int id) async {
     try {
       final r = await ApiClient.instance.get('/clientes/separados/$id/');
-      return Separado.fromJson(r.data);
+      return Separado.fromJson(r.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      debugPrint('❌ getSeparado error: ${e.response?.data}');
-      return null;
-    } catch (e) {
-      debugPrint('❌ getSeparado error: $e');
+      debugPrint('❌ getSeparado: ${e.response?.data}');
       return null;
     }
   }
@@ -157,13 +165,13 @@ class ClienteService {
   Future<Map<String, dynamic>> crearSeparado(
       Map<String, dynamic> data) async {
     try {
-      data.remove('empresa');
+      // ✅ Quitado data.remove('empresa') — separado no tiene ese campo
       final r = await ApiClient.instance.post(
-        '/clientes/separados/', data: data);
-      return {'success': true, 'data': Separado.fromJson(r.data)};
+          '/clientes/separados/', data: data);
+      return {'success': true, 'data': Separado.fromJson(r.data as Map<String, dynamic>)};
     } on DioException catch (e) {
       return {'success': false, 'error': _extractError(e, 'Error al crear separado')};
-    } catch (e) {
+    } catch (_) {
       return {'success': false, 'error': 'Error inesperado'};
     }
   }
@@ -173,12 +181,15 @@ class ClienteService {
     try {
       final r = await ApiClient.instance.post(
         '/clientes/separados/$id/abonar/',
-        data: {'monto': monto, 'metodo_pago': metodoPago},
+        data: {
+          'monto':      monto.toStringAsFixed(2),  // ✅ String evita precisión flotante
+          'metodo_pago': metodoPago,
+        },
       );
       return {'success': true, 'data': r.data};
     } on DioException catch (e) {
       return {'success': false, 'error': _extractError(e, 'Error al registrar abono')};
-    } catch (e) {
+    } catch (_) {
       return {'success': false, 'error': 'Error inesperado'};
     }
   }
@@ -186,15 +197,14 @@ class ClienteService {
   Future<Map<String, dynamic>> cancelarSeparado(int id) async {
     try {
       final r = await ApiClient.instance.post(
-        '/clientes/separados/$id/cancelar/');
-      // ✅ FIX: null-safe en detail
+          '/clientes/separados/$id/cancelar/');
       return {
         'success': true,
-        'detail':  r.data?['detail'] ?? 'Separado cancelado',
+        'detail': r.data?['detail'] ?? 'Separado cancelado',
       };
     } on DioException catch (e) {
       return {'success': false, 'error': _extractError(e, 'Error al cancelar separado')};
-    } catch (e) {
+    } catch (_) {
       return {'success': false, 'error': 'Error inesperado'};
     }
   }
@@ -203,18 +213,36 @@ class ClienteService {
     try {
       final r = await ApiClient.instance.get(
         '/clientes/separados/alertas/',
+        queryParameters: {if (tiendaId != null) 'tienda_id': tiendaId},
+      );
+      return Map<String, dynamic>.from(r.data as Map);
+    } on DioException catch (e) {
+      debugPrint('❌ getAlertasSeparados: ${e.response?.data}');
+      return {'vencidos': [], 'por_vencer': [], 'total_alertas': 0};
+    } catch (_) {
+      return {'vencidos': [], 'por_vencer': [], 'total_alertas': 0};
+    }
+  }
+
+  // ✅ Método faltante — abonos por fecha
+  Future<Map<String, dynamic>> getAbonosPorFecha({
+    required String fecha,
+    int? tiendaId,
+  }) async {
+    try {
+      final r = await ApiClient.instance.get(
+        '/clientes/separados/abonos/',
         queryParameters: {
+          'fecha': fecha,
           if (tiendaId != null) 'tienda_id': tiendaId,
         },
       );
-      // ✅ FIX: cast seguro — evita CastError si data no es exactamente Map<String, dynamic>
       return Map<String, dynamic>.from(r.data as Map);
     } on DioException catch (e) {
-      debugPrint('❌ getAlertasSeparados error: ${e.response?.data}');
-      return {'vencidos': [], 'por_vencer': [], 'total_alertas': 0};
-    } catch (e) {
-      debugPrint('❌ getAlertasSeparados error: $e');
-      return {'vencidos': [], 'por_vencer': [], 'total_alertas': 0};
+      debugPrint('❌ getAbonosPorFecha: ${e.response?.data}');
+      return {'abonos': [], 'total': 0.0};
+    } catch (_) {
+      return {'abonos': [], 'total': 0.0};
     }
   }
 }

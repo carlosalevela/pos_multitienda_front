@@ -1,13 +1,13 @@
 class Cliente {
-  final int     id;
-  final String  nombre;
-  final String  apellido;
-  final String? cedulaNit;
-  final String  telefono;
-  final String  email;
-  final String  direccion;
-  final bool    activo;
-  final String  createdAt;
+  final int      id;
+  final String   nombre;
+  final String   apellido;
+  final String?  cedulaNit;
+  final String   telefono;
+  final String   email;
+  final String   direccion;
+  final bool     activo;
+  final DateTime createdAt;   // ✅ DateTime en lugar de String
 
   Cliente({
     required this.id,
@@ -22,27 +22,66 @@ class Cliente {
   });
 
   factory Cliente.fromJson(Map<String, dynamic> j) => Cliente(
-    id:        j['id'],
-    nombre:    j['nombre']     ?? '',
-    apellido:  j['apellido']   ?? '',
-    cedulaNit: j['cedula_nit'],          // puede ser null
-    telefono:  j['telefono']   ?? '',
-    email:     j['email']      ?? '',
-    direccion: j['direccion']  ?? '',
-    activo:    j['activo']     ?? true,
-    createdAt: j['created_at'] ?? '',
+    id:        j['id']        as int,
+    nombre:    j['nombre']    as String? ?? '',
+    apellido:  j['apellido']  as String? ?? '',
+    cedulaNit: j['cedula_nit'] as String?,
+    telefono:  j['telefono']  as String? ?? '',
+    email:     j['email']     as String? ?? '',
+    direccion: j['direccion'] as String? ?? '',
+    activo:    j['activo']    as bool?   ?? true,
+    createdAt: j['created_at'] != null            // ✅ parseo seguro
+        ? DateTime.parse(j['created_at'] as String)
+        : DateTime.now(),
   );
 
-  // Para crear / editar — solo campos editables
+  // Para crear / editar
   Map<String, dynamic> toJson() => {
-    'nombre':     nombre,
-    'apellido':   apellido,
-    if (cedulaNit != null) 'cedula_nit': cedulaNit,
-    'telefono':   telefono,
-    'email':      email,
-    'direccion':  direccion,
+    'nombre':    nombre,
+    'apellido':  apellido,
+    if (cedulaNit != null && cedulaNit!.isNotEmpty)
+      'cedula_nit': cedulaNit,              // ✅ excluye string vacío también
+    'telefono':  telefono,
+    'email':     email,
+    'direccion': direccion,
+    'activo':    activo,                    // ✅ incluido
   };
 
-  // Nombre completo para mostrar en UI
-  String get nombreCompleto => '$nombre $apellido'.trim();
+  // ✅ copyWith para edición en formularios
+  Cliente copyWith({
+    int?     id,
+    String?  nombre,
+    String?  apellido,
+    String?  cedulaNit,
+    String?  telefono,
+    String?  email,
+    String?  direccion,
+    bool?    activo,
+    DateTime? createdAt,
+  }) =>
+      Cliente(
+        id:        id        ?? this.id,
+        nombre:    nombre    ?? this.nombre,
+        apellido:  apellido  ?? this.apellido,
+        cedulaNit: cedulaNit ?? this.cedulaNit,
+        telefono:  telefono  ?? this.telefono,
+        email:     email     ?? this.email,
+        direccion: direccion ?? this.direccion,
+        activo:    activo    ?? this.activo,
+        createdAt: createdAt ?? this.createdAt,
+      );
+
+  // ✅ Nombre completo sin espacio doble cuando no hay apellido
+  String get nombreCompleto =>
+      apellido.isNotEmpty ? '$nombre $apellido' : nombre;
+
+  @override
+  String toString() => 'Cliente($id, $nombreCompleto)';
+
+  @override
+  bool operator ==(Object other) =>
+      other is Cliente && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
 }

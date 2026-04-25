@@ -1,42 +1,31 @@
-// lib/services/contabilidad_service.dart
-
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../core/api_client.dart';
 import '../models/contabilidad_models.dart';
 
-
 class ContabilidadService {
-
-  // ── Helper extractor de errores ────────────────────────
   String _extractError(DioException e, String fallback) {
     final data = e.response?.data;
     if (data == null) return fallback;
     if (data is Map) {
-      if (data.containsKey('error'))  return data['error'].toString();
+      if (data.containsKey('error')) return data['error'].toString();
       if (data.containsKey('detail')) return data['detail'].toString();
-      final msgs = data.values
-          .expand((v) => v is List ? v : [v])
-          .join(', ');
+      final msgs = data.values.expand((v) => v is List ? v : [v]).join(', ');
       return msgs.isNotEmpty ? msgs : fallback;
     }
     return fallback;
   }
 
-  // ── Reportes ───────────────────────────────────────────
-
-  // Sin cambios en la llamada — el backend ya devuelve
-  // total_devoluciones, total_neto, devoluciones_por_metodo
-  // Solo necesita que ResumenDiario.fromJson los parsee ✅
   Future<ResumenDiario?> getResumenDiario({
-    int? tiendaId, String? fecha,
+    int? tiendaId,
+    String? fecha,
   }) async {
     try {
       final r = await ApiClient.instance.get(
         '/contabilidad/reportes/diario/',
         queryParameters: {
           if (tiendaId != null) 'tienda_id': tiendaId,
-          if (fecha    != null) 'fecha':     fecha,
+          if (fecha != null) 'fecha': fecha,
         },
       );
       return ResumenDiario.fromJson(r.data);
@@ -50,7 +39,9 @@ class ContabilidadService {
   }
 
   Future<ResumenMensual?> getResumenMensual({
-    int? tiendaId, int? anio, int? mes,
+    int? tiendaId,
+    int? anio,
+    int? mes,
   }) async {
     try {
       final now = DateTime.now();
@@ -58,7 +49,7 @@ class ContabilidadService {
         '/contabilidad/reportes/mensual/',
         queryParameters: {
           'anio': anio ?? now.year,
-          'mes':  mes  ?? now.month,
+          'mes': mes ?? now.month,
           if (tiendaId != null) 'tienda_id': tiendaId,
         },
       );
@@ -73,7 +64,8 @@ class ContabilidadService {
   }
 
   Future<Map<String, dynamic>?> getResumenAnual({
-    int? tiendaId, required int anio,
+    int? tiendaId,
+    required int anio,
   }) async {
     try {
       final r = await ApiClient.instance.get(
@@ -93,26 +85,21 @@ class ContabilidadService {
     }
   }
 
-  // ── Devoluciones del día ✅ NUEVO ──────────────────────
-  // Trae la LISTA para mostrar en la tabla de reportes
-
   Future<List<Map<String, dynamic>>> getDevolucionesDia(
-    String fecha, int? tiendaId,
+    String fecha,
+    int? tiendaId,
   ) async {
     try {
       final r = await ApiClient.instance.get(
         '/devoluciones/lista/',
         queryParameters: {
-          'fecha':  fecha,
+          'fecha': fecha,
           'estado': 'procesada',
           if (tiendaId != null) 'tienda_id': tiendaId,
         },
       );
       final data = r.data;
-      // ✅ soporta lista directa o paginado { results: [...] }
-      final lista = data is List
-          ? data
-          : (data['results'] ?? data);
+      final lista = data is List ? data : (data['results'] ?? data);
       return List<Map<String, dynamic>>.from(lista);
     } on DioException catch (e) {
       debugPrint('❌ getDevolucionesDia error: ${e.response?.data}');
@@ -123,10 +110,10 @@ class ContabilidadService {
     }
   }
 
-  // ── Top productos ──────────────────────────────────────
-
   Future<List<TopProducto>> getTopProductos({
-    int? tiendaId, String? fechaIni, String? fechaFin,
+    int? tiendaId,
+    String? fechaIni,
+    String? fechaFin,
   }) async {
     try {
       final r = await ApiClient.instance.get(
@@ -147,10 +134,8 @@ class ContabilidadService {
     }
   }
 
-  // ── Gastos ─────────────────────────────────────────────
-
   Future<List<Gasto>> getGastos({
-    int?    tiendaId,
+    int? tiendaId,
     String? fecha,
     String? fechaIni,
     String? fechaFin,
@@ -161,11 +146,11 @@ class ContabilidadService {
       final r = await ApiClient.instance.get(
         '/contabilidad/gastos/',
         queryParameters: {
-          if (tiendaId    != null) 'tienda_id':  tiendaId,
-          if (fecha       != null) 'fecha':       fecha,
-          if (fechaIni    != null) 'fecha_ini':   fechaIni,
-          if (fechaFin    != null) 'fecha_fin':   fechaFin,
-          if (categoria   != null) 'categoria':   categoria,
+          if (tiendaId != null) 'tienda_id': tiendaId,
+          if (fecha != null) 'fecha': fecha,
+          if (fechaIni != null) 'fecha_ini': fechaIni,
+          if (fechaFin != null) 'fecha_fin': fechaFin,
+          if (categoria != null) 'categoria': categoria,
           if (visibilidad != null) 'visibilidad': visibilidad,
         },
       );
@@ -182,7 +167,7 @@ class ContabilidadService {
   Future<Map<String, dynamic>?> getGastosResumenRango({
     required String fechaIni,
     required String fechaFin,
-    int?    tiendaId,
+    int? tiendaId,
     String? categoria,
   }) async {
     try {
@@ -191,7 +176,7 @@ class ContabilidadService {
         queryParameters: {
           'fecha_ini': fechaIni,
           'fecha_fin': fechaFin,
-          if (tiendaId  != null) 'tienda_id': tiendaId,
+          if (tiendaId != null) 'tienda_id': tiendaId,
           if (categoria != null) 'categoria': categoria,
         },
       );
@@ -205,17 +190,19 @@ class ContabilidadService {
     }
   }
 
-  // ── Crear / eliminar gasto ─────────────────────────────
-
   Future<Map<String, dynamic>> crearGasto(Map<String, dynamic> data) async {
     try {
       data.remove('empresa');
       final r = await ApiClient.instance.post(
-          '/contabilidad/gastos/', data: data);
+        '/contabilidad/gastos/',
+        data: data,
+      );
       return {'success': true, 'data': r.data};
     } on DioException catch (e) {
-      return {'success': false,
-          'error': _extractError(e, 'Error al registrar gasto')};
+      return {
+        'success': false,
+        'error': _extractError(e, 'Error al registrar gasto'),
+      };
     } catch (e) {
       return {'success': false, 'error': 'Error inesperado'};
     }
@@ -223,25 +210,28 @@ class ContabilidadService {
 
   Future<Map<String, dynamic>> eliminarGasto(int id) async {
     try {
-      final r = await ApiClient.instance.delete(
-          '/contabilidad/gastos/$id/');
-      return {'success': true,
-          'detail': r.data?['detail'] ?? 'Gasto eliminado'};
+      final r = await ApiClient.instance.delete('/contabilidad/gastos/$id/');
+      return {
+        'success': true,
+        'detail': r.data?['detail'] ?? 'Gasto eliminado',
+      };
     } on DioException catch (e) {
-      return {'success': false,
-          'error': _extractError(e, 'Error al eliminar gasto')};
+      return {
+        'success': false,
+        'error': _extractError(e, 'Error al eliminar gasto'),
+      };
     } catch (e) {
       return {'success': false, 'error': 'Error inesperado'};
     }
   }
 
-  // ── Abonos y separados del día ─────────────────────────
-
   Future<List<Map<String, dynamic>>> getAbonosDia(
-      String fecha, int? tiendaId) async {
+    String fecha,
+    int? tiendaId,
+  ) async {
     try {
       final r = await ApiClient.instance.get(
-        '/clientes/abonos/',
+        '/clientes/separados/abonos/',
         queryParameters: {
           'fecha': fecha,
           if (tiendaId != null) 'tienda_id': tiendaId.toString(),
@@ -251,7 +241,9 @@ class ContabilidadService {
       if (raw is Map && raw.containsKey('abonos')) {
         return List<Map<String, dynamic>>.from(raw['abonos']);
       }
-      if (raw is List) return List<Map<String, dynamic>>.from(raw);
+      if (raw is List) {
+        return List<Map<String, dynamic>>.from(raw);
+      }
       return [];
     } on DioException catch (e) {
       debugPrint('❌ getAbonosDia error: ${e.response?.data}');
@@ -263,7 +255,9 @@ class ContabilidadService {
   }
 
   Future<List<Map<String, dynamic>>> getSeparadosDia(
-      String fecha, int? tiendaId) async {
+    String fecha,
+    int? tiendaId,
+  ) async {
     try {
       final r = await ApiClient.instance.get(
         '/clientes/separados/',

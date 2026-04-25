@@ -10,6 +10,7 @@ import '../../models/producto.dart';
 import '../../services/empleado_service.dart';
 import 'widgets/producto_form_dialog.dart';
 
+
 class InventarioScreen extends StatefulWidget {
   const InventarioScreen({super.key});
 
@@ -17,9 +18,9 @@ class InventarioScreen extends StatefulWidget {
   State<InventarioScreen> createState() => _InventarioScreenState();
 }
 
-class _InventarioScreenState extends State<InventarioScreen> {
-  final _searchCtrl     = TextEditingController();
-  // ✅ FIX: service como campo — no instanciar en cada llamada
+class _InventarioScreenState extends State<InventarioScreen>
+    with TickerProviderStateMixin {
+  final _searchCtrl      = TextEditingController();
   final _empleadoService = EmpleadoService();
 
   List<Map<String, dynamic>> _tiendas       = [];
@@ -27,10 +28,19 @@ class _InventarioScreenState extends State<InventarioScreen> {
   final Set<String>           _abiertas     = {};
   String                      _activoFiltro = 'true';
 
-  static const _colores = [
-    Color(0xFF1A1A2E), Color(0xFF16213E), Color(0xFF0F3460),
-    Color(0xFF1B4332), Color(0xFF533483), Color(0xFF1A535C),
-    Color(0xFF2C3E50), Color(0xFF7B2D8B),
+  late AnimationController _fadeCtrl;
+  late Animation<double>   _fadeAnim;
+
+  // ── Paleta de categorías más moderna ──────────────
+  static const _gradientes = [
+    [Color(0xFF6366F1), Color(0xFF8B5CF6)], // Indigo → Violeta
+    [Color(0xFF0EA5E9), Color(0xFF06B6D4)], // Azul cielo → Cyan
+    [Color(0xFF10B981), Color(0xFF059669)], // Esmeralda
+    [Color(0xFFF59E0B), Color(0xFFEF4444)], // Ámbar → Rojo
+    [Color(0xFFEC4899), Color(0xFFF43F5E)], // Rosa → Fuscia
+    [Color(0xFF8B5CF6), Color(0xFF6366F1)], // Violeta → Indigo
+    [Color(0xFF14B8A6), Color(0xFF0EA5E9)], // Teal → Azul
+    [Color(0xFFF97316), Color(0xFFEF4444)], // Naranja → Rojo
   ];
 
   static const _iconos = [
@@ -43,12 +53,17 @@ class _InventarioScreenState extends State<InventarioScreen> {
   @override
   void initState() {
     super.initState();
+    _fadeCtrl = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 400));
+    _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
+    _fadeCtrl.forward();
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final auth = context.read<AuthProvider>();
       final inv  = context.read<InventarioProvider>();
 
-      if (auth.rol == 'admin') {
+      if (auth.rol == 'admin' || auth.rol == 'superadmin') {
         final tiendas = await _empleadoService.getTiendas();
         if (!mounted) return;
         setState(() {
@@ -68,13 +83,30 @@ class _InventarioScreenState extends State<InventarioScreen> {
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _fadeCtrl.dispose();
     super.dispose();
   }
 
   int? get _tiendaActiva {
     final auth = context.read<AuthProvider>();
-    if (auth.rol == 'admin') return _tiendaFiltro;
+    if (auth.rol == 'admin' || auth.rol == 'superadmin') return _tiendaFiltro;
     return auth.tiendaId == 0 ? null : auth.tiendaId;
+  }
+
+  // ✅ deduce empresa desde la tienda seleccionada
+  int? get _empresaActiva {
+    if (_tiendaFiltro == null) return null;
+    final t = _tiendas.where((t) => t['id'] == _tiendaFiltro).firstOrNull;
+    final raw = t?['empresa'];   // el backend devuelve 'empresa' (confirmado)
+    if (raw is int)    return raw;
+    if (raw is String) return int.tryParse(raw);
+    return null;
+  }
+
+  String _nombreTiendaActual() {
+    if (_tiendaFiltro == null) return 'Todas las tiendas';
+    final t = _tiendas.where((t) => t['id'] == _tiendaFiltro).firstOrNull;
+    return t?['nombre'] ?? 'Tienda';
   }
 
   Map<String, List<Producto>> _agrupar(List<Producto> lista) {
@@ -95,347 +127,566 @@ class _InventarioScreenState extends State<InventarioScreen> {
     final inv      = context.watch<InventarioProvider>();
     final auth     = context.watch<AuthProvider>();
     final esCajero = auth.rol == 'cajero';
-    final esAdmin  = auth.rol == 'admin';
+    final esAdmin  = auth.rol == 'admin' || auth.rol == 'superadmin';
     final grupos   = _agrupar(inv.productos);
 
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return FadeTransition(
+      opacity: _fadeAnim,
+      child: Container(
+        color: const Color(0xFFF8F9FC),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
 
-          // ── Header ──────────────────────────────────
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color:        const Color(Constants.primaryColor).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.inventory_2_rounded,
-                  color: Color(Constants.primaryColor)),
-            ),
-            const SizedBox(width: 12),
-            Text('Inventario',
-                style: GoogleFonts.poppins(
-                    fontSize: 22, fontWeight: FontWeight.bold,
-                    color: const Color(0xFF1A1A2E))),
+              // ── Header mejorado ──────────────────────
+              _buildHeader(esCajero, esAdmin, inv),
+              const SizedBox(height: 20),
 
-            if (esAdmin && _tiendas.isNotEmpty) ...[
-              const SizedBox(width: 20),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color:        Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border:       Border.all(color: Colors.grey.shade200),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<int>(
-                    value: _tiendaFiltro,
-                    icon:  const Icon(Icons.keyboard_arrow_down_rounded),
-                    style: GoogleFonts.poppins(fontSize: 13, color: Colors.black87),
-                    items: _tiendas.map((t) => DropdownMenuItem<int>(
-                      value: t['id'],
-                      child: Row(children: [
-                        const Icon(Icons.store_rounded,
-                            size: 16, color: Color(Constants.primaryColor)),
-                        const SizedBox(width: 6),
-                        Text(t['nombre'] ?? '',
-                            style: GoogleFonts.poppins(fontSize: 13)),
-                      ]),
-                    )).toList(),
-                    onChanged: (val) {
-                      setState(() => _tiendaFiltro = val);
-                      context.read<InventarioProvider>().cargarProductos(
-                          tiendaId: val, activo: _activoFiltro);
-                      _searchCtrl.clear();
-                    },
-                  ),
-                ),
+              // ── Selector de tienda ───────────────────
+              if (esAdmin && _tiendas.isNotEmpty) ...[
+                _selectorTienda(),
+                const SizedBox(height: 16),
+              ],
+
+              // ── Stats cards ──────────────────────────
+              if (inv.productos.isNotEmpty) ...[
+                _buildStatsRow(inv.productos, grupos.length),
+                const SizedBox(height: 20),
+              ],
+
+              // ── Barra de herramientas ────────────────
+              _buildToolbar(esCajero, inv),
+              const SizedBox(height: 16),
+
+              // ── Mensajes ─────────────────────────────
+              if (inv.successMsg != null)
+                _banner(inv.successMsg!, isError: false,
+                    onClose: inv.limpiarMensajes),
+              if (inv.errorMsg != null)
+                _banner(inv.errorMsg!, isError: true,
+                    onClose: inv.limpiarMensajes),
+
+              // ── Contenido ────────────────────────────
+              Expanded(
+                child: inv.cargando
+                    ? _loadingState()
+                    : inv.productos.isEmpty
+                        ? _emptyState(esCajero)
+                        : _buildCategorias(grupos, esCajero, esAdmin, inv),
               ),
             ],
-
-            const Spacer(),
-
-            if (!esCajero)
-              ElevatedButton.icon(
-                icon:  const Icon(Icons.add_rounded),
-                label: Text('Nuevo Producto',
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-                onPressed: () => _abrirFormulario(context, inv),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(Constants.primaryColor),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                  elevation: 0,
-                ),
-              ),
-          ]),
-          const SizedBox(height: 16),
-
-          // ── Filtro activo/inactivo/todos ─────────────
-          if (!esCajero) ...[
-            _filtroEstado(),
-            const SizedBox(height: 12),
-          ],
-
-          // ── Mensajes ────────────────────────────────
-          if (inv.successMsg != null)
-            _banner(inv.successMsg!,
-                isError: false, onClose: inv.limpiarMensajes),
-          if (inv.errorMsg != null)
-            _banner(inv.errorMsg!, isError: true, onClose: inv.limpiarMensajes),
-
-          // ── Buscador ────────────────────────────────
-          TextField(
-            controller: _searchCtrl,
-            decoration: InputDecoration(
-              hintText:   '🔍  Buscar productos...',
-              hintStyle:  GoogleFonts.poppins(color: Colors.grey.shade400),
-              filled:     true,
-              fillColor:  Colors.white,
-              prefixIcon: const Icon(Icons.search_rounded,
-                  color: Color(Constants.primaryColor)),
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none),
-              enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade200)),
-              focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                      color: Color(Constants.primaryColor), width: 2)),
-            ),
-            onChanged: (val) => context.read<InventarioProvider>()
-                .cargarProductos(
-                    q: val, tiendaId: _tiendaActiva, activo: _activoFiltro),
           ),
-          const SizedBox(height: 12),
-
-          // ── Stats ────────────────────────────────────
-          if (inv.productos.isNotEmpty) ...[
-            _buildStats(inv.productos, grupos.length),
-            const SizedBox(height: 16),
-          ],
-
-          // ── Contenido ────────────────────────────────
-          Expanded(
-            child: inv.cargando
-                ? const Center(child: CircularProgressIndicator())
-                : inv.productos.isEmpty
-                    ? _emptyState(esCajero)
-                    : _buildCategorias(grupos, esCajero, esAdmin, inv),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  // ── Filtro activo/inactivo/todos ───────────────────
-  Widget _filtroEstado() {
-    final opciones = [
-      ('true',  'Activos',   Icons.check_circle_outline_rounded),
-      ('false', 'Inactivos', Icons.block_rounded),
-      ('all',   'Todos',     Icons.all_inclusive_rounded),
-    ];
-
+  // ══════════════════════════════════════════════════
+  // HEADER
+  // ══════════════════════════════════════════════════
+  Widget _buildHeader(bool esCajero, bool esAdmin, InventarioProvider inv) {
     return Row(
-      children: opciones.map((op) {
-        final (valor, label, icon) = op;
-        final seleccionado = _activoFiltro == valor;
-        final color = valor == 'false'
-            ? Colors.red.shade600
-            : valor == 'all'
-                ? Colors.blueGrey.shade600
-                : const Color(Constants.primaryColor);
-
-        return Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: InkWell(
-            onTap: () {
-              setState(() => _activoFiltro = valor);
-              context.read<InventarioProvider>().cargarProductos(
-                  tiendaId: _tiendaActiva, activo: valor);
-            },
-            borderRadius: BorderRadius.circular(20),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                color: seleccionado ? color.withOpacity(0.12) : Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: seleccionado ? color : Colors.grey.shade200,
-                  width: seleccionado ? 1.5 : 1,
-                ),
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Ícono con gradiente
+        Container(
+          width: 52, height: 52,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF6366F1).withOpacity(0.35),
+                blurRadius: 12,
+                offset: const Offset(0, 5),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: 14,
-                      color: seleccionado ? color : Colors.grey.shade400),
-                  const SizedBox(width: 6),
-                  Text(label,
-                      style: GoogleFonts.poppins(
-                          fontSize:   12,
-                          fontWeight: seleccionado
-                              ? FontWeight.w600 : FontWeight.normal,
-                          color: seleccionado
-                              ? color : Colors.grey.shade500)),
-                ],
+            ],
+          ),
+          child: const Icon(Icons.inventory_2_rounded,
+              color: Colors.white, size: 26),
+        ),
+        const SizedBox(width: 14),
+
+        // Título y subtítulo
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Inventario',
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0F172A),
+                      letterSpacing: -0.5)),
+              if (esAdmin)
+                Text(
+                  _tiendas.isEmpty ? 'Cargando tiendas…' : _nombreTiendaActual(),
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13,
+                      color: const Color(0xFF6366F1),
+                      fontWeight: FontWeight.w600),
+                ),
+            ],
+          ),
+        ),
+
+        // Botón nuevo producto
+        if (!esCajero)
+          Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF6366F1).withOpacity(0.35),
+                  blurRadius: 12, offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: Text('Nuevo Producto',
+                  style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w700, fontSize: 14)),
+              onPressed: () => _abrirFormulario(context, inv),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                foregroundColor: Colors.white,
+                shadowColor: Colors.transparent,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 22, vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ),
-        );
-      }).toList(),
+      ],
     );
   }
 
-  // ── Stats Bar ──────────────────────────────────────
-  Widget _buildStats(List<Producto> productos, int numCats) {
+  // ══════════════════════════════════════════════════
+  // STATS ROW — Tarjetas grandes con íconos
+  // ══════════════════════════════════════════════════
+  Widget _buildStatsRow(List<Producto> productos, int numCats) {
     final bajo    = productos
         .where((p) => p.stockActual > 0 && p.stockActual <= p.stockMinimo)
         .length;
     final agotado = productos.where((p) => p.stockActual <= 0).length;
 
-    return Wrap(
-      spacing: 8, runSpacing: 8,
+    final stats = [
+      _StatData(
+        icon:    Icons.category_rounded,
+        label:   'Categorías',
+        value:   '$numCats',
+        colors:  [const Color(0xFF6366F1), const Color(0xFF8B5CF6)],
+      ),
+      _StatData(
+        icon:    Icons.inventory_2_rounded,
+        label:   'Productos',
+        value:   '${productos.length}',
+        colors:  [const Color(0xFF0EA5E9), const Color(0xFF06B6D4)],
+      ),
+      if (bajo > 0)
+        _StatData(
+          icon:    Icons.warning_amber_rounded,
+          label:   'Stock bajo',
+          value:   '$bajo',
+          colors:  [const Color(0xFFF59E0B), const Color(0xFFEF4444)],
+        ),
+      if (agotado > 0)
+        _StatData(
+          icon:    Icons.remove_circle_outline_rounded,
+          label:   'Agotados',
+          value:   '$agotado',
+          colors:  [const Color(0xFFEF4444), const Color(0xFFEC4899)],
+        ),
+    ];
+
+    return SizedBox(
+      height: 88,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: stats.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (_, i) => _statCard(stats[i]),
+      ),
+    );
+  }
+
+  Widget _statCard(_StatData s) {
+    return Container(
+      width: 160,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 12, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Row(children: [
+        Container(
+          width: 40, height: 40,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: s.colors),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(s.icon, color: Colors.white, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(s.value,
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 22, fontWeight: FontWeight.w800,
+                    color: const Color(0xFF0F172A),
+                    height: 1)),
+            Text(s.label,
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11, color: const Color(0xFF94A3B8),
+                    fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ]),
+    );
+  }
+
+  // ══════════════════════════════════════════════════
+  // TOOLBAR — Buscador + filtro estado
+  // ══════════════════════════════════════════════════
+  Widget _buildToolbar(bool esCajero, InventarioProvider inv) {
+    return Row(children: [
+      // Buscador
+      Expanded(
+        child: Container(
+          decoration: BoxDecoration(
+            color:        Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 10, offset: const Offset(0, 3)),
+            ],
+          ),
+          child: TextField(
+            controller: _searchCtrl,
+            style: GoogleFonts.plusJakartaSans(fontSize: 14,
+                color: const Color(0xFF0F172A)),
+            decoration: InputDecoration(
+              hintText: 'Buscar productos…',
+              hintStyle: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFFCBD5E1), fontSize: 14),
+              prefixIcon: const Icon(Icons.search_rounded,
+                  color: Color(0xFF6366F1), size: 20),
+              border:        InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 14),
+            ),
+            onChanged: (val) => context.read<InventarioProvider>()
+                .cargarProductos(
+                    q: val, tiendaId: _tiendaActiva, activo: _activoFiltro),
+          ),
+        ),
+      ),
+      if (!esCajero) ...[
+        const SizedBox(width: 12),
+        _filtroEstado(),
+      ],
+    ]);
+  }
+
+  // ══════════════════════════════════════════════════
+  // SELECTOR DE TIENDA
+  // ══════════════════════════════════════════════════
+  Widget _selectorTienda() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _chip(Icons.category_rounded,
-            '$numCats categoría${numCats != 1 ? 's' : ''}',
-            const Color(Constants.primaryColor)),
-        _chip(Icons.inventory_2_rounded,
-            '${productos.length} productos', const Color(0xFF1A1A2E)),
-        if (bajo > 0)
-          _chip(Icons.warning_amber_rounded,
-              '$bajo stock bajo', Colors.orange.shade700),
-        if (agotado > 0)
-          _chip(Icons.remove_circle_outline_rounded,
-              '$agotado agotado${agotado != 1 ? 's' : ''}',
-              Colors.red.shade600),
-        if (_activoFiltro == 'false')
-          _chip(Icons.block_rounded,
-              '${productos.length} inactivos', Colors.grey.shade600),
+        Padding(
+          padding: const EdgeInsets.only(left: 2, bottom: 10),
+          child: Text('Tienda',
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF64748B),
+                  letterSpacing: 0.5)),
+        ),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _chipTienda(id: null, nombre: 'Todas',
+                  icono: Icons.store_mall_directory_rounded),
+              const SizedBox(width: 8),
+              ..._tiendas.asMap().entries.map((e) {
+                final t = e.value;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: _chipTienda(
+                    id:     t['id'] as int,
+                    nombre: t['nombre'] as String? ?? 'Tienda',
+                    icono:  Icons.store_rounded,
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
       ],
     );
   }
 
-  Widget _chip(IconData icon, String label, Color color) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-    decoration: BoxDecoration(
-      color:        color.withOpacity(0.08),
-      borderRadius: BorderRadius.circular(20),
-      border:       Border.all(color: color.withOpacity(0.2)),
-    ),
-    child: Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(icon, size: 14, color: color),
-      const SizedBox(width: 6),
-      Text(label,
-          style: GoogleFonts.poppins(
-              fontSize: 12, fontWeight: FontWeight.w600, color: color)),
-    ]),
-  );
+  Widget _chipTienda({
+    required int?     id,
+    required String   nombre,
+    required IconData icono,
+  }) {
+    final sel = _tiendaFiltro == id;
+    return GestureDetector(
+      onTap: () {
+        if (_tiendaFiltro == id) return;
+        setState(() {
+          _tiendaFiltro = id;
+          _abiertas.clear();
+          _searchCtrl.clear();
+        });
+        context.read<InventarioProvider>().cargarProductos(
+            tiendaId: id, activo: _activoFiltro);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          gradient: sel
+              ? const LinearGradient(
+                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)])
+              : null,
+          color: sel ? null : Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            if (sel)
+              BoxShadow(
+                color: const Color(0xFF6366F1).withOpacity(0.3),
+                blurRadius: 10, offset: const Offset(0, 4))
+            else
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 6, offset: const Offset(0, 2)),
+          ],
+          border: sel
+              ? null
+              : Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icono,
+              size: 15,
+              color: sel ? Colors.white : const Color(0xFF94A3B8)),
+          const SizedBox(width: 8),
+          Text(nombre,
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13, fontWeight: FontWeight.w700,
+                  color: sel ? Colors.white : const Color(0xFF475569))),
+        ]),
+      ),
+    );
+  }
 
-  // ── Lista de categorías ────────────────────────────
+  // ══════════════════════════════════════════════════
+  // FILTRO ESTADO
+  // ══════════════════════════════════════════════════
+  Widget _filtroEstado() {
+    final opciones = [
+      ('true',  'Activos',   Icons.check_circle_outline_rounded,
+          const Color(0xFF10B981)),
+      ('false', 'Inactivos', Icons.block_rounded,
+          const Color(0xFFEF4444)),
+      ('all',   'Todos',     Icons.all_inclusive_rounded,
+          const Color(0xFF6366F1)),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 10, offset: const Offset(0, 3)),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: opciones.map((op) {
+          final (valor, label, icon, color) = op;
+          final sel = _activoFiltro == valor;
+          return GestureDetector(
+            onTap: () {
+              setState(() => _activoFiltro = valor);
+              context.read<InventarioProvider>().cargarProductos(
+                  tiendaId: _tiendaActiva, activo: valor);
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 9),
+              decoration: BoxDecoration(
+                color: sel ? color.withOpacity(0.12) : Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(icon, size: 14,
+                    color: sel ? color : const Color(0xFFCBD5E1)),
+                const SizedBox(width: 6),
+                Text(label,
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: sel
+                            ? FontWeight.w700 : FontWeight.w500,
+                        color: sel ? color : const Color(0xFF94A3B8))),
+              ]),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  // ══════════════════════════════════════════════════
+  // LISTA DE CATEGORÍAS
+  // ══════════════════════════════════════════════════
   Widget _buildCategorias(Map<String, List<Producto>> grupos,
       bool esCajero, bool esAdmin, InventarioProvider inv) {
     final keys = grupos.keys.toList()..sort();
     if (keys.remove('Sin categoría')) keys.add('Sin categoría');
 
     return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 24),
       itemCount: keys.length,
       itemBuilder: (_, i) {
-        final cat     = keys[i];
-        final prods   = grupos[cat]!;
+        final cat   = keys[i];
+        final prods = grupos[cat]!;
         final isOpen  = _abiertas.contains(cat);
-        final color   = _colores[i % _colores.length];
-        final icon    = _iconos[i % _iconos.length];
+        final g1 = _gradientes[i % _gradientes.length][0];
+        final g2 = _gradientes[i % _gradientes.length][1];
+        final icon   = _iconos[i % _iconos.length];
         final bajoCnt = prods
             .where((p) => p.stockActual > 0 && p.stockActual <= p.stockMinimo)
             .length;
         final agotCnt = prods.where((p) => p.stockActual <= 0).length;
 
         return Container(
-          margin: const EdgeInsets.only(bottom: 12),
+          margin: const EdgeInsets.only(bottom: 14),
           decoration: BoxDecoration(
             color:        Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color:      Colors.black.withOpacity(0.05),
-                blurRadius: 10, offset: const Offset(0, 4)),
+                color:      Colors.black.withOpacity(0.06),
+                blurRadius: 16, offset: const Offset(0, 6)),
             ],
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
             child: Column(children: [
-
-              // Cabecera
+              // ── Encabezado de categoría ──────────────
               InkWell(
                 onTap: () => setState(() =>
                     isOpen ? _abiertas.remove(cat) : _abiertas.add(cat)),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 20, vertical: 16),
-                  color: _activoFiltro == 'false'
-                      ? Colors.grey.shade600 : color,
+                      horizontal: 22, vertical: 18),
+                  decoration: BoxDecoration(
+                    gradient: _activoFiltro == 'false'
+                        ? LinearGradient(colors: [
+                            Colors.grey.shade500, Colors.grey.shade600])
+                        : LinearGradient(
+                            colors: [g1, g2],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight),
+                  ),
                   child: Row(children: [
+                    // Ícono en "frosted" container
                     Container(
-                      padding: const EdgeInsets.all(8),
+                      width: 42, height: 42,
                       decoration: BoxDecoration(
-                        color:        Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(8),
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(icon, color: Colors.white, size: 18),
+                      child: Icon(icon, color: Colors.white, size: 20),
                     ),
                     const SizedBox(width: 14),
+
+                    // Nombre + conteo
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(cat,
-                              style: GoogleFonts.poppins(
+                              style: GoogleFonts.plusJakartaSans(
                                   color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 15)),
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 15, letterSpacing: -0.2)),
                           Text(
                             '${prods.length} producto${prods.length != 1 ? 's' : ''}',
-                            style: GoogleFonts.poppins(
-                                color: Colors.white.withOpacity(0.7),
-                                fontSize: 12)),
+                            style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white.withOpacity(0.75),
+                                fontSize: 12, fontWeight: FontWeight.w500)),
                         ],
                       ),
                     ),
+
+                    // Badges de alerta
                     if (_activoFiltro != 'false') ...[
                       if (agotCnt > 0) ...[
-                        _alertBadge('$agotCnt agotado', Colors.red.shade400),
+                        _alertBadge('$agotCnt agotado',
+                            Colors.red.shade300),
                         const SizedBox(width: 6),
                       ],
                       if (bajoCnt > 0) ...[
-                        _alertBadge('$bajoCnt bajo', Colors.orange.shade400),
+                        _alertBadge('$bajoCnt bajo',
+                            Colors.orange.shade300),
                         const SizedBox(width: 10),
                       ],
                     ],
+
+                    // Flecha animada
                     AnimatedRotation(
                       turns:    isOpen ? 0.5 : 0,
-                      duration: const Duration(milliseconds: 220),
-                      child: const Icon(Icons.keyboard_arrow_down_rounded,
-                          color: Colors.white, size: 22),
+                      duration: const Duration(milliseconds: 250),
+                      child: Container(
+                        width: 30, height: 30,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.keyboard_arrow_down_rounded,
+                            color: Colors.white, size: 20),
+                      ),
                     ),
                   ]),
                 ),
               ),
 
-              // Productos expandibles
+              // ── Filas de productos ───────────────────
               AnimatedSize(
-                duration: const Duration(milliseconds: 250),
-                curve:    Curves.easeInOut,
+                duration: const Duration(milliseconds: 280),
+                curve: Curves.easeInOut,
                 child: isOpen
-                    ? _buildFilasProductos(prods, esCajero, esAdmin, inv)
+                    ? _buildFilasProductos(prods, esCajero, esAdmin, inv, g1)
                     : const SizedBox.shrink(),
               ),
             ]),
@@ -446,181 +697,393 @@ class _InventarioScreenState extends State<InventarioScreen> {
   }
 
   Widget _alertBadge(String text, Color color) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
     decoration: BoxDecoration(
-        color: color, borderRadius: BorderRadius.circular(10)),
+        color: color.withOpacity(0.25),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.5))),
     child: Text(text,
-        style: GoogleFonts.poppins(
+        style: GoogleFonts.plusJakartaSans(
             color: Colors.white, fontSize: 11,
-            fontWeight: FontWeight.w600)),
+            fontWeight: FontWeight.w700)),
   );
 
-  // ── Filas de productos ─────────────────────────────
+  // ══════════════════════════════════════════════════
+  // FILAS DE PRODUCTOS
+  // ══════════════════════════════════════════════════
   Widget _buildFilasProductos(List<Producto> prods, bool esCajero,
-      bool esAdmin, InventarioProvider inv) {
+      bool esAdmin, InventarioProvider inv, Color accentColor) {
     return Column(children: [
+      // Encabezado de tabla
       Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        color:   Colors.grey.shade50,
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+        decoration: BoxDecoration(
+          color: accentColor.withOpacity(0.04),
+          border: Border(
+            bottom: BorderSide(color: accentColor.withOpacity(0.1)),
+          ),
+        ),
         child: Row(children: [
           Expanded(flex: 3, child: _colHeader('Nombre')),
           Expanded(flex: 2, child: _colHeader('Referencia')),
-          Expanded(flex: 2, child: _colHeader('Precio venta')),
+          Expanded(flex: 2, child: _colHeader('Precio')),
           Expanded(flex: 1, child: _colHeader('Stock')),
           Expanded(flex: 2, child: _colHeader('Estado')),
-          if (!esCajero) const SizedBox(width: 80),
+          if (!esCajero) const SizedBox(width: 76),
         ]),
       ),
-      const Divider(height: 1, thickness: 1),
+
+      // Filas
       ...prods.asMap().entries.map((e) {
         final isLast = e.key == prods.length - 1;
-        return _filaProducto(e.value, inv, esCajero, esAdmin, isLast: isLast);
+        return _filaProducto(e.value, inv, esCajero, esAdmin,
+            accentColor: accentColor, isLast: isLast);
       }),
     ]);
   }
 
-  Text _colHeader(String t) => Text(t,
-      style: GoogleFonts.poppins(
-          fontSize: 12, fontWeight: FontWeight.w600,
-          color: Colors.grey.shade500));
+  Widget _colHeader(String t) => Text(t,
+      style: GoogleFonts.plusJakartaSans(
+          fontSize: 11, fontWeight: FontWeight.w700,
+          color: const Color(0xFF94A3B8),
+          letterSpacing: 0.4));
 
   Widget _filaProducto(Producto p, InventarioProvider inv,
-      bool esCajero, bool esAdmin, {required bool isLast}) {
+      bool esCajero, bool esAdmin,
+      {required Color accentColor, required bool isLast}) {
     final esInactivo = _activoFiltro == 'false';
     final agotado    = p.stockActual <= 0;
     final bajo       = !agotado && p.stockActual <= p.stockMinimo;
 
-    final estadoText  = esInactivo ? '🚫 Inactivo'
-        : agotado     ? '❌ Agotado'
-        : bajo        ? '⚠️ Stock bajo'
-        : '✅ OK';
-    final estadoColor = esInactivo ? Colors.grey.shade600
-        : agotado     ? Colors.red.shade700
-        : bajo        ? Colors.orange.shade700
-        : Colors.green.shade700;
-    final estadoBg    = esInactivo ? Colors.grey.shade100
-        : agotado     ? Colors.red.shade50
-        : bajo        ? Colors.orange.shade50
-        : Colors.green.shade50;
+    final (estadoText, estadoColor, estadoBg) = esInactivo
+        ? ('Inactivo', const Color(0xFF94A3B8), const Color(0xFFF1F5F9))
+        : agotado
+            ? ('Agotado', const Color(0xFFEF4444), const Color(0xFFFEF2F2))
+            : bajo
+                ? ('Stock bajo', const Color(0xFFF59E0B), const Color(0xFFFFFBEB))
+                : ('Disponible', const Color(0xFF10B981), const Color(0xFFF0FDF4));
+
+    final estadoIcon = esInactivo
+        ? Icons.block_rounded
+        : agotado ? Icons.remove_circle_outline_rounded
+        : bajo ? Icons.warning_amber_rounded
+        : Icons.check_circle_outline_rounded;
 
     return Container(
       decoration: BoxDecoration(
-        color: esInactivo ? Colors.grey.shade50 : Colors.white,
+        color: esInactivo
+            ? const Color(0xFFFAFAFA) : Colors.white,
         border: isLast
             ? null
-            : Border(bottom: BorderSide(color: Colors.grey.shade100)),
+            : Border(
+                bottom: BorderSide(color: const Color(0xFFF1F5F9))),
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
-        child: Row(children: [
-          Expanded(
-            flex: 3,
-            child: Text(p.nombre,
-                style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w600, fontSize: 13,
-                    color: esInactivo
-                        ? Colors.grey.shade400 : Colors.black87)),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(p.referencia.isEmpty ? '—' : p.referencia,
-                style: GoogleFonts.poppins(
-                    fontSize: 13, color: Colors.grey.shade500)),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text('\$${p.precio.toStringAsFixed(0)}',
-                style: GoogleFonts.poppins(
-                    fontSize: 13, fontWeight: FontWeight.w600,
-                    color: esInactivo
-                        ? Colors.grey.shade400 : Colors.black87)),
-          ),
-          Expanded(
-            flex: 1,
-            child: Text(p.stockActual.toStringAsFixed(0),
-                style: GoogleFonts.poppins(
-                    fontSize: 13,
-                    fontWeight: (agotado || bajo) && !esInactivo
-                        ? FontWeight.bold : FontWeight.normal,
-                    color: esInactivo   ? Colors.grey.shade400
-                        : agotado ? Colors.red.shade700
-                        : bajo    ? Colors.orange.shade700
-                        : Colors.black87)),
-          ),
-          Expanded(
-            flex: 2,
-            child: Align(
-              alignment: Alignment.centerLeft,
+      child: InkWell(
+        onTap: null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+          child: Row(children: [
+            // Nombre con punto de color
+            Expanded(
+              flex: 3,
+              child: Row(children: [
+                if (!esInactivo)
+                  Container(
+                    width: 6, height: 6,
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: agotado
+                          ? const Color(0xFFEF4444)
+                          : bajo
+                              ? const Color(0xFFF59E0B)
+                              : accentColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                Expanded(
+                  child: Text(p.nombre,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w700, fontSize: 13,
+                          color: esInactivo
+                              ? const Color(0xFFCBD5E1)
+                              : const Color(0xFF1E293B))),
+                ),
+              ]),
+            ),
+
+            // Referencia
+            Expanded(
+              flex: 2,
+              child: Text(p.referencia.isEmpty ? '—' : p.referencia,
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12, color: const Color(0xFF94A3B8))),
+            ),
+
+            // Precio con estilo
+            Expanded(
+              flex: 2,
+              child: Text('\$${p.precio.toStringAsFixed(0)}',
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13, fontWeight: FontWeight.w700,
+                      color: esInactivo
+                          ? const Color(0xFFCBD5E1)
+                          : const Color(0xFF1E293B))),
+            ),
+
+            // Stock
+            Expanded(
+              flex: 1,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                    color: estadoBg, borderRadius: BorderRadius.circular(20)),
-                child: Text(estadoText,
-                    style: GoogleFonts.poppins(
-                        color: estadoColor, fontSize: 11,
-                        fontWeight: FontWeight.w600)),
+                  color: esInactivo
+                      ? const Color(0xFFF1F5F9)
+                      : (agotado || bajo)
+                          ? estadoBg
+                          : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  p.stockActual.toStringAsFixed(0),
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13,
+                      fontWeight: (agotado || bajo) && !esInactivo
+                          ? FontWeight.w800 : FontWeight.w600,
+                      color: esInactivo
+                          ? const Color(0xFFCBD5E1)
+                          : agotado ? const Color(0xFFEF4444)
+                          : bajo ? const Color(0xFFF59E0B)
+                          : const Color(0xFF64748B))),
               ),
             ),
-          ),
-          if (!esCajero)
-            SizedBox(
-              width: 80,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (esInactivo) ...[
-                    if (esAdmin)
-                      IconButton(
-                        icon: const Icon(Icons.refresh_rounded,
-                            size: 18, color: Colors.green),
-                        tooltip:     'Reactivar',
-                        padding:     EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        onPressed:   () => _confirmarReactivar(context, inv, p),
+
+            // Estado pill
+            Expanded(
+              flex: 2,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                      color: estadoBg,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: estadoColor.withOpacity(0.2))),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(estadoIcon, size: 11, color: estadoColor),
+                      const SizedBox(width: 5),
+                      Text(estadoText,
+                          style: GoogleFonts.plusJakartaSans(
+                              color: estadoColor, fontSize: 11,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // Acciones
+            if (!esCajero)
+              SizedBox(
+                width: 76,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (esInactivo) ...[
+                      if (esAdmin)
+                        _actionBtn(
+                          icon: Icons.refresh_rounded,
+                          color: const Color(0xFF10B981),
+                          tooltip: 'Reactivar',
+                          onTap: () => _confirmarReactivar(context, inv, p),
+                        ),
+                    ] else ...[
+                      _actionBtn(
+                        icon: Icons.edit_rounded,
+                        color: const Color(0xFF6366F1),
+                        tooltip: 'Editar',
+                        onTap: () => _abrirFormulario(context, inv, producto: p),
                       ),
-                  ] else ...[
-                    IconButton(
-                      icon: const Icon(Icons.edit_rounded,
-                          size: 17, color: Color(Constants.primaryColor)),
-                      tooltip:     'Editar',
-                      padding:     EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed:   () => _abrirFormulario(context, inv, producto: p),
-                    ),
-                    const SizedBox(width: 10),
-                    IconButton(
-                      icon: const Icon(Icons.block_rounded,
-                          size: 17, color: Colors.redAccent),
-                      tooltip:     'Desactivar',
-                      padding:     EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed:   () => _confirmarEliminar(context, inv, p),
-                    ),
+                      const SizedBox(width: 8),
+                      _actionBtn(
+                        icon: Icons.block_rounded,
+                        color: const Color(0xFFEF4444),
+                        tooltip: 'Desactivar',
+                        onTap: () => _confirmarEliminar(context, inv, p),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-        ]),
+          ]),
+        ),
       ),
     );
   }
 
-  // ── Diálogos ───────────────────────────────────────
+  Widget _actionBtn({
+    required IconData icon,
+    required Color    color,
+    required String   tooltip,
+    required VoidCallback onTap,
+  }) =>
+    Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: 32, height: 32,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 16, color: color),
+        ),
+      ),
+    );
+
+  // ══════════════════════════════════════════════════
+  // LOADING STATE
+  // ══════════════════════════════════════════════════
+  Widget _loadingState() => Center(
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          width: 56, height: 56,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: const Padding(
+            padding: EdgeInsets.all(14),
+            child: CircularProgressIndicator(
+              color: Colors.white, strokeWidth: 2.5),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text('Cargando inventario…',
+            style: GoogleFonts.plusJakartaSans(
+                color: const Color(0xFF94A3B8),
+                fontWeight: FontWeight.w600, fontSize: 14)),
+      ],
+    ),
+  );
+
+  // ══════════════════════════════════════════════════
+  // EMPTY STATE
+  // ══════════════════════════════════════════════════
+  Widget _emptyState(bool esCajero) => Center(
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          width: 90, height: 90,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Icon(
+            _activoFiltro == 'false'
+                ? Icons.check_circle_outline_rounded
+                : Icons.inventory_2_outlined,
+            size: 44, color: const Color(0xFFCBD5E1),
+          ),
+        ),
+        const SizedBox(height: 18),
+        Text(
+          _activoFiltro == 'false'
+              ? '¡Sin productos inactivos!'
+              : 'No hay productos aquí',
+          style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFF475569),
+              fontSize: 17, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _activoFiltro == 'false'
+              ? 'Todo tu inventario está activo 🎉'
+              : 'Agrega el primero con "Nuevo Producto"',
+          style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFF94A3B8), fontSize: 13),
+        ),
+      ],
+    ),
+  );
+
+  // ══════════════════════════════════════════════════
+  // BANNER DE MENSAJES
+  // ══════════════════════════════════════════════════
+  Widget _banner(String msg,
+      {required bool isError, required VoidCallback onClose}) {
+    final color = isError ? const Color(0xFFEF4444) : const Color(0xFF10B981);
+    return Container(
+      margin:  const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color:        color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(14),
+        border:       Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Row(children: [
+        Container(
+          width: 30, height: 30,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            isError ? Icons.error_outline_rounded
+                    : Icons.check_circle_outline_rounded,
+            color: color, size: 18),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(msg,
+              style: GoogleFonts.plusJakartaSans(
+                  color: color.withOpacity(0.85),
+                  fontSize: 13, fontWeight: FontWeight.w600)),
+        ),
+        InkWell(
+          onTap: onClose,
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Icon(Icons.close_rounded, size: 16,
+                color: color.withOpacity(0.5)),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  // ══════════════════════════════════════════════════
+  // DIÁLOGOS (sin cambios estructurales, solo estilo)
+  // ══════════════════════════════════════════════════
   void _abrirFormulario(BuildContext context, InventarioProvider inv,
       {Producto? producto}) {
     showDialog(
       context: context,
       builder: (_) => ProductoFormDialog(
-        producto: producto,
-        tiendaId: _tiendaActiva ?? 0,
-        // ✅ FIX: eliminado guardando — ya no existe en el dialog
+        producto:  producto,
+        tiendaId:  _tiendaActiva ?? 0,
+        empresaId: _empresaActiva,       // ✅ empresa deducida de la tienda
         onGuardar: (data) async {
+          // ✅ garantiza que 'empresa' siempre vaya en el payload
+          if (_empresaActiva != null) {
+            data.putIfAbsent('empresa', () => _empresaActiva!);
+          }
           final ok = producto == null
               ? await inv.crearProducto(data)
               : await inv.editarProducto(producto.id, data);
-
-          // ✅ FIX: lanza si falla → dialog desbloquea botón y no hace pop
-          // ✅ FIX: eliminado Navigator.pop → el dialog lo hace al éxito
           if (!ok) throw Exception(inv.errorMsg ?? 'Error al guardar');
         },
       ),
@@ -631,47 +1094,19 @@ class _InventarioScreenState extends State<InventarioScreen> {
       BuildContext context, InventarioProvider inv, Producto p) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('¿Desactivar producto?',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-        content: Text(
-            'Se desactivará "${p.nombre}" del inventario. '
-            'Podrás reactivarlo luego desde la vista de inactivos.',
-            style: GoogleFonts.poppins(fontSize: 14)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancelar',
-                style: GoogleFonts.poppins(color: Colors.grey.shade600)),
-          ),
-          ElevatedButton.icon(
-            icon:  const Icon(Icons.block_rounded, size: 16),
-            label: Text('Desactivar',
-                style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-            onPressed: () async {
-              Navigator.pop(context);
-              final ok = await inv.eliminarProducto(p.id);
-              if (!context.mounted) return;
-              if (!ok) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text('❌ No se pudo desactivar "${p.nombre}"',
-                      style: GoogleFonts.poppins(fontSize: 13)),
-                  backgroundColor: Colors.red.shade600,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                ));
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
-            ),
-          ),
-        ],
+      builder: (_) => _dialogConfirmacion(
+        titulo:   '¿Desactivar producto?',
+        mensaje:  '"${p.nombre}" quedará inactivo. Podrás reactivarlo luego.',
+        labelOk:  'Desactivar',
+        colorOk:  const Color(0xFFEF4444),
+        iconOk:   Icons.block_rounded,
+        onOk: () async {
+          Navigator.pop(context);
+          final ok = await inv.eliminarProducto(p.id);
+          if (!context.mounted || ok) return;
+          _showSnack(context,
+              '❌ No se pudo desactivar "${p.nombre}"', isError: true);
+        },
       ),
     );
   }
@@ -680,114 +1115,88 @@ class _InventarioScreenState extends State<InventarioScreen> {
       BuildContext context, InventarioProvider inv, Producto p) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('¿Reactivar producto?',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-        content: Text(
-            '"${p.nombre}" volverá a estar disponible en el inventario.',
-            style: GoogleFonts.poppins(fontSize: 14)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancelar',
-                style: GoogleFonts.poppins(color: Colors.grey.shade600)),
-          ),
-          ElevatedButton.icon(
-            icon:  const Icon(Icons.refresh_rounded, size: 16),
-            label: Text('Reactivar',
-                style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-            onPressed: () async {
-              Navigator.pop(context);
-              final ok = await inv.reactivarProducto(p.id);
-              if (!context.mounted) return;
-              if (!ok) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text('❌ No se pudo reactivar "${p.nombre}"',
-                      style: GoogleFonts.poppins(fontSize: 13)),
-                  backgroundColor: Colors.red.shade600,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                ));
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
-            ),
-          ),
-        ],
+      builder: (_) => _dialogConfirmacion(
+        titulo:  '¿Reactivar producto?',
+        mensaje: '"${p.nombre}" volverá a estar disponible.',
+        labelOk: 'Reactivar',
+        colorOk: const Color(0xFF10B981),
+        iconOk:  Icons.refresh_rounded,
+        onOk: () async {
+          Navigator.pop(context);
+          final ok = await inv.reactivarProducto(p.id);
+          if (!context.mounted || ok) return;
+          _showSnack(context,
+              '❌ No se pudo reactivar "${p.nombre}"', isError: true);
+        },
       ),
     );
   }
 
-  Widget _emptyState(bool esCajero) => Center(
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(
-          _activoFiltro == 'false'
-              ? Icons.check_circle_outline_rounded
-              : Icons.inventory_2_outlined,
-          size: 72, color: Colors.grey.shade300,
+  Widget _dialogConfirmacion({
+    required String       titulo,
+    required String       mensaje,
+    required String       labelOk,
+    required Color        colorOk,
+    required IconData     iconOk,
+    required VoidCallback onOk,
+  }) =>
+    AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+      titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+      title: Text(titulo,
+          style: GoogleFonts.plusJakartaSans(
+              fontWeight: FontWeight.w800, fontSize: 17,
+              color: const Color(0xFF0F172A))),
+      content: Text(mensaje,
+          style: GoogleFonts.plusJakartaSans(
+              fontSize: 14, color: const Color(0xFF64748B))),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('Cancelar',
+              style: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFF94A3B8),
+                  fontWeight: FontWeight.w600)),
         ),
-        const SizedBox(height: 12),
-        Text(
-          _activoFiltro == 'false'
-              ? 'No hay productos inactivos 🎉'
-              : 'No hay productos en esta tienda',
-          style: GoogleFonts.poppins(
-              color: Colors.grey.shade400, fontSize: 16),
+        Container(
+          decoration: BoxDecoration(
+            color: colorOk.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10)),
+          child: TextButton.icon(
+            icon:  Icon(iconOk, size: 16, color: colorOk),
+            label: Text(labelOk,
+                style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w700, color: colorOk)),
+            onPressed: onOk,
+          ),
         ),
-        if (!esCajero && _activoFiltro != 'false') ...[
-          const SizedBox(height: 8),
-          Text('Haz clic en "Nuevo Producto" para agregar el primero',
-              style: GoogleFonts.poppins(
-                  color: Colors.grey.shade400, fontSize: 13)),
-        ],
       ],
-    ),
-  );
-
-  Widget _banner(String msg,
-      {required bool isError, required VoidCallback onClose}) =>
-    Container(
-      margin:  const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: isError
-            ? const Color(Constants.errorColor).withOpacity(0.1)
-            : Colors.green.shade50,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-            color: isError
-                ? const Color(Constants.errorColor).withOpacity(0.3)
-                : Colors.green.shade200),
-      ),
-      child: Row(children: [
-        Icon(
-          isError ? Icons.error_outline : Icons.check_circle_outline,
-          color: isError
-              ? const Color(Constants.errorColor) : Colors.green.shade700,
-          size: 18,
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(msg,
-              style: GoogleFonts.poppins(
-                  color: isError
-                      ? const Color(Constants.errorColor)
-                      : Colors.green.shade700,
-                  fontSize: 13)),
-        ),
-        IconButton(
-          icon:      const Icon(Icons.close_rounded, size: 16),
-          onPressed: onClose,
-          color:     Colors.grey,
-        ),
-      ]),
     );
+
+  void _showSnack(BuildContext ctx, String msg, {required bool isError}) {
+    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+      content: Text(msg,
+          style: GoogleFonts.plusJakartaSans(fontSize: 13)),
+      backgroundColor: isError
+          ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.all(16),
+    ));
+  }
+}
+
+// ── Modelo de dato para stats ──────────────────────
+class _StatData {
+  final IconData    icon;
+  final String      label;
+  final String      value;
+  final List<Color> colors;
+  const _StatData({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.colors,
+  });
 }

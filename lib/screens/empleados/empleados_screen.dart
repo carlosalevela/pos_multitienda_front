@@ -1,5 +1,3 @@
-// lib/screens/empleados/empleados_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants.dart';
@@ -16,9 +14,11 @@ class EmpleadosScreen extends StatefulWidget {
 class _EmpleadosScreenState extends State<EmpleadosScreen> {
   final _service = EmpleadoService();
   List<Map<String, dynamic>> _empleados = [];
-  bool   _cargando   = false;
+  bool _cargando = false;
   String _successMsg = '';
-  String _errorMsg   = '';
+  String _errorMsg = '';
+
+  int? _empresaIdActiva;
 
   @override
   void initState() {
@@ -29,9 +29,25 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
   Future<void> _cargarEmpleados() async {
     if (!mounted) return;
     setState(() => _cargando = true);
-    _empleados = await _service.getEmpleados();
-    // ✅ FIX: mounted guard — evita setState después de dispose
-    if (mounted) setState(() => _cargando = false);
+
+    try {
+      final empleados = await _service.getEmpleados(
+        empresaId: _empresaIdActiva,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _empleados = empleados;
+        _cargando = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _cargando = false;
+        _errorMsg = 'Error al cargar empleados';
+        _successMsg = '';
+      });
+    }
   }
 
   @override
@@ -41,48 +57,51 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-
-          // ── Header ──────────────────────────────────
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(Constants.primaryColor).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(Constants.primaryColor).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.people_rounded,
+                  color: Color(Constants.primaryColor),
+                ),
               ),
-              child: const Icon(Icons.people_rounded,
-                  color: Color(Constants.primaryColor)),
-            ),
-            const SizedBox(width: 12),
-            Text('Empleados',
-              style: GoogleFonts.poppins(
-                fontSize: 22, fontWeight: FontWeight.bold,
-                color: const Color(0xFF1A1A2E),
+              const SizedBox(width: 12),
+              Text(
+                'Empleados',
+                style: GoogleFonts.poppins(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF1A1A2E),
+                ),
               ),
-            ),
-            const Spacer(),
-            ElevatedButton.icon(
-              icon:  const Icon(Icons.person_add_rounded),
-              label: Text('Nuevo Empleado',
-                style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-              onPressed: () => _abrirFormulario(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(Constants.primaryColor),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-                elevation: 0,
+              const Spacer(),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.person_add_rounded),
+                label: Text(
+                  'Nuevo Empleado',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                ),
+                onPressed: () => _abrirFormulario(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(Constants.primaryColor),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  elevation: 0,
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
           const SizedBox(height: 16),
-
-          // ── Mensajes ────────────────────────────────
           if (_successMsg.isNotEmpty) _banner(_successMsg, isError: false),
-          if (_errorMsg.isNotEmpty)   _banner(_errorMsg,   isError: true),
-
-          // ── Tabla ───────────────────────────────────
+          if (_errorMsg.isNotEmpty) _banner(_errorMsg, isError: true),
           Expanded(
             child: _cargando
                 ? const Center(child: CircularProgressIndicator())
@@ -102,9 +121,9 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color:      Colors.black.withOpacity(0.04),
+            color: Colors.black.withOpacity(0.04),
             blurRadius: 10,
-            offset:     const Offset(0, 4),
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -112,11 +131,14 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
         borderRadius: BorderRadius.circular(16),
         child: SingleChildScrollView(
           child: DataTable(
-            headingRowColor:  WidgetStateProperty.all(const Color(0xFF1A1A2E)),
+            headingRowColor: WidgetStateProperty.all(const Color(0xFF1A1A2E)),
             headingTextStyle: GoogleFonts.poppins(
-              color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
-            dataTextStyle:    GoogleFonts.poppins(fontSize: 13),
-            columnSpacing:    24,
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+            dataTextStyle: GoogleFonts.poppins(fontSize: 13),
+            columnSpacing: 24,
             columns: const [
               DataColumn(label: Text('Nombre')),
               DataColumn(label: Text('Email')),
@@ -135,70 +157,89 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
 
   DataRow _buildRow(Map<String, dynamic> e) {
     final activo = e['activo'] ?? true;
-    return DataRow(cells: [
-      DataCell(Text('${e['nombre']} ${e['apellido']}',
-        style: GoogleFonts.poppins(fontWeight: FontWeight.w600))),
-      DataCell(Text(e['email'] ?? '')),
-      DataCell(Text(e['cedula'] ?? '')),
-      DataCell(
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: _rolColor(e['rol']).withOpacity(0.1),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            (e['rol'] ?? '').toUpperCase(),
-            style: GoogleFonts.poppins(
-              color: _rolColor(e['rol']), fontSize: 11,
-              fontWeight: FontWeight.w600),
-          ),
-        ),
-      ),
-      DataCell(Text(e['tienda_nombre'] ?? 'Sin tienda')),
-      DataCell(
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: activo ? Colors.green.shade50 : Colors.red.shade50,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            activo ? '✅ Activo' : '❌ Inactivo',
-            style: GoogleFonts.poppins(
-              color: activo ? Colors.green.shade700 : Colors.red.shade700,
-              fontSize: 12),
-          ),
-        ),
-      ),
-      DataCell(Row(children: [
-        IconButton(
-          icon:      const Icon(Icons.edit_rounded,
-              color: Color(Constants.primaryColor), size: 18),
-          tooltip:   'Editar',
-          onPressed: () => _abrirFormulario(empleado: e),
-        ),
-        IconButton(
-          icon: Icon(
-            activo ? Icons.person_off_rounded : Icons.person_rounded,
-            color: activo ? Colors.redAccent : Colors.green,
-            size: 18,
-          ),
-          tooltip:   activo ? 'Desactivar' : 'Activar',
-          onPressed: () => _confirmarDesactivar(e),
-        ),
-      ])),
-    ]);
-  }
 
-  // ── Helpers ─────────────────────────────────────────
+    return DataRow(
+      cells: [
+        DataCell(
+          Text(
+            '${e['nombre'] ?? ''} ${e['apellido'] ?? ''}',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          ),
+        ),
+        DataCell(Text((e['email'] ?? '').toString())),
+        DataCell(Text((e['cedula'] ?? '').toString())),
+        DataCell(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: _rolColor(e['rol']).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              (e['rol'] ?? '').toString().toUpperCase(),
+              style: GoogleFonts.poppins(
+                color: _rolColor(e['rol']),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+        DataCell(Text((e['tienda_nombre'] ?? 'Sin tienda').toString())),
+        DataCell(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: activo ? Colors.green.shade50 : Colors.red.shade50,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              activo ? '✅ Activo' : '❌ Inactivo',
+              style: GoogleFonts.poppins(
+                color: activo ? Colors.green.shade700 : Colors.red.shade700,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ),
+        DataCell(
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(
+                  Icons.edit_rounded,
+                  color: Color(Constants.primaryColor),
+                  size: 18,
+                ),
+                tooltip: 'Editar',
+                onPressed: () => _abrirFormulario(empleado: e),
+              ),
+              IconButton(
+                icon: Icon(
+                  activo ? Icons.person_off_rounded : Icons.person_rounded,
+                  color: activo ? Colors.redAccent : Colors.green,
+                  size: 18,
+                ),
+                tooltip: activo ? 'Desactivar' : 'Activar',
+                onPressed: () => _confirmarDesactivar(e),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
   Color _rolColor(String? rol) {
     switch (rol) {
-      case 'admin':      return const Color(Constants.primaryColor);
-      case 'supervisor': return Colors.orange;
-      case 'cajero':     return Colors.teal;
-      default:           return Colors.grey;
+      case 'admin':
+        return const Color(Constants.primaryColor);
+      case 'supervisor':
+        return Colors.orange;
+      case 'cajero':
+        return Colors.teal;
+      default:
+        return Colors.grey;
     }
   }
 
@@ -206,28 +247,25 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
     showDialog(
       context: context,
       builder: (_) => EmpleadoFormDialog(
-        empleado:  empleado,
+        empleado: empleado,
         onGuardar: (data) async {
-          // ✅ FIX: null-safe — result['success'] puede ser null
           final result = empleado == null
               ? await _service.crearEmpleado(
-                  nombre:   data['nombre'],
+                  nombre: data['nombre'],
                   apellido: data['apellido'],
-                  cedula:   data['cedula'],
-                  email:    data['email'],
+                  cedula: data['cedula'],
+                  email: data['email'],
                   password: data['password'],
-                  rol:      data['rol'],
+                  rol: data['rol'],
                   tiendaId: data['tienda'],
+                  empresaId: data['empresa'],
                 )
               : await _service.editarEmpleado(empleado['id'], data);
 
           if (result['success'] != true) {
-            // ✅ FIX: lanza para que el dialog desbloquee el botón
-            //        y el usuario pueda corregir sin cerrar el dialog
             throw Exception(result['error'] ?? 'Error desconocido');
           }
 
-          // ✅ FIX: NO llamar Navigator.pop — el dialog lo hace solo
           if (mounted) {
             setState(() {
               _successMsg = empleado == null
@@ -235,7 +273,7 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
                   : '✅ Empleado actualizado';
               _errorMsg = '';
             });
-            _cargarEmpleados();
+            await _cargarEmpleados();
           }
         },
       ),
@@ -244,6 +282,7 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
 
   void _confirmarDesactivar(Map<String, dynamic> e) {
     final activo = e['activo'] ?? true;
+
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -252,8 +291,10 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
           activo ? '¿Desactivar empleado?' : '¿Activar empleado?',
           style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
         ),
-        content: Text('${e['nombre']} ${e['apellido']}',
-          style: GoogleFonts.poppins(fontSize: 14)),
+        content: Text(
+          '${e['nombre']} ${e['apellido']}',
+          style: GoogleFonts.poppins(fontSize: 14),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -261,11 +302,14 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              // ✅ FIX: null-safe
               final result = await _service.editarEmpleado(
-                  e['id'], {'activo': !activo});
+                e['id'],
+                {'activo': !activo},
+              );
+
               if (!context.mounted) return;
               Navigator.pop(context);
+
               if (result['success'] == true) {
                 setState(() {
                   _successMsg = activo
@@ -273,10 +317,10 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
                       : '✅ Empleado activado';
                   _errorMsg = '';
                 });
-                _cargarEmpleados();
+                await _cargarEmpleados();
               } else {
                 setState(() {
-                  _errorMsg   = result['error'] ?? 'Error al cambiar estado';
+                  _errorMsg = result['error'] ?? 'Error al cambiar estado';
                   _successMsg = '';
                 });
               }
@@ -285,7 +329,8 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
               backgroundColor: activo ? Colors.redAccent : Colors.green,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             child: Text(activo ? 'Desactivar' : 'Activar'),
           ),
@@ -299,12 +344,19 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.people_outline_rounded,
-              size: 72, color: Colors.grey.shade300),
+          Icon(
+            Icons.people_outline_rounded,
+            size: 72,
+            color: Colors.grey.shade300,
+          ),
           const SizedBox(height: 12),
-          Text('No hay empleados registrados',
+          Text(
+            'No hay empleados registrados',
             style: GoogleFonts.poppins(
-                color: Colors.grey.shade400, fontSize: 16)),
+              color: Colors.grey.shade400,
+              fontSize: 16,
+            ),
+          ),
         ],
       ),
     );
@@ -312,7 +364,7 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
 
   Widget _banner(String msg, {required bool isError}) {
     return Container(
-      margin:  const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
         color: isError
@@ -325,34 +377,37 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
               : Colors.green.shade200,
         ),
       ),
-      child: Row(children: [
-        Icon(
-          isError ? Icons.error_outline : Icons.check_circle_outline,
-          color: isError
-              ? const Color(Constants.errorColor)
-              : Colors.green.shade700,
-          size: 18,
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(msg,
-            style: GoogleFonts.poppins(
-              color: isError
-                  ? const Color(Constants.errorColor)
-                  : Colors.green.shade700,
-              fontSize: 13,
+      child: Row(
+        children: [
+          Icon(
+            isError ? Icons.error_outline : Icons.check_circle_outline,
+            color: isError
+                ? const Color(Constants.errorColor)
+                : Colors.green.shade700,
+            size: 18,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              msg,
+              style: GoogleFonts.poppins(
+                color: isError
+                    ? const Color(Constants.errorColor)
+                    : Colors.green.shade700,
+                fontSize: 13,
+              ),
             ),
           ),
-        ),
-        IconButton(
-          icon:      const Icon(Icons.close_rounded, size: 16),
-          onPressed: () => setState(() {
-            _successMsg = '';
-            _errorMsg   = '';
-          }),
-          color: Colors.grey,
-        ),
-      ]),
+          IconButton(
+            icon: const Icon(Icons.close_rounded, size: 16),
+            onPressed: () => setState(() {
+              _successMsg = '';
+              _errorMsg = '';
+            }),
+            color: Colors.grey,
+          ),
+        ],
+      ),
     );
   }
 }

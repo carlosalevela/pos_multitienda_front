@@ -1,27 +1,33 @@
 // lib/screens/inventario/widgets/producto_form_dialog.dart
 
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/constants.dart';
 import '../../../models/producto.dart';
 
+
 class ProductoFormDialog extends StatefulWidget {
   final Producto?                                    producto;
   final Future<void> Function(Map<String, dynamic>) onGuardar;
   final int                                          tiendaId;
+  final int?                                         empresaId;  // ✅ nullable por compatibilidad
+
 
   const ProductoFormDialog({
     super.key,
     this.producto,
     required this.onGuardar,
     required this.tiendaId,
-    // ✅ FIX: guardando eliminado — se maneja localmente
+    this.empresaId,  // ✅ opcional — inventario_screen lo inyecta igual en el onGuardar
   });
+
 
   @override
   State<ProductoFormDialog> createState() => _ProductoFormDialogState();
 }
+
 
 class _ProductoFormDialogState extends State<ProductoFormDialog> {
   final _formKey          = GlobalKey<FormState>();
@@ -34,8 +40,9 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
   final _minStockCtrl     = TextEditingController();
   final _catCtrl          = TextEditingController();
 
-  // ✅ FIX: estado local — funciona correctamente dentro de showDialog
+
   bool _guardando = false;
+
 
   @override
   void initState() {
@@ -53,6 +60,7 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
     }
   }
 
+
   @override
   void dispose() {
     _nombreCtrl.dispose();
@@ -66,9 +74,11 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
     super.dispose();
   }
 
+
   @override
   Widget build(BuildContext context) {
     final esEdicion = widget.producto != null;
+
 
     return AlertDialog(
       shape:        RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -100,13 +110,16 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
               children: [
                 const SizedBox(height: 8),
 
+
                 // Nombre
                 _campo('Nombre del producto *', _nombreCtrl,
                   validator: (v) =>
                       v == null || v.isEmpty ? 'Campo requerido' : null),
 
+
                 // Descripción
                 _campo('Descripción', _descripcionCtrl),
+
 
                 // Código de barras + Categoría
                 Row(children: [
@@ -114,6 +127,7 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
                   const SizedBox(width: 12),
                   Expanded(child: _campo('Categoría', _catCtrl)),
                 ]),
+
 
                 // Precio venta + Precio compra
                 Row(children: [
@@ -129,6 +143,7 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
                         isNumber: true),
                   ),
                 ]),
+
 
                 // Stock inicial + Stock mínimo
                 Row(children: [
@@ -172,6 +187,7 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
     );
   }
 
+
   Widget _campo(
     String label,
     TextEditingController ctrl, {
@@ -214,34 +230,42 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
     );
   }
 
-  // ✅ FIX: async + try/catch + Navigator.pop al éxito
+
   Future<void> _guardar() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _guardando = true);
+
 
     final data = <String, dynamic>{
       'nombre':          _nombreCtrl.text.trim(),
       'codigo_barras':   _codigoCtrl.text.trim(),
       'descripcion':     _descripcionCtrl.text.trim(),
-      // ✅ FIX: precios como int, no como String
       'precio_venta':    int.tryParse(_precioVentaCtrl.text) ?? 0,
       'precio_compra':   int.tryParse(_precioCompraCtrl.text) ?? 0,
       'unidad_medida':   'unidad',
       'aplica_impuesto': false,
       'tienda_id':       widget.tiendaId,
+      // ✅ FIX: empresa incluida directamente en el payload
+      if (widget.empresaId != null)
+        'empresa':    widget.empresaId!,
       'stock_actual':    int.tryParse(_stockCtrl.text) ?? 0,
       'stock_minimo':    int.tryParse(_minStockCtrl.text) ?? 0,
     };
 
+
     if (_catCtrl.text.isNotEmpty) {
       data['categoria_nombre'] = _catCtrl.text.trim();
     }
+    
+    debugPrint('📦 empresaId del widget: ${widget.empresaId}');
+    debugPrint('📦 data completo: $data');
+
 
     try {
       await widget.onGuardar(data);
-      if (mounted) Navigator.pop(context);    // ← cierra al éxito
+      if (mounted) Navigator.pop(context);
     } catch (_) {
-      if (mounted) setState(() => _guardando = false);  // ← desbloquea botón
+      if (mounted) setState(() => _guardando = false);
     }
   }
 }
