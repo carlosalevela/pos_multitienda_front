@@ -5,12 +5,14 @@ import '../../../models/cliente.dart';
 import '../../../providers/cliente_provider.dart';
 
 class ClienteForm extends StatefulWidget {
-  final Cliente?      cliente;     // null = crear, con valor = editar
+  final Cliente?      cliente;
+  final int?          tiendaId;
   final VoidCallback? onGuardado;
 
   const ClienteForm({
     super.key,
     this.cliente,
+    this.tiendaId,
     this.onGuardado,
   });
 
@@ -18,6 +20,7 @@ class ClienteForm extends StatefulWidget {
   static Future<void> mostrar(
     BuildContext context, {
     Cliente?      cliente,
+    int?          tiendaId,
     VoidCallback? onGuardado,
   }) {
     return showModalBottomSheet(
@@ -26,6 +29,7 @@ class ClienteForm extends StatefulWidget {
       backgroundColor:    Colors.transparent,
       builder: (_) => ClienteForm(
         cliente:    cliente,
+        tiendaId:   tiendaId,
         onGuardado: onGuardado,
       ),
     );
@@ -36,7 +40,7 @@ class ClienteForm extends StatefulWidget {
 }
 
 class _ClienteFormState extends State<ClienteForm> {
-  final _formKey   = GlobalKey<FormState>();
+  final _formKey      = GlobalKey<FormState>();
   final _nombreCtrl    = TextEditingController();
   final _apellidoCtrl  = TextEditingController();
   final _cedulaCtrl    = TextEditingController();
@@ -49,7 +53,6 @@ class _ClienteFormState extends State<ClienteForm> {
   @override
   void initState() {
     super.initState();
-    // Pre-llenar si es edición
     if (_esEdicion) {
       final c = widget.cliente!;
       _nombreCtrl.text    = c.nombre;
@@ -79,14 +82,15 @@ class _ClienteFormState extends State<ClienteForm> {
 
     final prov = context.read<ClienteProvider>();
     final data = {
-      'nombre':    _nombreCtrl.text.trim(),
-      'apellido':  _apellidoCtrl.text.trim(),
+      'nombre':     _nombreCtrl.text.trim(),
+      'apellido':   _apellidoCtrl.text.trim(),
       'cedula_nit': _cedulaCtrl.text.trim().isEmpty
           ? null
           : _cedulaCtrl.text.trim(),
-      'telefono':  _telefonoCtrl.text.trim(),
-      'email':     _emailCtrl.text.trim(),
-      'direccion': _direccionCtrl.text.trim(),
+      'telefono':   _telefonoCtrl.text.trim(),
+      'email':      _emailCtrl.text.trim(),
+      'direccion':  _direccionCtrl.text.trim(),
+      if (widget.tiendaId != null) 'tienda': widget.tiendaId, // ✅
     };
 
     final ok = _esEdicion
@@ -111,7 +115,6 @@ class _ClienteFormState extends State<ClienteForm> {
         ),
       );
     } else {
-      // Muestra el error del provider inline
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -132,11 +135,11 @@ class _ClienteFormState extends State<ClienteForm> {
     required TextEditingController ctrl,
     required String                label,
     required IconData              icono,
-    TextInputType   tipo         = TextInputType.text,
-    String?         Function(String?)? validator,
-    bool            obligatorio  = false,
-    int             maxLines     = 1,
-    TextCapitalization capitalizacion = TextCapitalization.words,
+    TextInputType                  tipo          = TextInputType.text,
+    String? Function(String?)?     validator,
+    bool                           obligatorio   = false,
+    int                            maxLines      = 1,
+    TextCapitalization             capitalizacion = TextCapitalization.words,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -145,14 +148,14 @@ class _ClienteFormState extends State<ClienteForm> {
           text: TextSpan(
             text: label,
             style: GoogleFonts.poppins(
-              fontSize: 12,
+              fontSize:   12,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFF7A7974),
+              color:      const Color(0xFF7A7974),
             ),
             children: [
               if (obligatorio)
                 const TextSpan(
-                  text: ' *',
+                  text:  ' *',
                   style: TextStyle(color: Color(0xFFA12C7B)),
                 ),
             ],
@@ -160,14 +163,14 @@ class _ClienteFormState extends State<ClienteForm> {
         ),
         const SizedBox(height: 6),
         TextFormField(
-          controller:        ctrl,
-          keyboardType:      tipo,
-          maxLines:          maxLines,
+          controller:         ctrl,
+          keyboardType:       tipo,
+          maxLines:           maxLines,
           textCapitalization: capitalizacion,
-          validator:         validator,
+          validator:          validator,
           style: GoogleFonts.poppins(
             fontSize: 14,
-            color: const Color(0xFF28251D),
+            color:    const Color(0xFF28251D),
           ),
           decoration: InputDecoration(
             prefixIcon: Icon(icono, size: 18,
@@ -175,33 +178,31 @@ class _ClienteFormState extends State<ClienteForm> {
             hintText:  'Ingresa $label',
             hintStyle: GoogleFonts.poppins(
               fontSize: 13,
-              color: const Color(0xFFBAB9B4),
+              color:    const Color(0xFFBAB9B4),
             ),
             filled:    true,
             fillColor: const Color(0xFFF9F8F5),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide:
-                  const BorderSide(color: Color(0xFFD4D1CA)),
+              borderSide:   const BorderSide(color: Color(0xFFD4D1CA)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide:
-                  const BorderSide(color: Color(0xFFD4D1CA)),
+              borderSide:   const BorderSide(color: Color(0xFFD4D1CA)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(
+              borderSide:   const BorderSide(
                   color: Color(0xFF01696F), width: 1.5),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
+              borderSide:   BorderSide(
                   color: Colors.red.shade400, width: 1.5),
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
+              borderSide:   BorderSide(
                   color: Colors.red.shade400, width: 1.5),
             ),
             contentPadding: const EdgeInsets.symmetric(
@@ -219,52 +220,50 @@ class _ClienteFormState extends State<ClienteForm> {
     return Container(
       padding: EdgeInsets.fromLTRB(24, 8, 24, 24 + bottom),
       decoration: const BoxDecoration(
-        color: Colors.white,
+        color:        Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: SingleChildScrollView(
         child: Form(
           key: _formKey,
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize:       MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
 
               // ── Handle ───────────────────────────────────
               Center(
                 child: Container(
-                  width: 40, height: 4,
+                  width:  40, height: 4,
                   margin: const EdgeInsets.only(top: 12, bottom: 20),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
+                    color:        Colors.grey.shade300,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
               ),
 
               // ── Título ───────────────────────────────────
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF01696F).withOpacity(0.10),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.person_rounded,
-                        color: Color(0xFF01696F), size: 20),
+              Row(children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color:        const Color(0xFF01696F).withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  const SizedBox(width: 12),
-                  Text(
-                    _esEdicion ? 'Editar cliente' : 'Nuevo cliente',
-                    style: GoogleFonts.poppins(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF28251D),
-                    ),
+                  child: const Icon(Icons.person_rounded,
+                      color: Color(0xFF01696F), size: 20),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  _esEdicion ? 'Editar cliente' : 'Nuevo cliente',
+                  style: GoogleFonts.poppins(
+                    fontSize:   18,
+                    fontWeight: FontWeight.bold,
+                    color:      const Color(0xFF28251D),
                   ),
-                ],
-              ),
+                ),
+              ]),
 
               const SizedBox(height: 24),
 
@@ -298,10 +297,10 @@ class _ClienteFormState extends State<ClienteForm> {
 
               // ── Cédula / NIT ─────────────────────────────
               _campo(
-                ctrl:  _cedulaCtrl,
-                label: 'Cédula / NIT',
-                icono: Icons.badge_outlined,
-                tipo:  TextInputType.number,
+                ctrl:           _cedulaCtrl,
+                label:          'Cédula / NIT',
+                icono:          Icons.badge_outlined,
+                tipo:           TextInputType.number,
                 capitalizacion: TextCapitalization.none,
               ),
 
@@ -313,25 +312,24 @@ class _ClienteFormState extends State<ClienteForm> {
                 children: [
                   Expanded(
                     child: _campo(
-                      ctrl:  _telefonoCtrl,
-                      label: 'Teléfono',
-                      icono: Icons.phone_outlined,
-                      tipo:  TextInputType.phone,
+                      ctrl:           _telefonoCtrl,
+                      label:          'Teléfono',
+                      icono:          Icons.phone_outlined,
+                      tipo:           TextInputType.phone,
                       capitalizacion: TextCapitalization.none,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: _campo(
-                      ctrl:  _emailCtrl,
-                      label: 'Email',
-                      icono: Icons.email_outlined,
-                      tipo:  TextInputType.emailAddress,
+                      ctrl:           _emailCtrl,
+                      label:          'Email',
+                      icono:          Icons.email_outlined,
+                      tipo:           TextInputType.emailAddress,
                       capitalizacion: TextCapitalization.none,
                       validator: (v) {
                         if (v == null || v.trim().isEmpty) return null;
-                        final valid = RegExp(
-                            r'^[\w\.-]+@[\w\.-]+\.\w+$');
+                        final valid = RegExp(r'^[\w\.-]+@[\w\.-]+\.\w+$');
                         return valid.hasMatch(v.trim())
                             ? null
                             : 'Email inválido';
@@ -362,10 +360,9 @@ class _ClienteFormState extends State<ClienteForm> {
                   child: ElevatedButton(
                     onPressed: guardando ? null : _guardar,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF01696F),
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor:
-                          Colors.grey.shade200,
+                      backgroundColor:        const Color(0xFF01696F),
+                      foregroundColor:        Colors.white,
+                      disabledBackgroundColor: Colors.grey.shade200,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -375,17 +372,15 @@ class _ClienteFormState extends State<ClienteForm> {
                         ? const SizedBox(
                             width: 22, height: 22,
                             child: CircularProgressIndicator(
-                              color: Colors.white,
+                              color:       Colors.white,
                               strokeWidth: 2.5,
                             ),
                           )
                         : Text(
-                            _esEdicion
-                                ? 'Guardar cambios'
-                                : 'Crear cliente',
+                            _esEdicion ? 'Guardar cambios' : 'Crear cliente',
                             style: GoogleFonts.poppins(
                               fontWeight: FontWeight.bold,
-                              fontSize: 15,
+                              fontSize:   15,
                             ),
                           ),
                   ),

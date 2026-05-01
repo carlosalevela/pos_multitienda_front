@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/reportes_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/contabilidad_provider.dart';          // ✅ NUEVO
 import '../../services/venta_service.dart';
 import 'widgets/reporte_header.dart';
 import 'widgets/reporte_kpis.dart';
@@ -10,6 +11,8 @@ import 'widgets/reporte_devoluciones_card.dart';
 import 'widgets/reporte_top_productos.dart';
 import 'widgets/reporte_tabla.dart';
 import 'widgets/reporte_detalle_dialog.dart';
+import 'widgets/reporte_gastos_card.dart';                    // ✅ NUEVO
+
 
 class ReportesScreen extends StatefulWidget {
   const ReportesScreen({super.key});
@@ -17,6 +20,7 @@ class ReportesScreen extends StatefulWidget {
   @override
   State<ReportesScreen> createState() => _ReportesScreenState();
 }
+
 
 class _ReportesScreenState extends State<ReportesScreen> {
   DateTime _fecha = DateTime.now();
@@ -31,10 +35,16 @@ class _ReportesScreenState extends State<ReportesScreen> {
   void _cargar() {
     if (!mounted) return;
     final auth = context.read<AuthProvider>();
+
+    // ✅ Ambas cargas en paralelo
     context.read<ReportesProvider>().cargarVentas(
-          tiendaId: auth.tiendaId,
-          fecha: _fechaStr,
-        );
+      tiendaId: auth.tiendaId,
+      fecha: _fechaStr,
+    );
+    context.read<ContabilidadProvider>().cargarGastos(
+      tiendaId: auth.tiendaId,
+      fecha: _fechaStr,
+    );
   }
 
   String get _fechaStr =>
@@ -58,7 +68,6 @@ class _ReportesScreenState extends State<ReportesScreen> {
     try {
       final detalle = await _ventaService.obtenerVenta(ventaId);
       if (!ctx.mounted || detalle == null) return;
-
       showDialog(
         context: ctx,
         builder: (_) => ReporteDetalleDialog(detalle: detalle),
@@ -71,8 +80,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
           backgroundColor: Colors.red.shade600,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
+              borderRadius: BorderRadius.circular(10)),
           margin: const EdgeInsets.all(16),
         ),
       );
@@ -81,7 +89,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final rep = context.watch<ReportesProvider>();
+    final rep  = context.watch<ReportesProvider>();
     final auth = context.watch<AuthProvider>();
 
     return Scaffold(
@@ -102,7 +110,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
                   ? const Center(child: CircularProgressIndicator())
                   : LayoutBuilder(
                       builder: (context, constraints) {
-                        final isWide = constraints.maxWidth >= 1100;
+                        final isWide   = constraints.maxWidth >= 1100;
                         final isMedium = constraints.maxWidth >= 760;
 
                         return SingleChildScrollView(
@@ -115,6 +123,8 @@ class _ReportesScreenState extends State<ReportesScreen> {
                             children: [
                               ReporteKpis(rep: rep),
                               const SizedBox(height: 16),
+
+                              // ── Layout WIDE ≥1100px ──────────────────
                               if (isWide)
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -128,6 +138,8 @@ class _ReportesScreenState extends State<ReportesScreen> {
                                             const SizedBox(height: 12),
                                             ReporteDevolucionesCard(rep: rep),
                                           ],
+                                          const SizedBox(height: 12),
+                                          const ReporteGastosCard(), // ✅
                                           const SizedBox(height: 12),
                                           ReporteTopProductos(rep: rep),
                                         ],
@@ -143,6 +155,8 @@ class _ReportesScreenState extends State<ReportesScreen> {
                                     ),
                                   ],
                                 )
+
+                              // ── Layout MEDIUM ≥760px y MOBILE ────────
                               else ...[
                                 if (isMedium)
                                   Row(
@@ -156,6 +170,8 @@ class _ReportesScreenState extends State<ReportesScreen> {
                                               const SizedBox(height: 12),
                                               ReporteDevolucionesCard(rep: rep),
                                             ],
+                                            const SizedBox(height: 12),
+                                            const ReporteGastosCard(), // ✅
                                           ],
                                         ),
                                       ),
@@ -171,6 +187,8 @@ class _ReportesScreenState extends State<ReportesScreen> {
                                     const SizedBox(height: 12),
                                     ReporteDevolucionesCard(rep: rep),
                                   ],
+                                  const SizedBox(height: 12),
+                                  const ReporteGastosCard(),           // ✅
                                   const SizedBox(height: 12),
                                   ReporteTopProductos(rep: rep),
                                 ],

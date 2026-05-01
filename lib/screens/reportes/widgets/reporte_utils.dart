@@ -208,3 +208,20 @@ class KpiData {
     required this.color,
   });
 }
+
+Widget gastosBadge() => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Text(
+        'gasto',
+        style: GoogleFonts.poppins(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: Colors.orange.shade700,
+        ),
+      ),
+    );

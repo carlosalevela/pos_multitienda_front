@@ -9,7 +9,7 @@ import '../../core/constants.dart';
 import '../../models/producto.dart';
 import '../../services/empleado_service.dart';
 import 'widgets/producto_form_dialog.dart';
-
+import 'widgets/importar_excel_dialog.dart';
 
 class InventarioScreen extends StatefulWidget {
   const InventarioScreen({super.key});
@@ -31,16 +31,15 @@ class _InventarioScreenState extends State<InventarioScreen>
   late AnimationController _fadeCtrl;
   late Animation<double>   _fadeAnim;
 
-  // ── Paleta de categorías más moderna ──────────────
   static const _gradientes = [
-    [Color(0xFF6366F1), Color(0xFF8B5CF6)], // Indigo → Violeta
-    [Color(0xFF0EA5E9), Color(0xFF06B6D4)], // Azul cielo → Cyan
-    [Color(0xFF10B981), Color(0xFF059669)], // Esmeralda
-    [Color(0xFFF59E0B), Color(0xFFEF4444)], // Ámbar → Rojo
-    [Color(0xFFEC4899), Color(0xFFF43F5E)], // Rosa → Fuscia
-    [Color(0xFF8B5CF6), Color(0xFF6366F1)], // Violeta → Indigo
-    [Color(0xFF14B8A6), Color(0xFF0EA5E9)], // Teal → Azul
-    [Color(0xFFF97316), Color(0xFFEF4444)], // Naranja → Rojo
+    [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+    [Color(0xFF0EA5E9), Color(0xFF06B6D4)],
+    [Color(0xFF10B981), Color(0xFF059669)],
+    [Color(0xFFF59E0B), Color(0xFFEF4444)],
+    [Color(0xFFEC4899), Color(0xFFF43F5E)],
+    [Color(0xFF8B5CF6), Color(0xFF6366F1)],
+    [Color(0xFF14B8A6), Color(0xFF0EA5E9)],
+    [Color(0xFFF97316), Color(0xFFEF4444)],
   ];
 
   static const _iconos = [
@@ -80,6 +79,24 @@ class _InventarioScreenState extends State<InventarioScreen>
     });
   }
 
+  void _abrirImportarExcel(InventarioProvider inv) async {
+    final importo = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => ImportarExcelDialog(
+        tiendaId:     _tiendaActiva ?? 0,
+        empresaId:    _empresaActiva,
+        nombreTienda: _nombreTiendaActual(),
+      ),
+    );
+    if (importo == true && mounted) {
+      inv.cargarProductos(
+        tiendaId: _tiendaActiva,
+        activo:   _activoFiltro,
+      );
+    }
+  }
+
   @override
   void dispose() {
     _searchCtrl.dispose();
@@ -93,11 +110,10 @@ class _InventarioScreenState extends State<InventarioScreen>
     return auth.tiendaId == 0 ? null : auth.tiendaId;
   }
 
-  // ✅ deduce empresa desde la tienda seleccionada
   int? get _empresaActiva {
     if (_tiendaFiltro == null) return null;
     final t = _tiendas.where((t) => t['id'] == _tiendaFiltro).firstOrNull;
-    final raw = t?['empresa'];   // el backend devuelve 'empresa' (confirmado)
+    final raw = t?['empresa'];
     if (raw is int)    return raw;
     if (raw is String) return int.tryParse(raw);
     return null;
@@ -139,28 +155,22 @@ class _InventarioScreenState extends State<InventarioScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-
-              // ── Header mejorado ──────────────────────
               _buildHeader(esCajero, esAdmin, inv),
               const SizedBox(height: 20),
 
-              // ── Selector de tienda ───────────────────
               if (esAdmin && _tiendas.isNotEmpty) ...[
                 _selectorTienda(),
                 const SizedBox(height: 16),
               ],
 
-              // ── Stats cards ──────────────────────────
               if (inv.productos.isNotEmpty) ...[
                 _buildStatsRow(inv.productos, grupos.length),
                 const SizedBox(height: 20),
               ],
 
-              // ── Barra de herramientas ────────────────
               _buildToolbar(esCajero, inv),
               const SizedBox(height: 16),
 
-              // ── Mensajes ─────────────────────────────
               if (inv.successMsg != null)
                 _banner(inv.successMsg!, isError: false,
                     onClose: inv.limpiarMensajes),
@@ -168,7 +178,6 @@ class _InventarioScreenState extends State<InventarioScreen>
                 _banner(inv.errorMsg!, isError: true,
                     onClose: inv.limpiarMensajes),
 
-              // ── Contenido ────────────────────────────
               Expanded(
                 child: inv.cargando
                     ? _loadingState()
@@ -184,13 +193,12 @@ class _InventarioScreenState extends State<InventarioScreen>
   }
 
   // ══════════════════════════════════════════════════
-  // HEADER
+  // HEADER — ✅ FIX: botón Importar Excel con colores visibles
   // ══════════════════════════════════════════════════
   Widget _buildHeader(bool esCajero, bool esAdmin, InventarioProvider inv) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Ícono con gradiente
         Container(
           width: 52, height: 52,
           decoration: BoxDecoration(
@@ -203,8 +211,7 @@ class _InventarioScreenState extends State<InventarioScreen>
             boxShadow: [
               BoxShadow(
                 color: const Color(0xFF6366F1).withOpacity(0.35),
-                blurRadius: 12,
-                offset: const Offset(0, 5),
+                blurRadius: 12, offset: const Offset(0, 5),
               ),
             ],
           ),
@@ -212,8 +219,6 @@ class _InventarioScreenState extends State<InventarioScreen>
               color: Colors.white, size: 26),
         ),
         const SizedBox(width: 14),
-
-        // Título y subtítulo
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -236,7 +241,26 @@ class _InventarioScreenState extends State<InventarioScreen>
           ),
         ),
 
-        // Botón nuevo producto
+        // ✅ FIX: colores visibles sobre fondo claro #F8F9FC
+        if (!esCajero) ...[
+          OutlinedButton.icon(
+            icon: const Icon(Icons.table_chart_rounded, size: 16),
+            label: Text('Importar Excel',
+                style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w700, fontSize: 13)),
+            onPressed: () => _abrirImportarExcel(inv),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF6366F1),          // ← indigo visible
+              side: const BorderSide(color: Color(0xFF6366F1), width: 1.5),
+              backgroundColor: const Color(0xFF6366F1).withOpacity(0.06),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+          const SizedBox(width: 10),
+        ],
+
         if (!esCajero)
           Container(
             decoration: BoxDecoration(
@@ -273,7 +297,7 @@ class _InventarioScreenState extends State<InventarioScreen>
   }
 
   // ══════════════════════════════════════════════════
-  // STATS ROW — Tarjetas grandes con íconos
+  // STATS ROW
   // ══════════════════════════════════════════════════
   Widget _buildStatsRow(List<Producto> productos, int numCats) {
     final bajo    = productos
@@ -283,30 +307,30 @@ class _InventarioScreenState extends State<InventarioScreen>
 
     final stats = [
       _StatData(
-        icon:    Icons.category_rounded,
-        label:   'Categorías',
-        value:   '$numCats',
-        colors:  [const Color(0xFF6366F1), const Color(0xFF8B5CF6)],
+        icon:   Icons.category_rounded,
+        label:  'Categorías',
+        value:  '$numCats',
+        colors: [const Color(0xFF6366F1), const Color(0xFF8B5CF6)],
       ),
       _StatData(
-        icon:    Icons.inventory_2_rounded,
-        label:   'Productos',
-        value:   '${productos.length}',
-        colors:  [const Color(0xFF0EA5E9), const Color(0xFF06B6D4)],
+        icon:   Icons.inventory_2_rounded,
+        label:  'Productos',
+        value:  '${productos.length}',
+        colors: [const Color(0xFF0EA5E9), const Color(0xFF06B6D4)],
       ),
       if (bajo > 0)
         _StatData(
-          icon:    Icons.warning_amber_rounded,
-          label:   'Stock bajo',
-          value:   '$bajo',
-          colors:  [const Color(0xFFF59E0B), const Color(0xFFEF4444)],
+          icon:   Icons.warning_amber_rounded,
+          label:  'Stock bajo',
+          value:  '$bajo',
+          colors: [const Color(0xFFF59E0B), const Color(0xFFEF4444)],
         ),
       if (agotado > 0)
         _StatData(
-          icon:    Icons.remove_circle_outline_rounded,
-          label:   'Agotados',
-          value:   '$agotado',
-          colors:  [const Color(0xFFEF4444), const Color(0xFFEC4899)],
+          icon:   Icons.remove_circle_outline_rounded,
+          label:  'Agotados',
+          value:  '$agotado',
+          colors: [const Color(0xFFEF4444), const Color(0xFFEC4899)],
         ),
     ];
 
@@ -351,8 +375,7 @@ class _InventarioScreenState extends State<InventarioScreen>
             Text(s.value,
                 style: GoogleFonts.plusJakartaSans(
                     fontSize: 22, fontWeight: FontWeight.w800,
-                    color: const Color(0xFF0F172A),
-                    height: 1)),
+                    color: const Color(0xFF0F172A), height: 1)),
             Text(s.label,
                 style: GoogleFonts.plusJakartaSans(
                     fontSize: 11, color: const Color(0xFF94A3B8),
@@ -364,11 +387,10 @@ class _InventarioScreenState extends State<InventarioScreen>
   }
 
   // ══════════════════════════════════════════════════
-  // TOOLBAR — Buscador + filtro estado
+  // TOOLBAR
   // ══════════════════════════════════════════════════
   Widget _buildToolbar(bool esCajero, InventarioProvider inv) {
     return Row(children: [
-      // Buscador
       Expanded(
         child: Container(
           decoration: BoxDecoration(
@@ -382,15 +404,15 @@ class _InventarioScreenState extends State<InventarioScreen>
           ),
           child: TextField(
             controller: _searchCtrl,
-            style: GoogleFonts.plusJakartaSans(fontSize: 14,
-                color: const Color(0xFF0F172A)),
+            style: GoogleFonts.plusJakartaSans(
+                fontSize: 14, color: const Color(0xFF0F172A)),
             decoration: InputDecoration(
               hintText: 'Buscar productos…',
               hintStyle: GoogleFonts.plusJakartaSans(
                   color: const Color(0xFFCBD5E1), fontSize: 14),
               prefixIcon: const Icon(Icons.search_rounded,
                   color: Color(0xFF6366F1), size: 20),
-              border:        InputBorder.none,
+              border:         InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16, vertical: 14),
             ),
@@ -418,10 +440,8 @@ class _InventarioScreenState extends State<InventarioScreen>
           padding: const EdgeInsets.only(left: 2, bottom: 10),
           child: Text('Tienda',
               style: GoogleFonts.plusJakartaSans(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF64748B),
-                  letterSpacing: 0.5)),
+                  fontSize: 12, fontWeight: FontWeight.w700,
+                  color: const Color(0xFF64748B), letterSpacing: 0.5)),
         ),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -486,9 +506,7 @@ class _InventarioScreenState extends State<InventarioScreen>
                 color: Colors.black.withOpacity(0.05),
                 blurRadius: 6, offset: const Offset(0, 2)),
           ],
-          border: sel
-              ? null
-              : Border.all(color: const Color(0xFFE2E8F0)),
+          border: sel ? null : Border.all(color: const Color(0xFFE2E8F0)),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(icono,
@@ -541,8 +559,7 @@ class _InventarioScreenState extends State<InventarioScreen>
             },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 9),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
               decoration: BoxDecoration(
                 color: sel ? color.withOpacity(0.12) : Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
@@ -554,8 +571,7 @@ class _InventarioScreenState extends State<InventarioScreen>
                 Text(label,
                     style: GoogleFonts.plusJakartaSans(
                         fontSize: 12,
-                        fontWeight: sel
-                            ? FontWeight.w700 : FontWeight.w500,
+                        fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
                         color: sel ? color : const Color(0xFF94A3B8))),
               ]),
             ),
@@ -602,7 +618,6 @@ class _InventarioScreenState extends State<InventarioScreen>
           child: ClipRRect(
             borderRadius: BorderRadius.circular(20),
             child: Column(children: [
-              // ── Encabezado de categoría ──────────────
               InkWell(
                 onTap: () => setState(() =>
                     isOpen ? _abiertas.remove(cat) : _abiertas.add(cat)),
@@ -619,7 +634,6 @@ class _InventarioScreenState extends State<InventarioScreen>
                             end: Alignment.centerRight),
                   ),
                   child: Row(children: [
-                    // Ícono en "frosted" container
                     Container(
                       width: 42, height: 42,
                       decoration: BoxDecoration(
@@ -629,8 +643,6 @@ class _InventarioScreenState extends State<InventarioScreen>
                       child: Icon(icon, color: Colors.white, size: 20),
                     ),
                     const SizedBox(width: 14),
-
-                    // Nombre + conteo
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -648,22 +660,16 @@ class _InventarioScreenState extends State<InventarioScreen>
                         ],
                       ),
                     ),
-
-                    // Badges de alerta
                     if (_activoFiltro != 'false') ...[
                       if (agotCnt > 0) ...[
-                        _alertBadge('$agotCnt agotado',
-                            Colors.red.shade300),
+                        _alertBadge('$agotCnt agotado', Colors.red.shade300),
                         const SizedBox(width: 6),
                       ],
                       if (bajoCnt > 0) ...[
-                        _alertBadge('$bajoCnt bajo',
-                            Colors.orange.shade300),
+                        _alertBadge('$bajoCnt bajo', Colors.orange.shade300),
                         const SizedBox(width: 10),
                       ],
                     ],
-
-                    // Flecha animada
                     AnimatedRotation(
                       turns:    isOpen ? 0.5 : 0,
                       duration: const Duration(milliseconds: 250),
@@ -680,8 +686,6 @@ class _InventarioScreenState extends State<InventarioScreen>
                   ]),
                 ),
               ),
-
-              // ── Filas de productos ───────────────────
               AnimatedSize(
                 duration: const Duration(milliseconds: 280),
                 curve: Curves.easeInOut,
@@ -714,7 +718,6 @@ class _InventarioScreenState extends State<InventarioScreen>
   Widget _buildFilasProductos(List<Producto> prods, bool esCajero,
       bool esAdmin, InventarioProvider inv, Color accentColor) {
     return Column(children: [
-      // Encabezado de tabla
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
         decoration: BoxDecoration(
@@ -732,8 +735,6 @@ class _InventarioScreenState extends State<InventarioScreen>
           if (!esCajero) const SizedBox(width: 76),
         ]),
       ),
-
-      // Filas
       ...prods.asMap().entries.map((e) {
         final isLast = e.key == prods.length - 1;
         return _filaProducto(e.value, inv, esCajero, esAdmin,
@@ -745,8 +746,7 @@ class _InventarioScreenState extends State<InventarioScreen>
   Widget _colHeader(String t) => Text(t,
       style: GoogleFonts.plusJakartaSans(
           fontSize: 11, fontWeight: FontWeight.w700,
-          color: const Color(0xFF94A3B8),
-          letterSpacing: 0.4));
+          color: const Color(0xFF94A3B8), letterSpacing: 0.4));
 
   Widget _filaProducto(Producto p, InventarioProvider inv,
       bool esCajero, bool esAdmin,
@@ -771,19 +771,16 @@ class _InventarioScreenState extends State<InventarioScreen>
 
     return Container(
       decoration: BoxDecoration(
-        color: esInactivo
-            ? const Color(0xFFFAFAFA) : Colors.white,
+        color: esInactivo ? const Color(0xFFFAFAFA) : Colors.white,
         border: isLast
             ? null
-            : Border(
-                bottom: BorderSide(color: const Color(0xFFF1F5F9))),
+            : const Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
       ),
       child: InkWell(
         onTap: null,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
           child: Row(children: [
-            // Nombre con punto de color
             Expanded(
               flex: 3,
               child: Row(children: [
@@ -811,16 +808,12 @@ class _InventarioScreenState extends State<InventarioScreen>
                 ),
               ]),
             ),
-
-            // Referencia
             Expanded(
               flex: 2,
               child: Text(p.referencia.isEmpty ? '—' : p.referencia,
                   style: GoogleFonts.plusJakartaSans(
                       fontSize: 12, color: const Color(0xFF94A3B8))),
             ),
-
-            // Precio con estilo
             Expanded(
               flex: 2,
               child: Text('\$${p.precio.toStringAsFixed(0)}',
@@ -830,13 +823,10 @@ class _InventarioScreenState extends State<InventarioScreen>
                           ? const Color(0xFFCBD5E1)
                           : const Color(0xFF1E293B))),
             ),
-
-            // Stock
             Expanded(
               flex: 1,
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: esInactivo
                       ? const Color(0xFFF1F5F9)
@@ -859,8 +849,6 @@ class _InventarioScreenState extends State<InventarioScreen>
                           : const Color(0xFF64748B))),
               ),
             ),
-
-            // Estado pill
             Expanded(
               flex: 2,
               child: Align(
@@ -887,8 +875,6 @@ class _InventarioScreenState extends State<InventarioScreen>
                 ),
               ),
             ),
-
-            // Acciones
             if (!esCajero)
               SizedBox(
                 width: 76,
@@ -1066,7 +1052,7 @@ class _InventarioScreenState extends State<InventarioScreen>
   }
 
   // ══════════════════════════════════════════════════
-  // DIÁLOGOS (sin cambios estructurales, solo estilo)
+  // DIÁLOGOS
   // ══════════════════════════════════════════════════
   void _abrirFormulario(BuildContext context, InventarioProvider inv,
       {Producto? producto}) {
@@ -1075,9 +1061,8 @@ class _InventarioScreenState extends State<InventarioScreen>
       builder: (_) => ProductoFormDialog(
         producto:  producto,
         tiendaId:  _tiendaActiva ?? 0,
-        empresaId: _empresaActiva,       // ✅ empresa deducida de la tienda
+        empresaId: _empresaActiva,
         onGuardar: (data) async {
-          // ✅ garantiza que 'empresa' siempre vaya en el payload
           if (_empresaActiva != null) {
             data.putIfAbsent('empresa', () => _empresaActiva!);
           }
@@ -1143,7 +1128,7 @@ class _InventarioScreenState extends State<InventarioScreen>
     AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-      titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+      titlePadding:   const EdgeInsets.fromLTRB(24, 24, 24, 12),
       title: Text(titulo,
           style: GoogleFonts.plusJakartaSans(
               fontWeight: FontWeight.w800, fontSize: 17,

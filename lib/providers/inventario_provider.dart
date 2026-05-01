@@ -218,6 +218,42 @@ class InventarioProvider extends ChangeNotifier {
     return false;
   }
 
+    // ── Importar productos batch desde Excel ─────────────
+
+  Future<Map<String, dynamic>> importarProductos({
+    required List<Map<String, dynamic>> productos,
+    required int  tiendaId,
+    int?          empresaId,
+  }) async {
+    _guardando  = true;
+    _errorMsg   = null;
+    _successMsg = null;
+    notifyListeners();
+
+    final result = await _service.importarProductos(
+      productos:  productos,
+      tiendaId:   tiendaId,
+      empresaId:  empresaId,
+    );
+
+    _guardando = false;
+
+    if (result['success'] == true) {
+      final data    = result['data'] as Map<String, dynamic>;
+      final creados = data['creados'] ?? 0;
+      _successMsg   = '$creados productos importados ✅';
+      await cargarProductos(
+        tiendaId: tiendaId,
+        activo:   _activoFiltro,
+      );
+      return result;   // ← retorna el resultado completo para que el widget
+    }                  //   muestre el detalle de fallidos
+
+    _errorMsg = result['error'] ?? 'Error al importar';
+    notifyListeners();
+    return result;
+  }
+
   // ── Utilidades ────────────────────────────────────────
 
   void limpiarMensajes() {

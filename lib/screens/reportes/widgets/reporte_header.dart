@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';                        // ✅ NUEVO
 import '../../../providers/reportes_provider.dart';
 import '../../../providers/auth_provider.dart';
+import '../../../providers/contabilidad_provider.dart';         // ✅ NUEVO
 import '../../../services/reporte_pdf_service.dart';
 import 'reporte_utils.dart';
+
 
 class ReporteHeader extends StatelessWidget {
   final ReportesProvider rep;
@@ -25,7 +28,11 @@ class ReporteHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final impactoCaja = rep.impactoCajaDevoluciones;
+    // ✅ NUEVO
+    final gastos      = context.watch<ContabilidadProvider>().gastos;
+    final totalGastos = gastos.fold(0.0, (s, g) => s + g.monto);
+
+    final impactoCaja  = rep.impactoCajaDevoluciones;
     final impactoColor = impactoCaja > 0
         ? Colors.green.shade700
         : impactoCaja < 0
@@ -67,34 +74,27 @@ class ReporteHeader extends StatelessWidget {
                   color: kAccent.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(
-                  Icons.bar_chart_rounded,
-                  color: kAccent,
-                  size: 24,
-                ),
+                child: const Icon(Icons.bar_chart_rounded,
+                    color: kAccent, size: 24),
               ),
               const SizedBox(width: 14),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Reportes de ventas',
-                    style: GoogleFonts.poppins(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: kDark,
-                    ),
-                  ),
-                  Text(
-                    auth.tiendaNombre,
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      color: Colors.grey.shade500,
-                    ),
-                  ),
+                  Text('Reportes de ventas',
+                      style: GoogleFonts.poppins(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: kDark)),
+                  Text(auth.tiendaNombre,
+                      style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: Colors.grey.shade500)),
                 ],
               ),
               const Spacer(),
+
+              // Badge devoluciones
               if (rep.numDevoluciones > 0) ...[
                 reporteBadge(
                   '${rep.numDevoluciones} devolución${rep.numDevoluciones > 1 ? "es" : ""}',
@@ -104,23 +104,30 @@ class ReporteHeader extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
               ],
+
+              // ✅ Badge gastos
+              if (gastos.isNotEmpty) ...[
+                reporteBadge(
+                  '${gastos.length} gasto${gastos.length > 1 ? "s" : ""}',
+                  Colors.orange.shade700,
+                  Colors.orange.shade50,
+                  Colors.orange.shade200,
+                ),
+                const SizedBox(width: 10),
+              ],
+
               OutlinedButton.icon(
                 onPressed: onFecha,
                 icon: const Icon(Icons.calendar_today_rounded, size: 15),
-                label: Text(
-                  fechaStr,
-                  style: GoogleFonts.poppins(fontSize: 13),
-                ),
+                label: Text(fechaStr,
+                    style: GoogleFonts.poppins(fontSize: 13)),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: kAccent,
                   side: const BorderSide(color: kAccent),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                      borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
+                      horizontal: 14, vertical: 10),
                 ),
               ),
               const SizedBox(width: 8),
@@ -132,8 +139,7 @@ class ReporteHeader extends StatelessWidget {
                     foregroundColor: Colors.grey.shade600,
                     side: BorderSide(color: Colors.grey.shade300),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                        borderRadius: BorderRadius.circular(10)),
                     minimumSize: const Size(42, 42),
                     maximumSize: const Size(42, 42),
                     padding: EdgeInsets.zero,
@@ -159,24 +165,21 @@ class ReporteHeader extends StatelessWidget {
                           fecha: fechaStr,
                           tiendaNombre: auth.tiendaNombre,
                           empresaNombre: auth.empresaNombre,
+                          gastos: gastos,
                         ),
                 icon: const Icon(Icons.picture_as_pdf_rounded, size: 15),
-                label: Text(
-                  'Exportar PDF',
-                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-                ),
+                label: Text('Exportar PDF',
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red.shade600,
                   foregroundColor: Colors.white,
                   disabledBackgroundColor: Colors.grey.shade200,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                      borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
+                      horizontal: 16, vertical: 10),
                 ),
               ),
             ],
@@ -204,6 +207,13 @@ class ReporteHeader extends StatelessWidget {
                 color: impactoColor,
                 filled: true,
               ),
+              // ✅ NUEVO chip de gastos
+              if (gastos.isNotEmpty)
+                _ResumenHeaderChip(
+                  label: 'Gastos',
+                  value: '-\$${fmtNum(totalGastos)}',
+                  color: Colors.orange.shade700,
+                ),
               _ResumenHeaderChip(
                 label: 'Neto real',
                 value: netoTexto,
@@ -224,6 +234,7 @@ class ReporteHeader extends StatelessWidget {
   }
 }
 
+// _ResumenHeaderChip sin cambios
 class _ResumenHeaderChip extends StatelessWidget {
   final String label;
   final String value;
@@ -249,23 +260,17 @@ class _ResumenHeaderChip extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: GoogleFonts.poppins(
-              fontSize: 10,
-              color: color.withOpacity(0.85),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+          Text(label,
+              style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  color: color.withOpacity(0.85),
+                  fontWeight: FontWeight.w500)),
           const SizedBox(height: 2),
-          Text(
-            value,
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              color: color,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+          Text(value,
+              style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: color,
+                  fontWeight: FontWeight.w700)),
         ],
       ),
     );

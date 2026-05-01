@@ -189,4 +189,31 @@ class InventarioService {
       return [];
     }
   }
+
+    // ── Importar productos batch desde Excel ───────────────
+
+  Future<Map<String, dynamic>> importarProductos({
+    required List<Map<String, dynamic>> productos,
+    required int  tiendaId,
+    required int? empresaId,
+  }) async {
+    try {
+      final response = await ApiClient.instance.post(
+        '/productos/importar/',
+        data: {
+          'tienda_id': tiendaId,
+          if (empresaId != null) 'empresa': empresaId,
+          'productos': productos,
+        },
+      );
+      return {'success': true, 'data': response.data};
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'error': _extractError(e, 'Error al importar productos'),
+      };
+    } catch (e) {
+      return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
 }

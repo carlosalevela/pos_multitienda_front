@@ -34,7 +34,7 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     _sidebarCtrl = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 500));
+        vsync: this, duration: const Duration(milliseconds: 500));
     _sidebarAnim = CurvedAnimation(
         parent: _sidebarCtrl, curve: Curves.easeOutCubic);
     _sidebarCtrl.forward();
@@ -63,7 +63,7 @@ class _HomeScreenState extends State<HomeScreen>
       _MenuItem(
         icon:  Icons.account_balance_wallet_rounded,
         label: 'Caja',
-        roles: ['cajero'],
+        roles: ['cajero', 'admin', 'supervisor', 'superadmin'],
         group: 'Operaciones',
       ),
       _MenuItem(
@@ -72,10 +72,11 @@ class _HomeScreenState extends State<HomeScreen>
         roles: ['admin', 'supervisor', 'cajero'],
         group: 'Finanzas',
       ),
+      // ✅ Reportes: solo cajero
       _MenuItem(
         icon:  Icons.assessment_rounded,
         label: 'Reportes',
-        roles: ['admin', 'supervisor', 'cajero'],
+        roles: ['cajero'],
         group: 'Finanzas',
       ),
       _MenuItem(
@@ -134,9 +135,10 @@ class _HomeScreenState extends State<HomeScreen>
     final all = <_Screen>[
       _Screen(widget: const PosScreen(),          roles: ['cajero']),
       _Screen(widget: const InventarioScreen(),   roles: ['admin', 'supervisor', 'cajero']),
-      _Screen(widget: const CajaScreen(),         roles: ['cajero']),
+      _Screen(widget: const CajaScreen(),         roles: ['cajero','admin', 'supervisor', 'superadmin']),
       _Screen(widget: const ContabilidadScreen(), roles: ['admin', 'supervisor', 'cajero']),
-      _Screen(widget: const ReportesScreen(),     roles: ['admin', 'supervisor', 'cajero']),
+      // ✅ Reportes: solo cajero
+      _Screen(widget: const ReportesScreen(),     roles: ['cajero']),
       _Screen(
         widget: ClientesScreen(
           esAdminOSupervisor:
@@ -172,8 +174,10 @@ class _HomeScreenState extends State<HomeScreen>
       });
     }
 
+    final activeItem = menuItems.isNotEmpty ? menuItems[_selectedIndex] : null;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FC),
+      backgroundColor: const Color(0xFFF1F4F9),
       body: Row(children: [
 
         // ── SIDEBAR ──────────────────────────────────────────────
@@ -191,12 +195,23 @@ class _HomeScreenState extends State<HomeScreen>
 
         // ── CONTENIDO PRINCIPAL ───────────────────────────────────
         Expanded(
-          child: screens.isEmpty
-              ? _noModules()
-              : IndexedStack(
-                  index: _selectedIndex,
-                  children: screens,
-                ),
+          child: Column(
+            children: [
+              // Header superior
+              if (activeItem != null)
+                _ContentHeader(item: activeItem),
+
+              // Pantalla activa
+              Expanded(
+                child: screens.isEmpty
+                    ? _noModules()
+                    : IndexedStack(
+                        index: _selectedIndex,
+                        children: screens,
+                      ),
+              ),
+            ],
+          ),
         ),
       ]),
     );
@@ -230,14 +245,106 @@ class _HomeScreenState extends State<HomeScreen>
 }
 
 // ══════════════════════════════════════════════════════════════
-// SIDEBAR — widget separado para claridad
+// HEADER DEL CONTENIDO PRINCIPAL
+// ══════════════════════════════════════════════════════════════
+class _ContentHeader extends StatelessWidget {
+  final _MenuItem item;
+  const _ContentHeader({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(color: Color(0xFFE8ECF2), width: 1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x08000000),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Ícono del módulo
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: const Color(0xFF6366F1).withOpacity(0.08),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(item.icon,
+                size: 18, color: const Color(0xFF6366F1)),
+          ),
+          const SizedBox(width: 12),
+
+          // Breadcrumb
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.group.toUpperCase(),
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF94A3B8),
+                  letterSpacing: 1.0,
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                item.label,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF1E293B),
+                  letterSpacing: -0.3,
+                ),
+              ),
+            ],
+          ),
+
+          const Spacer(),
+
+          // Separador + fecha/hora opcional
+          Text(
+            _formattedDate(),
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 12,
+              color: const Color(0xFFB0BBCC),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formattedDate() {
+    final now = DateTime.now();
+    const months = [
+      'ene', 'feb', 'mar', 'abr', 'may', 'jun',
+      'jul', 'ago', 'sep', 'oct', 'nov', 'dic'
+    ];
+    return '${now.day} ${months[now.month - 1]}. ${now.year}';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// SIDEBAR
 // ══════════════════════════════════════════════════════════════
 class _Sidebar extends StatelessWidget {
-  final List<_MenuItem> menuItems;
-  final int             selectedIndex;
-  final AuthProvider    auth;
-  final void Function(int)  onSelect;
-  final VoidCallback        onLogout;
+  final List<_MenuItem>    menuItems;
+  final int                selectedIndex;
+  final AuthProvider       auth;
+  final void Function(int) onSelect;
+  final VoidCallback       onLogout;
 
   const _Sidebar({
     required this.menuItems,
@@ -247,13 +354,11 @@ class _Sidebar extends StatelessWidget {
     required this.onLogout,
   });
 
-  // Agrupa ítems por su campo `group`
   List<_MenuGroup> _buildGroups() {
     final map = <String, List<_MenuItem>>{};
     for (final item in menuItems) {
       map.putIfAbsent(item.group, () => []).add(item);
     }
-    // Orden fijo de grupos
     const order = ['Operaciones', 'Finanzas', 'Gestión', 'Administración'];
     final result = <_MenuGroup>[];
     for (final g in order) {
@@ -267,17 +372,37 @@ class _Sidebar extends StatelessWidget {
     final groups = _buildGroups();
 
     return Container(
-      width: 252,
+      width: 256,
       decoration: const BoxDecoration(
-        color: Color(0xFF0F1629),
+        color: Color(0xFF0D1526),
         boxShadow: [
-          BoxShadow(color: Color(0x22000000), blurRadius: 24, offset: Offset(4, 0)),
+          BoxShadow(
+            color: Color(0x28000000),
+            blurRadius: 32,
+            offset: Offset(6, 0),
+          ),
         ],
       ),
       child: Column(children: [
 
         // ── Logo / Marca ─────────────────────────────
         _buildBrand(),
+
+        // ── Línea divisora decorativa ─────────────────
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Container(
+            height: 1,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(colors: [
+                Colors.transparent,
+                Color(0xFF1E3050),
+                Colors.transparent,
+              ]),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
 
         // ── Perfil de usuario ────────────────────────
         _buildUserCard(),
@@ -287,17 +412,20 @@ class _Sidebar extends StatelessWidget {
         // ── Navegación con grupos ────────────────────
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             children: groups.expand((g) => [
               _groupLabel(g.title),
               ...g.items.map((item) {
                 final idx = menuItems.indexOf(item);
                 return _navItem(item, idx, idx == selectedIndex);
               }),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
             ]).toList(),
           ),
         ),
+
+        // ── Versión ──────────────────────────────────
+        _buildVersion(),
 
         // ── Cerrar sesión ────────────────────────────
         _buildLogout(context),
@@ -307,26 +435,25 @@ class _Sidebar extends StatelessWidget {
 
   // ── Brand header ──────────────────────────────────
   Widget _buildBrand() => Container(
-    padding: const EdgeInsets.fromLTRB(20, 28, 20, 22),
+    padding: const EdgeInsets.fromLTRB(20, 26, 20, 20),
     child: Row(children: [
-      // Logo con gradiente
       Container(
-        width: 44, height: 44,
+        width: 42, height: 42,
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(13),
+          borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF6366F1).withOpacity(0.4),
-              blurRadius: 12, offset: const Offset(0, 4)),
+              color: const Color(0xFF6366F1).withOpacity(0.45),
+              blurRadius: 14, offset: const Offset(0, 4)),
           ],
         ),
         child: const Icon(Icons.store_rounded,
-            color: Colors.white, size: 22),
+            color: Colors.white, size: 20),
       ),
       const SizedBox(width: 12),
       Column(
@@ -339,39 +466,55 @@ class _Sidebar extends StatelessWidget {
                   fontSize: 20, letterSpacing: -0.5)),
           Text('Multitienda',
               style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFF64748B),
+                  color: const Color(0xFF3D5270),
                   fontSize: 11, fontWeight: FontWeight.w600,
-                  letterSpacing: 0.3)),
+                  letterSpacing: 0.5)),
         ],
+      ),
+
+      const Spacer(),
+
+      // Punto verde de "en línea"
+      Container(
+        width: 8, height: 8,
+        decoration: BoxDecoration(
+          color: const Color(0xFF22C55E),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF22C55E).withOpacity(0.5),
+              blurRadius: 6,
+            ),
+          ],
+        ),
       ),
     ]),
   );
 
   // ── Tarjeta de usuario ─────────────────────────────
   Widget _buildUserCard() => Container(
-    margin:  const EdgeInsets.symmetric(horizontal: 14),
+    margin:  const EdgeInsets.symmetric(horizontal: 12),
     padding: const EdgeInsets.all(12),
     decoration: BoxDecoration(
-      color:        const Color(0xFF1E2A45),
+      color: const Color(0xFF131F35),
       borderRadius: BorderRadius.circular(14),
-      border:       Border.all(color: const Color(0xFF2D3A52)),
+      border: Border.all(color: const Color(0xFF1E3050)),
     ),
     child: Row(children: [
-      // Avatar con iniciales
       Container(
-        width: 40, height: 40,
+        width: 38, height: 38,
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [_rolGradient(auth.rol)[0], _rolGradient(auth.rol)[1]],
           ),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(11),
         ),
         child: Center(
           child: Text(
             auth.nombre.isNotEmpty ? auth.nombre[0].toUpperCase() : 'U',
             style: GoogleFonts.plusJakartaSans(
                 color: Colors.white,
-                fontWeight: FontWeight.w800, fontSize: 16),
+                fontWeight: FontWeight.w800, fontSize: 15),
           ),
         ),
       ),
@@ -383,23 +526,23 @@ class _Sidebar extends StatelessWidget {
             Text(auth.nombre,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white, fontSize: 13,
+                    color: const Color(0xFFE2E8F0), fontSize: 13,
                     fontWeight: FontWeight.w700)),
-            const SizedBox(height: 3),
+            const SizedBox(height: 4),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
               decoration: BoxDecoration(
-                color: _rolColor(auth.rol).withOpacity(0.15),
+                color: _rolColor(auth.rol).withOpacity(0.12),
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                    color: _rolColor(auth.rol).withOpacity(0.3)),
+                    color: _rolColor(auth.rol).withOpacity(0.25)),
               ),
               child: Text(
                 auth.rol.toUpperCase(),
                 style: GoogleFonts.plusJakartaSans(
                     color: _rolColor(auth.rol),
                     fontSize: 9, fontWeight: FontWeight.w800,
-                    letterSpacing: 0.5),
+                    letterSpacing: 0.6),
               ),
             ),
           ],
@@ -410,12 +553,23 @@ class _Sidebar extends StatelessWidget {
 
   // ── Etiqueta de grupo ──────────────────────────────
   Widget _groupLabel(String title) => Padding(
-    padding: const EdgeInsets.fromLTRB(8, 16, 8, 6),
-    child: Text(title.toUpperCase(),
-        style: GoogleFonts.plusJakartaSans(
-            color: const Color(0xFF3D4F6B),
-            fontSize: 10, fontWeight: FontWeight.w800,
-            letterSpacing: 1.0)),
+    padding: const EdgeInsets.fromLTRB(10, 18, 10, 5),
+    child: Row(children: [
+      Container(
+        width: 16, height: 1,
+        color: const Color(0xFF1E3050),
+      ),
+      const SizedBox(width: 8),
+      Text(title.toUpperCase(),
+          style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFF2E4268),
+              fontSize: 9, fontWeight: FontWeight.w800,
+              letterSpacing: 1.2)),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Container(height: 1, color: const Color(0xFF1E3050)),
+      ),
+    ]),
   );
 
   // ── Ítem de navegación ─────────────────────────────
@@ -426,66 +580,69 @@ class _Sidebar extends StatelessWidget {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
-          onTap:       () => onSelect(index),
+          onTap:        () => onSelect(index),
           borderRadius: BorderRadius.circular(10),
-          hoverColor:  const Color(0xFF1E2A45),
-          splashColor: const Color(0xFF6366F1).withOpacity(0.1),
+          hoverColor:   const Color(0xFF131F35),
+          splashColor:  const Color(0xFF6366F1).withOpacity(0.08),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             curve:    Curves.easeOut,
-            padding:  const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            padding:  const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
             decoration: BoxDecoration(
               color: selected
-                  ? const Color(0xFF6366F1).withOpacity(0.15)
+                  ? const Color(0xFF6366F1).withOpacity(0.12)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(10),
               border: selected
                   ? Border.all(
-                      color: const Color(0xFF6366F1).withOpacity(0.3))
-                  : null,
+                      color: const Color(0xFF6366F1).withOpacity(0.25))
+                  : Border.all(color: Colors.transparent),
             ),
             child: Row(children: [
-              // Ícono con contenedor suave
+              // Indicador lateral izquierdo
               AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                width: 32, height: 32,
+                width: 3, height: 22,
+                margin: const EdgeInsets.only(right: 10),
                 decoration: BoxDecoration(
                   color: selected
-                      ? const Color(0xFF6366F1).withOpacity(0.2)
-                      : const Color(0xFF1E2A45),
+                      ? const Color(0xFF818CF8)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+
+              // Ícono
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 30, height: 30,
+                decoration: BoxDecoration(
+                  color: selected
+                      ? const Color(0xFF6366F1).withOpacity(0.18)
+                      : const Color(0xFF131F35),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
                   item.icon,
-                  size: 17,
+                  size: 16,
                   color: selected
                       ? const Color(0xFF818CF8)
-                      : const Color(0xFF475569),
+                      : const Color(0xFF3D5270),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 11),
 
               // Label
               Expanded(
                 child: Text(item.label,
                     style: GoogleFonts.plusJakartaSans(
                         color: selected
-                            ? const Color(0xFFE0E7FF)
-                            : const Color(0xFF64748B),
+                            ? const Color(0xFFCDD5FF)
+                            : const Color(0xFF4E6285),
                         fontSize: 13,
                         fontWeight: selected
                             ? FontWeight.w700 : FontWeight.w500)),
               ),
-
-              // Indicador activo
-              if (selected)
-                Container(
-                  width: 4, height: 4,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF818CF8),
-                    shape: BoxShape.circle,
-                  ),
-                ),
             ]),
           ),
         ),
@@ -493,39 +650,54 @@ class _Sidebar extends StatelessWidget {
     );
   }
 
+  // ── Versión de la app ──────────────────────────────
+  Widget _buildVersion() => Padding(
+    padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+    child: Row(children: [
+      const Icon(Icons.circle, size: 6, color: Color(0xFF1E3050)),
+      const SizedBox(width: 8),
+      Text('v1.0.0',
+          style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFF1E3050),
+              fontSize: 10, fontWeight: FontWeight.w600)),
+    ]),
+  );
+
   // ── Cerrar sesión ──────────────────────────────────
   Widget _buildLogout(BuildContext context) => Container(
-    margin:  const EdgeInsets.all(14),
-    padding: const EdgeInsets.all(2),
+    margin:  const EdgeInsets.fromLTRB(12, 0, 12, 16),
     decoration: BoxDecoration(
-      color:        const Color(0xFF1A1127),
+      color:        const Color(0xFF130A0A),
       borderRadius: BorderRadius.circular(12),
-      border:       Border.all(color: const Color(0xFF2D1B35)),
+      border:       Border.all(color: const Color(0xFF2A1010)),
     ),
     child: Material(
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap:        onLogout,
-        borderRadius: BorderRadius.circular(10),
-        hoverColor:   const Color(0xFFEF4444).withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        hoverColor:   const Color(0xFFEF4444).withOpacity(0.07),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Row(children: [
             Container(
-              width: 32, height: 32,
+              width: 30, height: 30,
               decoration: BoxDecoration(
-                color: const Color(0xFFEF4444).withOpacity(0.12),
+                color: const Color(0xFFEF4444).withOpacity(0.10),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.logout_rounded,
-                  size: 17, color: Color(0xFFF87171)),
+                  size: 16, color: Color(0xFFF87171)),
             ),
             const SizedBox(width: 12),
             Text('Cerrar sesión',
                 style: GoogleFonts.plusJakartaSans(
                     color: const Color(0xFFF87171),
                     fontSize: 13, fontWeight: FontWeight.w700)),
+            const Spacer(),
+            const Icon(Icons.arrow_forward_ios_rounded,
+                size: 10, color: Color(0xFF7B2020)),
           ]),
         ),
       ),
@@ -556,10 +728,10 @@ class _Sidebar extends StatelessWidget {
 // MODELOS INTERNOS
 // ══════════════════════════════════════════════════════
 class _MenuItem {
-  final IconData   icon;
-  final String     label;
+  final IconData     icon;
+  final String       label;
   final List<String> roles;
-  final String     group;
+  final String       group;
   const _MenuItem({
     required this.icon,
     required this.label,
@@ -569,7 +741,7 @@ class _MenuItem {
 }
 
 class _MenuGroup {
-  final String         title;
+  final String          title;
   final List<_MenuItem> items;
   const _MenuGroup(this.title, this.items);
 }

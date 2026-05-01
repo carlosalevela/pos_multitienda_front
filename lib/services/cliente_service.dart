@@ -4,7 +4,6 @@ import '../models/cliente.dart';
 import '../models/separado.dart';
 import '../core/api_client.dart';
 
-
 class ClienteService {
 
   // ── Helper extractor de errores ────────────────────────────
@@ -27,23 +26,30 @@ class ClienteService {
       data is List ? data : (data['results'] as List? ?? []);
 
 
-  // ── Clientes ───────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════
+  // CLIENTES
+  // ══════════════════════════════════════════════════════════
 
-  Future<List<Cliente>> getClientes({String? q}) async {
-    try {
-      final r = await ApiClient.instance.get(
-        '/clientes/',
-        queryParameters: {if (q != null && q.isNotEmpty) 'q': q},
-      );
-      return _parseList(r.data)
-          .map((e) => Cliente.fromJson(e as Map<String, dynamic>))
-          .toList();
-    } on DioException catch (e) {
-      debugPrint('❌ getClientes: ${e.response?.data}');
-      // ✅ Relanza para que el provider muestre el error real
-      rethrow;
-    }
+  Future<List<Cliente>> getClientes({String? q, int? tiendaId}) async {
+  try {
+    final params = {
+      if (q        != null && q.isNotEmpty) 'q':         q,
+      if (tiendaId != null)                 'tienda_id': tiendaId,
+    };
+    debugPrint('🔍 getClientes params: $params');
+    final r = await ApiClient.instance.get(
+      '/clientes/',
+      queryParameters: params,
+    );
+    debugPrint('🔍 getClientes response: ${r.data}');
+    return _parseList(r.data)
+        .map((e) => Cliente.fromJson(e as Map<String, dynamic>))
+        .toList();
+  } on DioException catch (e) {
+    debugPrint('❌ getClientes: ${e.response?.data}');
+    rethrow;
   }
+}
 
   Future<List<Cliente>> getClientesSimple({String? q}) async {
     try {
@@ -70,15 +76,15 @@ class ClienteService {
     }
   }
 
-
-  // ── Crear / editar / desactivar ────────────────────────────
-
   Future<Map<String, dynamic>> crearCliente(
       Map<String, dynamic> data) async {
     try {
-      data.remove('empresa');   // empresa la inyecta el backend
+      data.remove('empresa');
       final r = await ApiClient.instance.post('/clientes/', data: data);
-      return {'success': true, 'data': Cliente.fromJson(r.data as Map<String, dynamic>)};
+      return {
+        'success': true,
+        'data': Cliente.fromJson(r.data as Map<String, dynamic>),
+      };
     } on DioException catch (e) {
       return {'success': false, 'error': _extractError(e, 'Error al crear cliente')};
     } catch (_) {
@@ -91,7 +97,10 @@ class ClienteService {
     try {
       data.remove('empresa');
       final r = await ApiClient.instance.patch('/clientes/$id/', data: data);
-      return {'success': true, 'data': Cliente.fromJson(r.data as Map<String, dynamic>)};
+      return {
+        'success': true,
+        'data': Cliente.fromJson(r.data as Map<String, dynamic>),
+      };
     } on DioException catch (e) {
       return {'success': false, 'error': _extractError(e, 'Error al editar cliente')};
     } catch (_) {
@@ -113,14 +122,16 @@ class ClienteService {
     }
   }
 
-  // ✅ Reactivar cliente (PATCH activo: true)
   Future<Map<String, dynamic>> activarCliente(int id) async {
     try {
       final r = await ApiClient.instance.patch(
         '/clientes/$id/',
         data: {'activo': true},
       );
-      return {'success': true, 'data': Cliente.fromJson(r.data as Map<String, dynamic>)};
+      return {
+        'success': true,
+        'data': Cliente.fromJson(r.data as Map<String, dynamic>),
+      };
     } on DioException catch (e) {
       return {'success': false, 'error': _extractError(e, 'Error al activar cliente')};
     } catch (_) {
@@ -129,17 +140,28 @@ class ClienteService {
   }
 
 
-  // ── Separados ──────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════
+  // SEPARADOS
+  // ══════════════════════════════════════════════════════════
 
   Future<List<Separado>> getSeparados({
-    int? tiendaId, String? estado, int? clienteId,
+    int?          tiendaId,
+    String?       estado,
+    List<String>? estados,   // ← Opción B: múltiples estados
+    int?          clienteId,
   }) async {
+    // ✅ Validación: no usar ambos a la vez
+    assert(
+      !(estado != null && estados != null),
+      'Usa "estado" o "estados", no ambos simultáneamente.',
+    );
     try {
       final r = await ApiClient.instance.get(
         '/clientes/separados/',
         queryParameters: {
           if (tiendaId  != null) 'tienda_id':  tiendaId,
           if (estado    != null) 'estado':      estado,
+          if (estados   != null) 'estado__in':  estados.join(','), // ← csv para Django
           if (clienteId != null) 'cliente_id':  clienteId,
         },
       );
@@ -165,10 +187,12 @@ class ClienteService {
   Future<Map<String, dynamic>> crearSeparado(
       Map<String, dynamic> data) async {
     try {
-      // ✅ Quitado data.remove('empresa') — separado no tiene ese campo
       final r = await ApiClient.instance.post(
           '/clientes/separados/', data: data);
-      return {'success': true, 'data': Separado.fromJson(r.data as Map<String, dynamic>)};
+      return {
+        'success': true,
+        'data': Separado.fromJson(r.data as Map<String, dynamic>),
+      };
     } on DioException catch (e) {
       return {'success': false, 'error': _extractError(e, 'Error al crear separado')};
     } catch (_) {
@@ -182,7 +206,7 @@ class ClienteService {
       final r = await ApiClient.instance.post(
         '/clientes/separados/$id/abonar/',
         data: {
-          'monto':      monto.toStringAsFixed(2),  // ✅ String evita precisión flotante
+          'monto':       monto.toStringAsFixed(2),
           'metodo_pago': metodoPago,
         },
       );
@@ -224,7 +248,6 @@ class ClienteService {
     }
   }
 
-  // ✅ Método faltante — abonos por fecha
   Future<Map<String, dynamic>> getAbonosPorFecha({
     required String fecha,
     int? tiendaId,

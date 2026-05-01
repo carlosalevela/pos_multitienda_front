@@ -1,603 +1,746 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../providers/cliente_provider.dart';
+import '../../providers/empresa_provider.dart';
+import '../../providers/tienda_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../models/cliente.dart';
-import 'widgets/cliente_card.dart';
+import '../../models/empresa_model.dart';
+import '../../models/tienda_model.dart';
 import 'widgets/cliente_form.dart';
-import 'widgets/cliente_search_bar.dart';
-import 'widgets/alertas_badge.dart';
+import 'widgets/cliente_detalle_sheet.dart';
 
+const _teal   = Color(0xFF01696F);
+const _danger = Color(0xFFE03E3E);
+const _bg     = Color(0xFFF2F5F7);
+
+enum _Fase { empresa, tienda, clientes }
+
+// ─── SCREEN ──────────────────────────────────────────────────
 class ClientesScreen extends StatefulWidget {
   final bool esAdminOSupervisor;
-
-  const ClientesScreen({
-    super.key,
-    required this.esAdminOSupervisor,
-  });
+  const ClientesScreen({super.key, required this.esAdminOSupervisor});
 
   @override
   State<ClientesScreen> createState() => _ClientesScreenState();
 }
 
 class _ClientesScreenState extends State<ClientesScreen> {
+  // ── Navegación ──────────────────────────────────────
+  _Fase        _fase            = _Fase.empresa;
+  int?         _empresaId;
+  String       _empresaNombre   = '';
+  int?         _tiendaId;
+  String       _tiendaNombre    = '';
+  List<Tienda> _tiendas         = [];
+  bool         _cargandoTiendas = false;
+
+  // ── Clientes ─────────────────────────────────────────
+  final _searchCtrl = TextEditingController();
+  String _filtro    = 'todos';
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final prov = context.read<ClienteProvider>();
-      await prov.cargarClientes();
-      await prov.cargarAlertas();
+      if (!mounted) return;
+      if (widget.esAdminOSupervisor) {
+        await context.read<EmpresaProvider>().cargarEmpresas();
+      } else {
+        final auth = context.read<AuthProvider>();
+        setState(() {
+          _tiendaId     = auth.tiendaId;
+          _tiendaNombre = auth.tiendaNombre;
+          _fase         = _Fase.clientes;
+        });
+        if (!mounted) return;
+        final prov = context.read<ClienteProvider>();
+        await prov.cargarClientes(tiendaId: _tiendaId);
+        await prov.cargarAlertas(tiendaId: _tiendaId); // ✅ fix 1
+      }
     });
   }
 
-  void _mostrarFormCrear() {
-    ClienteForm.mostrar(
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  // ── Seleccionar empresa ──────────────────────────────
+  Future<void> _seleccionarEmpresa(Empresa e) async {
+    setState(() {
+      _empresaId       = e.id;
+      _empresaNombre   = e.nombre;
+      _fase            = _Fase.tienda;
+      _tiendas         = [];
+      _cargandoTiendas = true;
+    });
+    try {
+      await context.read<TiendaProvider>().cargarTiendasPorEmpresa(e.id);
+      if (mounted) {
+        setState(() {
+          _tiendas         = context.read<TiendaProvider>().tiendas;
+          _cargandoTiendas = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _cargandoTiendas = false);
+    }
+  }
+
+  // ── Seleccionar tienda ───────────────────────────────
+  Future<void> _seleccionarTienda(Tienda t) async {
+    setState(() {
+      _tiendaId     = t.id;
+      _tiendaNombre = t.nombre;
+      _fase         = _Fase.clientes;
+      _filtro       = 'todos';
+      _searchCtrl.clear();
+    });
+    if (!mounted) return;
+    final prov = context.read<ClienteProvider>();
+    await prov.cargarClientes(tiendaId: t.id);
+    await prov.cargarAlertas(tiendaId: t.id); // ✅ fix 2
+  }
+
+  // ── Recargar tiendas ─────────────────────────────────
+  Future<void> _recargarTiendas() async {
+    if (_empresaId == null) return;
+    setState(() { _tiendas = []; _cargandoTiendas = true; });
+    try {
+      await context.read<TiendaProvider>().cargarTiendasPorEmpresa(_empresaId!);
+      if (mounted) {
+        setState(() {
+          _tiendas         = context.read<TiendaProvider>().tiendas;
+          _cargandoTiendas = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _cargandoTiendas = false);
+    }
+  }
+
+  // ── Retroceder ───────────────────────────────────────
+  void _retroceder() {
+    if (_fase == _Fase.clientes) {
+      final prov = context.read<ClienteProvider>();
+      prov.limpiarClientes();
+      prov.limpiarAlertas(); // ✅ fix 3
+      setState(() {
+        _tiendaId     = null;
+        _tiendaNombre = '';
+        _fase         = _Fase.tienda;
+      });
+    } else if (_fase == _Fase.tienda) {
+      setState(() {
+        _empresaId     = null;
+        _empresaNombre = '';
+        _tiendas       = [];
+        _fase          = _Fase.empresa;
+      });
+    }
+  }
+
+  // ── Clientes ─────────────────────────────────────────
+  List<Cliente> _filtrados(List<Cliente> lista) {
+    if (_filtro == 'activos')   return lista.where((c) => c.activo).toList();
+    if (_filtro == 'inactivos') return lista.where((c) => !c.activo).toList();
+    return lista;
+  }
+
+  void _snack(String msg, {Color color = _teal}) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content:         Text(msg),
+      backgroundColor: color,
+      behavior:        SnackBarBehavior.floating,
+      margin:          const EdgeInsets.all(16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ));
+  }
+
+  void _abrirFormCrear() {
+    ClienteForm.mostrar(context,
+        onGuardado: () => context
+            .read<ClienteProvider>()
+            .cargarClientes(tiendaId: _tiendaId));
+  }
+
+  void _abrirFormEditar(Cliente c) {
+    ClienteForm.mostrar(context,
+        cliente:    c,
+        onGuardado: () => context
+            .read<ClienteProvider>()
+            .cargarClientes(tiendaId: _tiendaId));
+  }
+
+  void _verDetalle(Cliente c) {
+    ClienteDetalleSheet.mostrar(
       context,
-      onGuardado: () async {
-        await context.read<ClienteProvider>().cargarClientes();
-      },
+      cliente:            c,
+      esAdminOSupervisor: widget.esAdminOSupervisor,
+      onEditar:    () { Navigator.pop(context); _abrirFormEditar(c); },
+      onDesactivar: () { Navigator.pop(context); _confirmarDesactivar(c); },
     );
   }
 
-  void _mostrarFormEditar(Cliente cliente) {
-    ClienteForm.mostrar(
-      context,
-      cliente: cliente,
-      onGuardado: () async {
-        await context.read<ClienteProvider>().cargarClientes();
-      },
-    );
-  }
-
-  Future<void> _confirmarDesactivar(Cliente cliente) async {
+  Future<void> _confirmarDesactivar(Cliente c) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-        ),
-        title: Text(
-          '¿Desactivar cliente?',
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.bold,
-            fontSize: 17,
-          ),
-        ),
-        content: Text(
-          'El cliente "${cliente.nombreCompleto}" dejará de aparecer en las búsquedas activas.',
-          style: GoogleFonts.poppins(fontSize: 13),
-        ),
+        title:   const Text('¿Desactivar cliente?'),
+        content: Text('"${c.nombreCompleto}" dejará de aparecer en búsquedas.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(
-              'Cancelar',
-              style: GoogleFonts.poppins(color: Colors.grey.shade600),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade500,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            child: Text(
-              'Desactivar',
-              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-            ),
-          ),
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Desactivar',
+                  style: TextStyle(color: _danger))),
         ],
       ),
     );
-
     if (ok != true || !mounted) return;
-
-    final prov = context.read<ClienteProvider>();
-    final success = await prov.desactivarCliente(cliente.id);
-
+    final prov    = context.read<ClienteProvider>();
+    final success = await prov.desactivarCliente(c.id);
     if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          success
-              ? 'Cliente desactivado correctamente'
-              : (prov.error ?? 'No se pudo desactivar el cliente'),
-          style: GoogleFonts.poppins(fontSize: 13),
-        ),
-        backgroundColor:
-            success ? const Color(0xFF437A22) : Colors.red.shade600,
-        behavior: SnackBarBehavior.floating,
-      ),
+    _snack(
+      success ? 'Cliente desactivado' : (prov.error ?? 'No se pudo desactivar'),
+      color: success ? _teal : _danger,
     );
   }
 
-  void _verDetalleCliente(Cliente cliente) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => _ClienteDetalleSheet(
-        cliente: cliente,
-        esAdminOSupervisor: widget.esAdminOSupervisor,
-        onEditar: () {
-          Navigator.pop(context);
-          _mostrarFormEditar(cliente);
-        },
-        onDesactivar: () {
-          Navigator.pop(context);
-          _confirmarDesactivar(cliente);
-        },
+  // ── AppBar dinámico ──────────────────────────────────
+  PreferredSizeWidget _buildAppBar() {
+    final (titulo, sub) = switch (_fase) {
+      _Fase.empresa  => ('Clientes',     'Selecciona una empresa'),
+      _Fase.tienda   => (_empresaNombre, 'Selecciona una sucursal'),
+      _Fase.clientes => (_tiendaNombre,  _empresaNombre),
+    };
+    return AppBar(
+      backgroundColor: _teal,
+      foregroundColor: Colors.white,
+      leading: widget.esAdminOSupervisor && _fase != _Fase.empresa
+          ? IconButton(
+              icon:      const Icon(Icons.arrow_back_rounded),
+              onPressed: _retroceder,
+            )
+          : null,
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(titulo,
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, fontSize: 16)),
+          if (sub.isNotEmpty)
+            Text(sub,
+                style: const TextStyle(
+                    fontSize: 11, color: Colors.white70)),
+        ],
       ),
+      actions: [
+        if (_fase == _Fase.clientes)
+          Consumer<ClienteProvider>(
+            builder: (_, p, __) => p.totalAlertas > 0
+                ? Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: Chip(
+                      backgroundColor: Colors.amber,
+                      label: Text('${p.totalAlertas} alertas',
+                          style: const TextStyle(fontSize: 12)),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+      ],
     );
   }
 
-  Future<void> _recargar() async {
-    final prov = context.read<ClienteProvider>();
-    await prov.cargarClientes();
-    await prov.cargarAlertas();
-  }
-
+  // ── Build ────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    return Consumer<ClienteProvider>(
-      builder: (_, prov, __) {
-        final clientes = prov.clientes;
+    return Scaffold(
+      backgroundColor: _bg,
+      appBar:          _buildAppBar(),
+      floatingActionButton: _fase == _Fase.clientes
+          ? FloatingActionButton.extended(
+              onPressed:       _abrirFormCrear,
+              backgroundColor: _teal,
+              foregroundColor: Colors.white,
+              icon:            const Icon(Icons.person_add_rounded),
+              label:           const Text('Nuevo cliente'),
+            )
+          : null,
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Header ──────────────────────────────────────
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Clientes',
-                        style: GoogleFonts.poppins(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF28251D),
-                        ),
-                      ),
-                      Text(
-                        '${clientes.length} registrados',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: const Color(0xFF7A7974),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                AlertasBadge(
-                  total: prov.totalAlertas,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          prov.totalAlertas > 0
-                              ? 'Tienes ${prov.totalAlertas} alertas de separados'
-                              : 'No hay alertas activas',
-                          style: GoogleFonts.poppins(fontSize: 13),
-                        ),
-                        behavior: SnackBarBehavior.floating,
-                      ),
+      body: switch (_fase) {
+
+        // ── FASE 1: Empresas ──────────────────────────
+        _Fase.empresa => Consumer<EmpresaProvider>(
+          builder: (_, prov, __) {
+            if (prov.cargando) {
+              return const Center(
+                  child: CircularProgressIndicator(color: _teal));
+            }
+            if (prov.errorMsg.isNotEmpty) {
+              return _ErrorVacio(
+                msg:     prov.errorMsg,
+                onRetry: prov.cargarEmpresas,
+              );
+            }
+            if (prov.empresas.isEmpty) {
+              return const _Vacio(
+                icon:    Icons.business_outlined,
+                mensaje: 'No hay empresas disponibles',
+              );
+            }
+            return Column(children: [
+              _StatsStrip(items: [
+                ('Total',     '${prov.totalEmpresas}'),
+                ('Activas',   '${prov.totalActivas}'),
+                ('Inactivas', '${prov.totalInactivas}'),
+              ]),
+              Expanded(
+                child: ListView.separated(
+                  padding:          const EdgeInsets.all(12),
+                  itemCount:        prov.empresas.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (_, i) {
+                    final e = prov.empresas[i];
+                    return _EmpresaTile(
+                      empresa: e,
+                      onTap:   () => _seleccionarEmpresa(e),
                     );
                   },
                 ),
-              ],
-            ),
+              ),
+            ]);
+          },
+        ),
 
-            const SizedBox(height: 14),
-
-            // ── Search bar ─────────────────────────────────
-            ClienteSearchBar(
-              onSearch: (q) => prov.cargarClientes(q: q),
-              onAgregar:
-                  widget.esAdminOSupervisor ? _mostrarFormCrear : null,
-            ),
-
-            const SizedBox(height: 14),
-
-            // ── Estado error ───────────────────────────────
-            if (prov.error != null) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.red.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.error_outline_rounded,
-                        color: Colors.red.shade400, size: 18),
-                    const SizedBox(width: 8),
+        // ── FASE 2: Tiendas ───────────────────────────
+        _Fase.tienda => _cargandoTiendas
+            ? const Center(child: CircularProgressIndicator(color: _teal))
+            : _tiendas.isEmpty
+                ? const _Vacio(
+                    icon:    Icons.store_outlined,
+                    mensaje: 'Esta empresa no tiene sucursales',
+                  )
+                : Column(children: [
+                    _StatsStrip(items: [
+                      ('Sucursales', '${_tiendas.length}'),
+                      ('Activas',
+                          '${_tiendas.where((t) => t.activo).length}'),
+                      ('Inactivas',
+                          '${_tiendas.where((t) => !t.activo).length}'),
+                    ]),
                     Expanded(
-                      child: Text(
-                        prov.error!,
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: Colors.red.shade700,
+                      child: ListView.separated(
+                        padding:          const EdgeInsets.all(12),
+                        itemCount:        _tiendas.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: 8),
+                        itemBuilder: (_, i) => _TiendaTile(
+                          tienda: _tiendas[i],
+                          onTap:  () => _seleccionarTienda(_tiendas[i]),
                         ),
                       ),
                     ),
-                    GestureDetector(
-                      onTap: prov.limpiarError,
-                      child: Icon(Icons.close_rounded,
-                          size: 18, color: Colors.red.shade300),
-                    ),
-                  ],
+                  ]),
+
+        // ── FASE 3: Clientes ──────────────────────────
+        _Fase.clientes => Consumer<ClienteProvider>(
+          builder: (_, prov, __) {
+            final lista = _filtrados(prov.clientes);
+            return Column(children: [
+              _StatsStrip(items: [
+                ('Total',     '${prov.clientes.length}'),
+                ('Activos',   '${prov.clientes.where((c) => c.activo).length}'),
+                ('Inactivos', '${prov.clientes.where((c) => !c.activo).length}'),
+              ]),
+
+              // Búsqueda
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: TextField(
+                  controller: _searchCtrl,
+                  onChanged:  (q) =>
+                      prov.cargarClientes(tiendaId: _tiendaId, q: q),
+                  decoration: InputDecoration(
+                    hintText:   'Buscar cliente…',
+                    prefixIcon: const Icon(Icons.search),
+                    filled:     true,
+                    fillColor:  Colors.white,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide:   BorderSide.none),
+                    suffixIcon: _searchCtrl.text.isNotEmpty
+                        ? IconButton(
+                            icon:      const Icon(Icons.close),
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              setState(() => _filtro = 'todos');
+                              prov.cargarClientes(tiendaId: _tiendaId);
+                            },
+                          )
+                        : null,
+                  ),
                 ),
               ),
-              const SizedBox(height: 12),
-            ],
 
-            // ── Lista ──────────────────────────────────────
-            Expanded(
-              child: prov.cargando
-                  ? const Center(child: CircularProgressIndicator())
-                  : clientes.isEmpty
-                      ? _EstadoVacio(
-                          esAdminOSupervisor: widget.esAdminOSupervisor,
-                          onCrear: _mostrarFormCrear,
-                          onRecargar: _recargar,
-                        )
-                      : RefreshIndicator(
-                          onRefresh: _recargar,
-                          color: const Color(0xFF01696F),
-                          child: ListView.builder(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            itemCount: clientes.length,
-                            itemBuilder: (_, i) {
-                              final cliente = clientes[i];
-                              return ClienteCard(
-                                cliente: cliente,
-                                mostrarAcciones: widget.esAdminOSupervisor,
-                                onTap: () => _verDetalleCliente(cliente),
-                                onEditar: () => _mostrarFormEditar(cliente),
-                                onDesactivar: () =>
-                                    _confirmarDesactivar(cliente),
-                              );
+              // Filtros
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                child: Row(children: [
+                  for (final (label, key) in [
+                    ('Todos',    'todos'),
+                    ('Activos',  'activos'),
+                    ('Inactivos','inactivos'),
+                  ])
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label:         Text(label),
+                        selected:      _filtro == key,
+                        onSelected:    (_) => setState(() => _filtro = key),
+                        selectedColor: _teal,
+                        labelStyle: TextStyle(
+                            color: _filtro == key ? Colors.white : null),
+                      ),
+                    ),
+                ]),
+              ),
+
+              // Banner error
+              if (prov.error != null)
+                ListTile(
+                  tileColor: _danger.withOpacity(0.08),
+                  leading:   const Icon(Icons.error_outline, color: _danger),
+                  title:     Text(prov.error!,
+                      style: const TextStyle(
+                          color: _danger, fontSize: 13)),
+                  trailing: IconButton(
+                      icon:      const Icon(Icons.close, size: 18),
+                      onPressed: prov.limpiarError),
+                ),
+
+              // Lista
+              Expanded(
+                child: prov.cargando
+                    ? const Center(
+                        child: CircularProgressIndicator(color: _teal))
+                    : lista.isEmpty
+                        ? _Vacio(
+                            icon:    Icons.people_outline,
+                            mensaje: 'Sin resultados',
+                            accion: TextButton(
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                setState(() => _filtro = 'todos');
+                                prov.cargarClientes(tiendaId: _tiendaId);
+                              },
+                              child: const Text('Limpiar filtros'),
+                            ),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: () async {
+                              await prov.cargarClientes(
+                                  tiendaId: _tiendaId,
+                                  q:        _searchCtrl.text);
+                              await prov.cargarAlertas(tiendaId: _tiendaId); // ✅ fix 4
                             },
+                            color: _teal,
+                            child: ListView.separated(
+                              padding: const EdgeInsets.fromLTRB(
+                                  12, 0, 12, 100),
+                              itemCount:        lista.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 8),
+                              itemBuilder: (_, i) => _ClienteTile(
+                                cliente:            lista[i],
+                                esAdminOSupervisor: widget.esAdminOSupervisor,
+                                onTap:       () => _verDetalle(lista[i]),
+                                onEditar:    () => _abrirFormEditar(lista[i]),
+                                onDesactivar: () =>
+                                    _confirmarDesactivar(lista[i]),
+                              ),
+                            ),
                           ),
-                        ),
-            ),
-          ],
-        );
+              ),
+            ]);
+          },
+        ),
       },
     );
   }
 }
 
-// ═════════════════════════════════════════════════════════════
+// ─── STATS STRIP ─────────────────────────────────────────────
+class _StatsStrip extends StatelessWidget {
+  final List<(String, String)> items;
+  const _StatsStrip({required this.items});
 
-class _EstadoVacio extends StatelessWidget {
-  final bool esAdminOSupervisor;
-  final VoidCallback onCrear;
-  final Future<void> Function() onRecargar;
+  @override
+  Widget build(BuildContext context) => Container(
+    color:   _teal,
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+    child:   Row(
+      children: items.map((e) => _Stat(e.$1, e.$2)).toList(),
+    ),
+  );
+}
 
-  const _EstadoVacio({
-    required this.esAdminOSupervisor,
-    required this.onCrear,
-    required this.onRecargar,
-  });
+class _Stat extends StatelessWidget {
+  final String label, value;
+  const _Stat(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: Container(
+      margin:  const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color:        Colors.white.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(children: [
+        Text(value,
+            style: const TextStyle(
+                color:      Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize:   18)),
+        Text(label,
+            style: const TextStyle(
+                color: Colors.white70, fontSize: 11)),
+      ]),
+    ),
+  );
+}
+
+// ─── EMPRESA TILE ─────────────────────────────────────────────
+class _EmpresaTile extends StatelessWidget {
+  final Empresa      empresa;
+  final VoidCallback onTap;
+  const _EmpresaTile({required this.empresa, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      children: [
-        const SizedBox(height: 80),
-        Center(
-          child: Container(
-            width: 68,
-            height: 68,
-            decoration: BoxDecoration(
-              color: const Color(0xFF01696F).withOpacity(0.08),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Icon(
-              Icons.people_alt_outlined,
-              size: 32,
-              color: Color(0xFF01696F),
-            ),
-          ),
+    final activa = empresa.activo;
+    final subtitulo = [
+      if (empresa.nit.isNotEmpty)    'NIT: ${empresa.nit}',
+      if (empresa.ciudad.isNotEmpty)  empresa.ciudad,
+    ].join(' · ');
+
+    return ListTile(
+      onTap:     activa ? onTap : null,
+      tileColor: Colors.white,
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12)),
+      leading: Container(
+        width:  42, height: 42,
+        decoration: BoxDecoration(
+          color:        _teal.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(12),
         ),
-        const SizedBox(height: 14),
-        Center(
-          child: Text(
-            'No hay clientes aún',
-            style: GoogleFonts.poppins(
-              fontSize: 16,
+        child: const Icon(Icons.business_rounded,
+            color: _teal, size: 22),
+      ),
+      title: Text(empresa.nombre,
+          style: TextStyle(
               fontWeight: FontWeight.w700,
-              color: const Color(0xFF28251D),
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 28),
-            child: Text(
-              esAdminOSupervisor
-                  ? 'Crea tu primer cliente para empezar a registrar ventas y separados.'
-                  : 'Todavía no hay clientes disponibles para mostrar.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                fontSize: 12,
-                color: const Color(0xFF7A7974),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 18),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (esAdminOSupervisor)
-              ElevatedButton.icon(
-                onPressed: onCrear,
-                icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
-                label: Text(
-                  'Nuevo cliente',
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF01696F),
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 18, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            if (esAdminOSupervisor) const SizedBox(width: 10),
-            OutlinedButton.icon(
-              onPressed: onRecargar,
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: Text(
-                'Recargar',
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF01696F),
-                side: const BorderSide(color: Color(0xFF01696F)),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
+              color: activa ? null : Colors.grey)),
+      subtitle: subtitulo.isNotEmpty
+          ? Text(subtitulo, style: const TextStyle(fontSize: 12))
+          : null,
+      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        _Badge(activo: activa, labelOn: 'Activa', labelOff: 'Inactiva'),
+        if (activa) ...[
+          const SizedBox(width: 4),
+          const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+        ],
+      ]),
     );
   }
 }
 
-// ═════════════════════════════════════════════════════════════
-
-class _ClienteDetalleSheet extends StatelessWidget {
-  final Cliente cliente;
-  final bool esAdminOSupervisor;
-  final VoidCallback? onEditar;
-  final VoidCallback? onDesactivar;
-
-  const _ClienteDetalleSheet({
-    required this.cliente,
-    required this.esAdminOSupervisor,
-    this.onEditar,
-    this.onDesactivar,
-  });
-
-  Widget _infoTile(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          Icon(icon, size: 17, color: const Color(0xFFBAB9B4)),
-          const SizedBox(width: 10),
-          Text(
-            '$label  ',
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              color: const Color(0xFF7A7974),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value.isEmpty ? '—' : value,
-              textAlign: TextAlign.end,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.poppins(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF28251D),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+// ─── TIENDA TILE ──────────────────────────────────────────────
+class _TiendaTile extends StatelessWidget {
+  final Tienda       tienda;
+  final VoidCallback onTap;
+  const _TiendaTile({required this.tienda, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final iniciales = [
-      cliente.nombre.isNotEmpty ? cliente.nombre[0] : '',
-      cliente.apellido.isNotEmpty ? cliente.apellido[0] : '',
-    ].join().toUpperCase();
+    final activa = tienda.activo;
+    final subtitulo = [
+      if (tienda.ciudad.isNotEmpty)    tienda.ciudad,
+      if (tienda.direccion.isNotEmpty) tienda.direccion,
+      if (tienda.telefono.isNotEmpty)  'Tel: ${tienda.telefono}',
+    ].join(' · ');
 
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.88,
+    return ListTile(
+      onTap:     activa ? onTap : null,
+      tileColor: Colors.white,
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12)),
+      leading: Container(
+        width:  42, height: 42,
+        decoration: BoxDecoration(
+          color:        _teal.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(Icons.store_rounded, color: _teal, size: 22),
       ),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(top: 12, bottom: 20),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(22, 0, 22, 22),
-            child: Column(
-              children: [
-                Container(
-                  width: 62,
-                  height: 62,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF01696F).withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Center(
-                    child: Text(
-                      iniciales,
-                      style: GoogleFonts.poppins(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF01696F),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  cliente.nombreCompleto,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF28251D),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: cliente.activo
-                        ? const Color(0xFFD4DFCC)
-                        : const Color(0xFFF3F0EC),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    cliente.activo ? 'Activo' : 'Inactivo',
-                    style: GoogleFonts.poppins(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: cliente.activo
-                          ? const Color(0xFF437A22)
-                          : const Color(0xFF7A7974),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 22),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF9F8F5),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFEDEAE5)),
-                  ),
-                  child: Column(
-                    children: [
-                      _infoTile(Icons.badge_outlined, 'Cédula/NIT',
-                          cliente.cedulaNit ?? '—'),
-                      _infoTile(
-                          Icons.phone_outlined, 'Teléfono', cliente.telefono),
-                      _infoTile(Icons.email_outlined, 'Email', cliente.email),
-                      _infoTile(Icons.location_on_outlined, 'Dirección',
-                          cliente.direccion),
-                    ],
-                  ),
-                ),
-                if (esAdminOSupervisor) ...[
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: onEditar,
-                          icon: const Icon(Icons.edit_outlined, size: 17),
-                          label: Text(
-                            'Editar',
-                            style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFF01696F),
-                            side: const BorderSide(
-                              color: Color(0xFF01696F),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 13),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: onDesactivar,
-                          icon: const Icon(Icons.person_off_outlined, size: 17),
-                          label: Text(
-                            'Desactivar',
-                            style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red.shade500,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(vertical: 13),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
+      title: Text(tienda.nombre,
+          style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: activa ? null : Colors.grey)),
+      subtitle: subtitulo.isNotEmpty
+          ? Text(subtitulo, style: const TextStyle(fontSize: 12))
+          : null,
+      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        _Badge(activo: activa, labelOn: 'Activa', labelOff: 'Inactiva'),
+        if (activa) ...[
+          const SizedBox(width: 4),
+          const Icon(Icons.chevron_right_rounded, color: Colors.grey),
         ],
-      ),
+      ]),
     );
   }
+}
+
+// ─── CLIENTE TILE ─────────────────────────────────────────────
+class _ClienteTile extends StatelessWidget {
+  final Cliente      cliente;
+  final bool         esAdminOSupervisor;
+  final VoidCallback onTap;
+  final VoidCallback onEditar;
+  final VoidCallback onDesactivar;
+
+  const _ClienteTile({
+    required this.cliente,
+    required this.esAdminOSupervisor,
+    required this.onTap,
+    required this.onEditar,
+    required this.onDesactivar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = cliente;
+    final iniciales = [
+      c.nombre.isNotEmpty   ? c.nombre[0]   : '',
+      c.apellido.isNotEmpty ? c.apellido[0] : '',
+    ].join().toUpperCase();
+
+    return ListTile(
+      onTap:     onTap,
+      tileColor: Colors.white,
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12)),
+      leading: CircleAvatar(
+        backgroundColor: c.activo ? _teal : Colors.grey,
+        child: Text(iniciales,
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold)),
+      ),
+      title: Text(c.nombreCompleto,
+          style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: c.activo ? null : Colors.grey)),
+      subtitle: c.telefono.isNotEmpty ? Text(c.telefono) : null,
+      trailing: esAdminOSupervisor
+          ? Row(mainAxisSize: MainAxisSize.min, children: [
+              IconButton(
+                icon: const Icon(Icons.edit_rounded,
+                    size: 18, color: _teal),
+                onPressed: onEditar,
+              ),
+              IconButton(
+                icon: const Icon(Icons.person_off_rounded,
+                    size: 18, color: _danger),
+                onPressed: onDesactivar,
+              ),
+            ])
+          : _Badge(
+              activo:   c.activo,
+              labelOn:  'Activo',
+              labelOff: 'Inactivo',
+            ),
+    );
+  }
+}
+
+// ─── BADGE ────────────────────────────────────────────────────
+class _Badge extends StatelessWidget {
+  final bool   activo;
+  final String labelOn, labelOff;
+  const _Badge({
+    required this.activo,
+    required this.labelOn,
+    required this.labelOff,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: activo
+          ? _teal.withOpacity(0.10)
+          : Colors.grey.withOpacity(0.10),
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: Text(
+      activo ? labelOn : labelOff,
+      style: TextStyle(
+          fontSize:   11,
+          fontWeight: FontWeight.bold,
+          color: activo ? _teal : Colors.grey),
+    ),
+  );
+}
+
+// ─── ESTADO VACÍO ─────────────────────────────────────────────
+class _Vacio extends StatelessWidget {
+  final IconData icon;
+  final String   mensaje;
+  final Widget?  accion;
+  const _Vacio({
+    required this.icon,
+    required this.mensaje,
+    this.accion,
+  });
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 48, color: Colors.grey),
+      const SizedBox(height: 12),
+      Text(mensaje, style: const TextStyle(color: Colors.grey)),
+      if (accion != null) accion!,
+    ]),
+  );
+}
+
+// ─── ERROR + RETRY ────────────────────────────────────────────
+class _ErrorVacio extends StatelessWidget {
+  final String       msg;
+  final VoidCallback onRetry;
+  const _ErrorVacio({required this.msg, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      const Icon(Icons.error_outline, size: 48, color: _danger),
+      const SizedBox(height: 12),
+      Text(msg, style: const TextStyle(color: _danger)),
+      const SizedBox(height: 12),
+      TextButton.icon(
+        onPressed: onRetry,
+        icon:  const Icon(Icons.refresh_rounded),
+        label: const Text('Reintentar'),
+      ),
+    ]),
+  );
 }

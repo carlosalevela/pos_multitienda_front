@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../../../providers/reportes_provider.dart';
+import '../../../providers/contabilidad_provider.dart';
 import 'reporte_utils.dart';
 
 class ReporteKpis extends StatelessWidget {
@@ -9,7 +11,12 @@ class ReporteKpis extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tieneDev = rep.numDevoluciones > 0;
+    final totalGastos = context
+        .watch<ContabilidadProvider>()
+        .gastos
+        .fold(0.0, (s, g) => s + g.monto);
+
+    final tieneDev    = rep.numDevoluciones > 0;
     final impactoCaja = rep.impactoCajaDevoluciones;
 
     final impactoTexto = impactoCaja > 0
@@ -25,14 +32,14 @@ class ReporteKpis extends StatelessWidget {
             : '\$0';
 
     final impactoColor = impactoCaja > 0
-        ? Colors.green.shade700
+        ? const Color(0xFF2E7D32)
         : impactoCaja < 0
             ? kDevColor
-            : Colors.blueGrey.shade600;
+            : const Color(0xFF546E7A);
 
     final netoColor = rep.totalNeto >= 0
         ? const Color(0xFF1565C0)
-        : Colors.red.shade700;
+        : const Color(0xFFC62828);
 
     final kpis = <KpiData>[
       KpiData(
@@ -65,7 +72,7 @@ class ReporteKpis extends StatelessWidget {
         icon: Icons.trending_up_rounded,
         label: 'Ticket promedio',
         valor: '\$${fmtNum(rep.ticketPromedio)}',
-        color: const Color(0xFF7B1FA2),
+        color: const Color(0xFF6A1B9A),
       ),
       KpiData(
         icon: Icons.discount_rounded,
@@ -73,6 +80,13 @@ class ReporteKpis extends StatelessWidget {
         valor: '\$${fmtNum(rep.totalDescuentos)}',
         color: const Color(0xFFE65100),
       ),
+      if (totalGastos > 0)
+        KpiData(
+          icon: Icons.account_balance_wallet_outlined,
+          label: 'Gastos del día',
+          valor: '-\$${fmtNum(totalGastos)}',
+          color: const Color(0xFFF57C00),
+        ),
       if (rep.totalAbonos > 0)
         KpiData(
           icon: Icons.bookmark_rounded,
@@ -85,39 +99,33 @@ class ReporteKpis extends StatelessWidget {
           icon: Icons.cancel_rounded,
           label: 'Anuladas',
           valor: '${rep.totalAnuladas}',
-          color: Colors.red.shade700,
+          color: const Color(0xFFC62828),
         ),
       if (rep.numCambiosExactos > 0)
         KpiData(
           icon: Icons.swap_horiz_rounded,
           label: 'Cambios exactos',
           valor: '${rep.numCambiosExactos}',
-          color: Colors.blueGrey.shade600,
+          color: const Color(0xFF546E7A),
         ),
     ];
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        final cardWidth = width >= 1400
-            ? (width - 30) / 4
-            : width >= 1000
-                ? (width - 20) / 3
-                : width >= 700
-                    ? (width - 10) / 2
-                    : width;
+        final cols  = width >= 900 ? 4 : width >= 550 ? 3 : 2;
 
-        return Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: kpis
-              .map(
-                (kpi) => SizedBox(
-                  width: cardWidth,
-                  child: _KpiCard(data: kpi),
-                ),
-              )
-              .toList(),
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 2.6,
+          ),
+          itemCount: kpis.length,
+          itemBuilder: (_, i) => _KpiCard(data: kpis[i]),
         );
       },
     );
@@ -131,19 +139,11 @@ class _KpiCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 86,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: data.color.withOpacity(0.18)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          )
-        ],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFECEFF1)),
       ),
       child: Row(
         children: [
@@ -167,19 +167,19 @@ class _KpiCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
                     color: kDark,
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 1),
                 Text(
                   data.label,
-                  maxLines: 2,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.poppins(
                     fontSize: 11,
-                    color: Colors.grey.shade500,
+                    color: const Color(0xFF90A4AE),
                   ),
                 ),
               ],

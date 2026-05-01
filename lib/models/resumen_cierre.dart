@@ -8,7 +8,6 @@ class VentasCierre {
     required this.total, required this.numTransacciones,
   });
 
-  // ✅ tryParse — aguanta String y num del backend
   factory VentasCierre.fromJson(Map<String, dynamic> j) => VentasCierre(
     efectivo:         double.tryParse(j['efectivo']?.toString()      ?? '0') ?? 0.0,
     tarjeta:          double.tryParse(j['tarjeta']?.toString()       ?? '0') ?? 0.0,
@@ -21,14 +20,12 @@ class VentasCierre {
 
 
 class AbonosCierre {
-  final double total, efectivo, transferencia; // ✅ breakdown por método
+  final double total, efectivo, transferencia;
   final int    cantidad;
 
   AbonosCierre({
-    required this.total,
-    required this.efectivo,
-    required this.transferencia,
-    required this.cantidad,
+    required this.total, required this.efectivo,
+    required this.transferencia, required this.cantidad,
   });
 
   factory AbonosCierre.fromJson(Map<String, dynamic> j) => AbonosCierre(
@@ -38,8 +35,8 @@ class AbonosCierre {
     cantidad:      j['cantidad'] ?? 0,
   );
 
-  factory AbonosCierre.vacio() => AbonosCierre(
-    total: 0, efectivo: 0, transferencia: 0, cantidad: 0);
+  factory AbonosCierre.vacio() =>
+      AbonosCierre(total: 0, efectivo: 0, transferencia: 0, cantidad: 0);
 }
 
 
@@ -79,13 +76,45 @@ class GastosCierre {
 }
 
 
+// ── NUEVO ─────────────────────────────────────────────────────
+class DevolucionesCierre {
+  final double efectivo, cambiosCobrar, cambiosDevolver, netoEfectivo;
+  final int    cantidad;
+  final int    cambiosProducto;
+
+  DevolucionesCierre({
+    required this.efectivo,
+    required this.cambiosCobrar,
+    required this.cambiosDevolver,
+    required this.netoEfectivo,
+    required this.cantidad,
+    required this.cambiosProducto,
+  });
+
+  factory DevolucionesCierre.fromJson(Map<String, dynamic> j) =>
+      DevolucionesCierre(
+        efectivo:        double.tryParse(j['efectivo']?.toString()         ?? '0') ?? 0.0,
+        cambiosCobrar:   double.tryParse(j['cambios_cobrar']?.toString()   ?? '0') ?? 0.0,
+        cambiosDevolver: double.tryParse(j['cambios_devolver']?.toString() ?? '0') ?? 0.0,
+        netoEfectivo:    double.tryParse(j['neto_efectivo']?.toString()    ?? '0') ?? 0.0,
+        cantidad:        (j['cantidad'] as num?)?.toInt() ?? 0,
+        cambiosProducto: (j['cambios_producto'] as num?)?.toInt() ?? 0,  // ← AGREGAR
+      );
+
+  factory DevolucionesCierre.vacio() => DevolucionesCierre(
+      efectivo: 0, cambiosCobrar: 0,
+      cambiosDevolver: 0, netoEfectivo: 0, cantidad: 0, cambiosProducto: 0);
+}
+
+
 class ResumenCierre {
   final int    sesionId;
   final String tiendaNombre, empleadoNombre, fechaApertura;
   final double montoInicial, montoEsperadoCaja;
-  final VentasCierre ventas;
-  final GastosCierre gastos;
-  final AbonosCierre abonos;
+  final VentasCierre      ventas;
+  final GastosCierre      gastos;
+  final AbonosCierre      abonos;
+  final DevolucionesCierre devoluciones;  // ← NUEVO
 
   ResumenCierre({
     required this.sesionId,       required this.tiendaNombre,
@@ -93,19 +122,23 @@ class ResumenCierre {
     required this.montoInicial,   required this.montoEsperadoCaja,
     required this.ventas,         required this.gastos,
     required this.abonos,
+    required this.devoluciones,   // ← NUEVO
   });
 
   factory ResumenCierre.fromJson(Map<String, dynamic> j) => ResumenCierre(
-    sesionId:          j['sesion_id']      ?? 0,
-    tiendaNombre:      j['tienda_nombre']  ?? '',
+    sesionId:          j['sesion_id']       ?? 0,
+    tiendaNombre:      j['tienda_nombre']   ?? '',
     empleadoNombre:    j['empleado_nombre'] ?? '',
-    fechaApertura:     j['fecha_apertura'] ?? '',
+    fechaApertura:     j['fecha_apertura']  ?? '',
     montoInicial:      double.tryParse(j['monto_inicial']?.toString()       ?? '0') ?? 0.0,
     montoEsperadoCaja: double.tryParse(j['monto_esperado_caja']?.toString() ?? '0') ?? 0.0,
-    abonos: j['abonos'] != null
+    ventas:       VentasCierre.fromJson(j['ventas']   ?? {}),
+    gastos:       GastosCierre.fromJson(j['gastos']   ?? {}),
+    abonos:       j['abonos'] != null
         ? AbonosCierre.fromJson(j['abonos'])
         : AbonosCierre.vacio(),
-    ventas: VentasCierre.fromJson(j['ventas'] ?? {}),
-    gastos: GastosCierre.fromJson(j['gastos'] ?? {}),
+    devoluciones: j['devoluciones'] != null           // ← NUEVO
+        ? DevolucionesCierre.fromJson(j['devoluciones'])
+        : DevolucionesCierre.vacio(),
   );
 }

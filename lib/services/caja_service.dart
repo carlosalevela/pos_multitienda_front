@@ -123,7 +123,7 @@ class CajaService {
   }) async {
     try {
       final r = await ApiClient.instance.get(
-        '/caja/sesiones/',
+        '/caja/historial/',   // ← solo esto cambia
         queryParameters: {
           if (tiendaId != null) 'tienda_id': tiendaId.toString(),
           if (estado   != null) 'estado':    estado,
