@@ -1,5 +1,3 @@
-// lib/screens/inventario/inventario_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -20,60 +18,67 @@ class InventarioScreen extends StatefulWidget {
 
 class _InventarioScreenState extends State<InventarioScreen>
     with TickerProviderStateMixin {
-  final _searchCtrl      = TextEditingController();
+  final _searchCtrl = TextEditingController();
   final _empleadoService = EmpleadoService();
 
-  List<Map<String, dynamic>> _tiendas       = [];
-  int?                        _tiendaFiltro;
-  final Set<String>           _abiertas     = {};
-  String                      _activoFiltro = 'true';
+  List<Map<String, dynamic>> _tiendas = [];
+  int? _tiendaFiltro;
+  final Set<String> _abiertas = {};
+  String _activoFiltro = 'true';
 
   late AnimationController _fadeCtrl;
-  late Animation<double>   _fadeAnim;
+  late Animation<double> _fadeAnim;
 
-  static const _gradientes = [
-    [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-    [Color(0xFF0EA5E9), Color(0xFF06B6D4)],
-    [Color(0xFF10B981), Color(0xFF059669)],
-    [Color(0xFFF59E0B), Color(0xFFEF4444)],
-    [Color(0xFFEC4899), Color(0xFFF43F5E)],
-    [Color(0xFF8B5CF6), Color(0xFF6366F1)],
-    [Color(0xFF14B8A6), Color(0xFF0EA5E9)],
-    [Color(0xFFF97316), Color(0xFFEF4444)],
-  ];
+  static const _bg = Color(0xFFF4F6F8);
+  static const _card = Colors.white;
+  static const _border = Color(0xFFE5E7EB);
+  static const _text = Color(0xFF111827);
+  static const _muted = Color(0xFF6B7280);
+  static const _muted2 = Color(0xFF9CA3AF);
+  static const _accent = Color(0xFF22C55E);
+  static const _accentDark = Color(0xFF15803D);
+  static const _danger = Color(0xFFEF4444);
+  static const _warning = Color(0xFFF59E0B);
+  static const _chipBg = Color(0xFFF8FAFC);
 
   static const _iconos = [
-    Icons.category_rounded,    Icons.shopping_bag_rounded,
-    Icons.inventory_2_rounded, Icons.local_offer_rounded,
-    Icons.storefront_rounded,  Icons.label_rounded,
-    Icons.star_rounded,        Icons.folder_rounded,
+    Icons.category_rounded,
+    Icons.shopping_bag_rounded,
+    Icons.inventory_2_rounded,
+    Icons.local_offer_rounded,
+    Icons.storefront_rounded,
+    Icons.label_rounded,
+    Icons.star_rounded,
+    Icons.folder_rounded,
   ];
 
   @override
   void initState() {
     super.initState();
     _fadeCtrl = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 400));
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
     _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
     _fadeCtrl.forward();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final auth = context.read<AuthProvider>();
-      final inv  = context.read<InventarioProvider>();
+      final inv = context.read<InventarioProvider>();
 
       if (auth.rol == 'admin' || auth.rol == 'superadmin') {
         final tiendas = await _empleadoService.getTiendas();
         if (!mounted) return;
         setState(() {
-          _tiendas      = tiendas;
+          _tiendas = tiendas;
           _tiendaFiltro = tiendas.isNotEmpty ? tiendas.first['id'] : null;
         });
         inv.cargarProductos(tiendaId: _tiendaFiltro, activo: _activoFiltro);
       } else {
         inv.cargarProductos(
           tiendaId: auth.tiendaId == 0 ? null : auth.tiendaId,
-          activo:   _activoFiltro,
+          activo: _activoFiltro,
         );
       }
     });
@@ -84,15 +89,15 @@ class _InventarioScreenState extends State<InventarioScreen>
       context: context,
       barrierDismissible: false,
       builder: (_) => ImportarExcelDialog(
-        tiendaId:     _tiendaActiva ?? 0,
-        empresaId:    _empresaActiva,
+        tiendaId: _tiendaActiva ?? 0,
+        empresaId: _empresaActiva,
         nombreTienda: _nombreTiendaActual(),
       ),
     );
     if (importo == true && mounted) {
       inv.cargarProductos(
         tiendaId: _tiendaActiva,
-        activo:   _activoFiltro,
+        activo: _activoFiltro,
       );
     }
   }
@@ -114,7 +119,7 @@ class _InventarioScreenState extends State<InventarioScreen>
     if (_tiendaFiltro == null) return null;
     final t = _tiendas.where((t) => t['id'] == _tiendaFiltro).firstOrNull;
     final raw = t?['empresa'];
-    if (raw is int)    return raw;
+    if (raw is int) return raw;
     if (raw is String) return int.tryParse(raw);
     return null;
   }
@@ -140,44 +145,37 @@ class _InventarioScreenState extends State<InventarioScreen>
 
   @override
   Widget build(BuildContext context) {
-    final inv      = context.watch<InventarioProvider>();
-    final auth     = context.watch<AuthProvider>();
+    final inv = context.watch<InventarioProvider>();
+    final auth = context.watch<AuthProvider>();
     final esCajero = auth.rol == 'cajero';
-    final esAdmin  = auth.rol == 'admin' || auth.rol == 'superadmin';
-    final grupos   = _agrupar(inv.productos);
+    final esAdmin = auth.rol == 'admin' || auth.rol == 'superadmin';
+    final grupos = _agrupar(inv.productos);
 
     return FadeTransition(
       opacity: _fadeAnim,
       child: Container(
-        color: const Color(0xFFF8F9FC),
+        color: _bg,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
+          padding: const EdgeInsets.fromLTRB(24, 22, 24, 0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildHeader(esCajero, esAdmin, inv),
-              const SizedBox(height: 20),
-
+              const SizedBox(height: 18),
               if (esAdmin && _tiendas.isNotEmpty) ...[
                 _selectorTienda(),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
               ],
-
               if (inv.productos.isNotEmpty) ...[
                 _buildStatsRow(inv.productos, grupos.length),
-                const SizedBox(height: 20),
+                const SizedBox(height: 18),
               ],
-
               _buildToolbar(esCajero, inv),
-              const SizedBox(height: 16),
-
+              const SizedBox(height: 14),
               if (inv.successMsg != null)
-                _banner(inv.successMsg!, isError: false,
-                    onClose: inv.limpiarMensajes),
+                _banner(inv.successMsg!, isError: false, onClose: inv.limpiarMensajes),
               if (inv.errorMsg != null)
-                _banner(inv.errorMsg!, isError: true,
-                    onClose: inv.limpiarMensajes),
-
+                _banner(inv.errorMsg!, isError: true, onClose: inv.limpiarMensajes),
               Expanded(
                 child: inv.cargando
                     ? _loadingState()
@@ -192,150 +190,155 @@ class _InventarioScreenState extends State<InventarioScreen>
     );
   }
 
-  // ══════════════════════════════════════════════════
-  // HEADER — ✅ FIX: botón Importar Excel con colores visibles
-  // ══════════════════════════════════════════════════
   Widget _buildHeader(bool esCajero, bool esAdmin, InventarioProvider inv) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Container(
-          width: 52, height: 52,
+          width: 50,
+          height: 50,
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            color: const Color(0xFFE9F9EF),
             borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF6366F1).withOpacity(0.35),
-                blurRadius: 12, offset: const Offset(0, 5),
-              ),
-            ],
+            border: Border.all(color: const Color(0xFFCDEFD8)),
           ),
-          child: const Icon(Icons.inventory_2_rounded,
-              color: Colors.white, size: 26),
+          child: const Icon(Icons.inventory_2_rounded, color: _accentDark, size: 24),
         ),
         const SizedBox(width: 14),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Inventario',
-                  style: GoogleFonts.plusJakartaSans(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF0F172A),
-                      letterSpacing: -0.5)),
-              if (esAdmin)
-                Text(
-                  _tiendas.isEmpty ? 'Cargando tiendas…' : _nombreTiendaActual(),
-                  style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
-                      color: const Color(0xFF6366F1),
-                      fontWeight: FontWeight.w600),
+              Text(
+                'Control de inventario',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: _text,
+                  letterSpacing: -0.4,
                 ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                esAdmin
+                    ? 'Vista general · ${_tiendas.isEmpty ? 'Cargando tiendas…' : _nombreTiendaActual()}'
+                    : 'Supervisa existencias, precios y disponibilidad de productos',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13,
+                  color: _muted,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ],
           ),
         ),
-
-        // ✅ FIX: colores visibles sobre fondo claro #F8F9FC
         if (!esCajero) ...[
-          OutlinedButton.icon(
-            icon: const Icon(Icons.table_chart_rounded, size: 16),
-            label: Text('Importar Excel',
-                style: GoogleFonts.plusJakartaSans(
-                    fontWeight: FontWeight.w700, fontSize: 13)),
-            onPressed: () => _abrirImportarExcel(inv),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF6366F1),          // ← indigo visible
-              side: const BorderSide(color: Color(0xFF6366F1), width: 1.5),
-              backgroundColor: const Color(0xFF6366F1).withOpacity(0.06),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
+          _secondaryButton(
+            icon: Icons.table_chart_rounded,
+            label: 'Importar Excel',
+            onTap: () => _abrirImportarExcel(inv),
           ),
           const SizedBox(width: 10),
-        ],
-
-        if (!esCajero)
-          Container(
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-              ),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF6366F1).withOpacity(0.35),
-                  blurRadius: 12, offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: Text('Nuevo Producto',
-                  style: GoogleFonts.plusJakartaSans(
-                      fontWeight: FontWeight.w700, fontSize: 14)),
-              onPressed: () => _abrirFormulario(context, inv),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                foregroundColor: Colors.white,
-                shadowColor: Colors.transparent,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 22, vertical: 14),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
+          _primaryButton(
+            icon: Icons.add_rounded,
+            label: 'Nuevo producto',
+            onTap: () => _abrirFormulario(context, inv),
           ),
+        ],
       ],
     );
   }
 
-  // ══════════════════════════════════════════════════
-  // STATS ROW
-  // ══════════════════════════════════════════════════
+  Widget _primaryButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return ElevatedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 18),
+      label: Text(
+        label,
+        style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w700),
+      ),
+      style: ElevatedButton.styleFrom(
+        elevation: 0,
+        backgroundColor: _accentDark,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    );
+  }
+
+  Widget _secondaryButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 18),
+      label: Text(
+        label,
+        style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w700),
+      ),
+      style: OutlinedButton.styleFrom(
+        elevation: 0,
+        foregroundColor: _text,
+        backgroundColor: _card,
+        side: const BorderSide(color: _border),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    );
+  }
+
   Widget _buildStatsRow(List<Producto> productos, int numCats) {
-    final bajo    = productos
-        .where((p) => p.stockActual > 0 && p.stockActual <= p.stockMinimo)
-        .length;
+    final bajo = productos.where((p) => p.stockActual > 0 && p.stockActual <= p.stockMinimo).length;
     final agotado = productos.where((p) => p.stockActual <= 0).length;
+    final activos = productos.where((p) => p.stockActual > p.stockMinimo).length;
 
     final stats = [
       _StatData(
-        icon:   Icons.category_rounded,
-        label:  'Categorías',
-        value:  '$numCats',
-        colors: [const Color(0xFF6366F1), const Color(0xFF8B5CF6)],
+        icon: Icons.grid_view_rounded,
+        label: 'Categorías',
+        value: '$numCats',
+        tone: const Color(0xFFEEF2FF),
+        iconColor: const Color(0xFF4F46E5),
       ),
       _StatData(
-        icon:   Icons.inventory_2_rounded,
-        label:  'Productos',
-        value:  '${productos.length}',
-        colors: [const Color(0xFF0EA5E9), const Color(0xFF06B6D4)],
+        icon: Icons.inventory_2_rounded,
+        label: 'Productos',
+        value: '${productos.length}',
+        tone: const Color(0xFFEFFBF3),
+        iconColor: _accentDark,
       ),
-      if (bajo > 0)
-        _StatData(
-          icon:   Icons.warning_amber_rounded,
-          label:  'Stock bajo',
-          value:  '$bajo',
-          colors: [const Color(0xFFF59E0B), const Color(0xFFEF4444)],
-        ),
-      if (agotado > 0)
-        _StatData(
-          icon:   Icons.remove_circle_outline_rounded,
-          label:  'Agotados',
-          value:  '$agotado',
-          colors: [const Color(0xFFEF4444), const Color(0xFFEC4899)],
-        ),
+      _StatData(
+        icon: Icons.check_circle_outline_rounded,
+        label: 'Disponibles',
+        value: '$activos',
+        tone: const Color(0xFFEAFBF0),
+        iconColor: _accent,
+      ),
+      _StatData(
+        icon: Icons.warning_amber_rounded,
+        label: 'Stock bajo',
+        value: '$bajo',
+        tone: const Color(0xFFFFF7E8),
+        iconColor: _warning,
+      ),
+      _StatData(
+        icon: Icons.remove_circle_outline_rounded,
+        label: 'Agotados',
+        value: '$agotado',
+        tone: const Color(0xFFFFEFEF),
+        iconColor: _danger,
+      ),
     ];
 
     return SizedBox(
-      height: 88,
+      height: 102,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: stats.length,
@@ -347,130 +350,168 @@ class _InventarioScreenState extends State<InventarioScreen>
 
   Widget _statCard(_StatData s) {
     return Container(
-      width: 160,
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      width: 180,
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        color: _card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 12, offset: const Offset(0, 4)),
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
         ],
       ),
-      child: Row(children: [
-        Container(
-          width: 40, height: 40,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(colors: s.colors),
-            borderRadius: BorderRadius.circular(10),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: s.tone,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(s.icon, color: s.iconColor, size: 21),
           ),
-          child: Icon(s.icon, color: Colors.white, size: 20),
-        ),
-        const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(s.value,
-                style: GoogleFonts.plusJakartaSans(
-                    fontSize: 22, fontWeight: FontWeight.w800,
-                    color: const Color(0xFF0F172A), height: 1)),
-            Text(s.label,
-                style: GoogleFonts.plusJakartaSans(
-                    fontSize: 11, color: const Color(0xFF94A3B8),
-                    fontWeight: FontWeight.w600)),
-          ],
-        ),
-      ]),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  s.value,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    color: _text,
+                    height: 1,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  s.label,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    color: _muted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  // ══════════════════════════════════════════════════
-  // TOOLBAR
-  // ══════════════════════════════════════════════════
   Widget _buildToolbar(bool esCajero, InventarioProvider inv) {
-    return Row(children: [
-      Expanded(
-        child: Container(
-          decoration: BoxDecoration(
-            color:        Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.06),
-                blurRadius: 10, offset: const Offset(0, 3)),
-            ],
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
-          child: TextField(
-            controller: _searchCtrl,
-            style: GoogleFonts.plusJakartaSans(
-                fontSize: 14, color: const Color(0xFF0F172A)),
-            decoration: InputDecoration(
-              hintText: 'Buscar productos…',
-              hintStyle: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFFCBD5E1), fontSize: 14),
-              prefixIcon: const Icon(Icons.search_rounded,
-                  color: Color(0xFF6366F1), size: 20),
-              border:         InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 14),
-            ),
-            onChanged: (val) => context.read<InventarioProvider>()
-                .cargarProductos(
-                    q: val, tiendaId: _tiendaActiva, activo: _activoFiltro),
-          ),
-        ),
+        ],
       ),
-      if (!esCajero) ...[
-        const SizedBox(width: 12),
-        _filtroEstado(),
-      ],
-    ]);
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 46,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: _border),
+              ),
+              child: TextField(
+                controller: _searchCtrl,
+                style: GoogleFonts.plusJakartaSans(fontSize: 14, color: _text),
+                decoration: InputDecoration(
+                  hintText: 'Buscar por nombre o referencia...',
+                  hintStyle: GoogleFonts.plusJakartaSans(fontSize: 14, color: _muted2),
+                  prefixIcon: const Icon(Icons.search_rounded, color: _muted, size: 20),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                ),
+                onChanged: (val) => context.read<InventarioProvider>().cargarProductos(
+                      q: val,
+                      tiendaId: _tiendaActiva,
+                      activo: _activoFiltro,
+                    ),
+              ),
+            ),
+          ),
+          if (!esCajero) ...[
+            const SizedBox(width: 12),
+            _filtroEstado(),
+          ],
+        ],
+      ),
+    );
   }
 
-  // ══════════════════════════════════════════════════
-  // SELECTOR DE TIENDA
-  // ══════════════════════════════════════════════════
   Widget _selectorTienda() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 2, bottom: 10),
-          child: Text('Tienda',
-              style: GoogleFonts.plusJakartaSans(
-                  fontSize: 12, fontWeight: FontWeight.w700,
-                  color: const Color(0xFF64748B), letterSpacing: 0.5)),
-        ),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _chipTienda(id: null, nombre: 'Todas',
-                  icono: Icons.store_mall_directory_rounded),
-              const SizedBox(width: 8),
-              ..._tiendas.asMap().entries.map((e) {
-                final t = e.value;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: _chipTienda(
-                    id:     t['id'] as int,
-                    nombre: t['nombre'] as String? ?? 'Tienda',
-                    icono:  Icons.store_rounded,
-                  ),
-                );
-              }),
-            ],
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Tiendas',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: _muted,
+              letterSpacing: 0.3,
+            ),
           ),
-        ),
-      ],
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _chipTienda(
+                  id: null,
+                  nombre: 'Todas',
+                  icono: Icons.store_mall_directory_rounded,
+                ),
+                const SizedBox(width: 8),
+                ..._tiendas.asMap().entries.map((e) {
+                  final t = e.value;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: _chipTienda(
+                      id: t['id'] as int,
+                      nombre: t['nombre'] as String? ?? 'Tienda',
+                      icono: Icons.store_rounded,
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _chipTienda({
-    required int?     id,
-    required String   nombre,
+    required int? id,
+    required String nombre,
     required IconData icono,
   }) {
     final sel = _tiendaFiltro == id;
@@ -483,68 +524,51 @@ class _InventarioScreenState extends State<InventarioScreen>
           _searchCtrl.clear();
         });
         context.read<InventarioProvider>().cargarProductos(
-            tiendaId: id, activo: _activoFiltro);
+              tiendaId: id,
+              activo: _activoFiltro,
+            );
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOut,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          gradient: sel
-              ? const LinearGradient(
-                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)])
-              : null,
-          color: sel ? null : Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            if (sel)
-              BoxShadow(
-                color: const Color(0xFF6366F1).withOpacity(0.3),
-                blurRadius: 10, offset: const Offset(0, 4))
-            else
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 6, offset: const Offset(0, 2)),
-          ],
-          border: sel ? null : Border.all(color: const Color(0xFFE2E8F0)),
+          color: sel ? const Color(0xFFEAFBF0) : _chipBg,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: sel ? const Color(0xFFB9E8C8) : _border),
         ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icono,
-              size: 15,
-              color: sel ? Colors.white : const Color(0xFF94A3B8)),
-          const SizedBox(width: 8),
-          Text(nombre,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icono, size: 16, color: sel ? _accentDark : _muted),
+            const SizedBox(width: 8),
+            Text(
+              nombre,
               style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13, fontWeight: FontWeight.w700,
-                  color: sel ? Colors.white : const Color(0xFF475569))),
-        ]),
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: sel ? _accentDark : _text,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  // ══════════════════════════════════════════════════
-  // FILTRO ESTADO
-  // ══════════════════════════════════════════════════
   Widget _filtroEstado() {
     final opciones = [
-      ('true',  'Activos',   Icons.check_circle_outline_rounded,
-          const Color(0xFF10B981)),
-      ('false', 'Inactivos', Icons.block_rounded,
-          const Color(0xFFEF4444)),
-      ('all',   'Todos',     Icons.all_inclusive_rounded,
-          const Color(0xFF6366F1)),
+      ('true', 'Activos', Icons.check_circle_outline_rounded, _accentDark),
+      ('false', 'Inactivos', Icons.block_rounded, _danger),
+      ('all', 'Todos', Icons.all_inclusive_rounded, const Color(0xFF475569)),
     ];
 
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 10, offset: const Offset(0, 3)),
-        ],
+        border: Border.all(color: _border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -555,25 +579,41 @@ class _InventarioScreenState extends State<InventarioScreen>
             onTap: () {
               setState(() => _activoFiltro = valor);
               context.read<InventarioProvider>().cargarProductos(
-                  tiendaId: _tiendaActiva, activo: valor);
+                    tiendaId: _tiendaActiva,
+                    activo: valor,
+                  );
             },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: sel ? color.withOpacity(0.12) : Colors.transparent,
+                color: sel ? Colors.white : Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
+                boxShadow: sel
+                    ? [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.04),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : [],
               ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(icon, size: 14,
-                    color: sel ? color : const Color(0xFFCBD5E1)),
-                const SizedBox(width: 6),
-                Text(label,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 14, color: sel ? color : _muted2),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
                     style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
-                        color: sel ? color : const Color(0xFF94A3B8))),
-              ]),
+                      fontSize: 12,
+                      fontWeight: sel ? FontWeight.w700 : FontWeight.w600,
+                      color: sel ? color : _muted,
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
         }).toList(),
@@ -581,11 +621,12 @@ class _InventarioScreenState extends State<InventarioScreen>
     );
   }
 
-  // ══════════════════════════════════════════════════
-  // LISTA DE CATEGORÍAS
-  // ══════════════════════════════════════════════════
-  Widget _buildCategorias(Map<String, List<Producto>> grupos,
-      bool esCajero, bool esAdmin, InventarioProvider inv) {
+  Widget _buildCategorias(
+    Map<String, List<Producto>> grupos,
+    bool esCajero,
+    bool esAdmin,
+    InventarioProvider inv,
+  ) {
     final keys = grupos.keys.toList()..sort();
     if (keys.remove('Sin categoría')) keys.add('Sin categoría');
 
@@ -593,260 +634,424 @@ class _InventarioScreenState extends State<InventarioScreen>
       padding: const EdgeInsets.only(bottom: 24),
       itemCount: keys.length,
       itemBuilder: (_, i) {
-        final cat   = keys[i];
+        final cat = keys[i];
         final prods = grupos[cat]!;
-        final isOpen  = _abiertas.contains(cat);
-        final g1 = _gradientes[i % _gradientes.length][0];
-        final g2 = _gradientes[i % _gradientes.length][1];
-        final icon   = _iconos[i % _iconos.length];
-        final bajoCnt = prods
-            .where((p) => p.stockActual > 0 && p.stockActual <= p.stockMinimo)
-            .length;
+        final isOpen = _abiertas.contains(cat);
+        final icon = _iconos[i % _iconos.length];
+        final bajoCnt = prods.where((p) => p.stockActual > 0 && p.stockActual <= p.stockMinimo).length;
         final agotCnt = prods.where((p) => p.stockActual <= 0).length;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 14),
           decoration: BoxDecoration(
-            color:        Colors.white,
-            borderRadius: BorderRadius.circular(20),
+            color: _card,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: _border),
             boxShadow: [
               BoxShadow(
-                color:      Colors.black.withOpacity(0.06),
-                blurRadius: 16, offset: const Offset(0, 6)),
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
             ],
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: Column(children: [
-              InkWell(
-                onTap: () => setState(() =>
-                    isOpen ? _abiertas.remove(cat) : _abiertas.add(cat)),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 22, vertical: 18),
-                  decoration: BoxDecoration(
-                    gradient: _activoFiltro == 'false'
-                        ? LinearGradient(colors: [
-                            Colors.grey.shade500, Colors.grey.shade600])
-                        : LinearGradient(
-                            colors: [g1, g2],
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight),
-                  ),
-                  child: Row(children: [
-                    Container(
-                      width: 42, height: 42,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(icon, color: Colors.white, size: 20),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(cat,
-                              style: GoogleFonts.plusJakartaSans(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 15, letterSpacing: -0.2)),
-                          Text(
-                            '${prods.length} producto${prods.length != 1 ? 's' : ''}',
-                            style: GoogleFonts.plusJakartaSans(
-                                color: Colors.white.withOpacity(0.75),
-                                fontSize: 12, fontWeight: FontWeight.w500)),
-                        ],
-                      ),
-                    ),
-                    if (_activoFiltro != 'false') ...[
-                      if (agotCnt > 0) ...[
-                        _alertBadge('$agotCnt agotado', Colors.red.shade300),
-                        const SizedBox(width: 6),
-                      ],
-                      if (bajoCnt > 0) ...[
-                        _alertBadge('$bajoCnt bajo', Colors.orange.shade300),
-                        const SizedBox(width: 10),
-                      ],
-                    ],
-                    AnimatedRotation(
-                      turns:    isOpen ? 0.5 : 0,
-                      duration: const Duration(milliseconds: 250),
-                      child: Container(
-                        width: 30, height: 30,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(22),
+            child: Column(
+              children: [
+                InkWell(
+                  onTap: () => setState(() {
+                    isOpen ? _abiertas.remove(cat) : _abiertas.add(cat);
+                  }),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                    color: const Color(0xFFFCFCFD),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF0FDF4),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFD7F3DF)),
+                          ),
+                          child: Icon(icon, color: _accentDark, size: 20),
                         ),
-                        child: const Icon(Icons.keyboard_arrow_down_rounded,
-                            color: Colors.white, size: 20),
-                      ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                cat,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: _text,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                '${prods.length} producto${prods.length != 1 ? 's' : ''}',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: _muted,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (_activoFiltro != 'false') ...[
+                          if (agotCnt > 0) ...[
+                            _alertBadge('$agotCnt agotado', const Color(0xFFFFEFEF), _danger),
+                            const SizedBox(width: 6),
+                          ],
+                          if (bajoCnt > 0) ...[
+                            _alertBadge('$bajoCnt bajo', const Color(0xFFFFF7E8), _warning),
+                            const SizedBox(width: 8),
+                          ],
+                        ],
+                        AnimatedRotation(
+                          turns: isOpen ? 0.5 : 0,
+                          duration: const Duration(milliseconds: 250),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: _chipBg,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: _border),
+                            ),
+                            child: const Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              color: _muted,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ]),
+                  ),
                 ),
-              ),
-              AnimatedSize(
-                duration: const Duration(milliseconds: 280),
-                curve: Curves.easeInOut,
-                child: isOpen
-                    ? _buildFilasProductos(prods, esCajero, esAdmin, inv, g1)
-                    : const SizedBox.shrink(),
-              ),
-            ]),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 260),
+                  curve: Curves.easeInOut,
+                  child: isOpen
+                      ? _buildFilasProductos(prods, esCajero, esAdmin, inv)
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            ),
           ),
         );
       },
     );
   }
 
-  Widget _alertBadge(String text, Color color) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-    decoration: BoxDecoration(
-        color: color.withOpacity(0.25),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.5))),
-    child: Text(text,
-        style: GoogleFonts.plusJakartaSans(
-            color: Colors.white, fontSize: 11,
-            fontWeight: FontWeight.w700)),
-  );
-
-  // ══════════════════════════════════════════════════
-  // FILAS DE PRODUCTOS
-  // ══════════════════════════════════════════════════
-  Widget _buildFilasProductos(List<Producto> prods, bool esCajero,
-      bool esAdmin, InventarioProvider inv, Color accentColor) {
-    return Column(children: [
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
-        decoration: BoxDecoration(
-          color: accentColor.withOpacity(0.04),
-          border: Border(
-            bottom: BorderSide(color: accentColor.withOpacity(0.1)),
-          ),
-        ),
-        child: Row(children: [
-          Expanded(flex: 3, child: _colHeader('Nombre')),
-          Expanded(flex: 2, child: _colHeader('Referencia')),
-          Expanded(flex: 2, child: _colHeader('Precio')),
-          Expanded(flex: 1, child: _colHeader('Stock')),
-          Expanded(flex: 2, child: _colHeader('Estado')),
-          if (!esCajero) const SizedBox(width: 76),
-        ]),
+  Widget _alertBadge(String text, Color bg, Color fg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: fg.withOpacity(0.15)),
       ),
-      ...prods.asMap().entries.map((e) {
-        final isLast = e.key == prods.length - 1;
-        return _filaProducto(e.value, inv, esCajero, esAdmin,
-            accentColor: accentColor, isLast: isLast);
-      }),
-    ]);
+      child: Text(
+        text,
+        style: GoogleFonts.plusJakartaSans(
+          color: fg,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
   }
 
-  Widget _colHeader(String t) => Text(t,
-      style: GoogleFonts.plusJakartaSans(
-          fontSize: 11, fontWeight: FontWeight.w700,
-          color: const Color(0xFF94A3B8), letterSpacing: 0.4));
+  Widget _buildFilasProductos(
+    List<Producto> prods,
+    bool esCajero,
+    bool esAdmin,
+    InventarioProvider inv,
+  ) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: _border)),
+          ),
+          child: Row(
+            children: [
+              Expanded(flex: 3, child: _colHeader('Nombre')),
+              Expanded(flex: 2, child: _colHeader('Referencia')),
+              if (esAdmin) ...[
+                Expanded(flex: 2, child: _colHeader('Costo')),
+                Expanded(flex: 2, child: _colHeader('Venta')),
+                Expanded(flex: 2, child: _colHeader('Mayoreo')),
+                Expanded(flex: 2, child: _colHeader('Margen')),
+              ] else
+                Expanded(flex: 2, child: _colHeader('Precio')),
+              Expanded(flex: 1, child: _colHeader('Stock')),
+              Expanded(flex: 2, child: _colHeader('Estado')),
+              if (!esCajero) const SizedBox(width: 84),
+            ],
+          ),
+        ),
+        ...prods.asMap().entries.map((e) {
+          final isLast = e.key == prods.length - 1;
+          return _filaProducto(
+            e.value,
+            inv,
+            esCajero,
+            esAdmin,
+            isLast: isLast,
+          );
+        }),
+      ],
+    );
+  }
 
-  Widget _filaProducto(Producto p, InventarioProvider inv,
-      bool esCajero, bool esAdmin,
-      {required Color accentColor, required bool isLast}) {
+  Widget _colHeader(String t) {
+    return Text(
+      t,
+      style: GoogleFonts.plusJakartaSans(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: _muted2,
+        letterSpacing: 0.3,
+      ),
+    );
+  }
+
+  String _margenTexto(double costo, double venta) {
+    if (costo <= 0) return '—';
+    final m = ((venta - costo) / costo) * 100;
+    return '${m.toStringAsFixed(1)}%';
+  }
+
+  Color _margenColor(double costo, double venta) {
+    if (costo <= 0) return _muted2;
+    final m = ((venta - costo) / costo) * 100;
+    if (m < 0) return _danger;
+    if (m < 10) return _warning;
+    if (m < 20) return const Color(0xFF2563EB);
+    return _accentDark;
+  }
+
+  Widget _filaProducto(
+    Producto p,
+    InventarioProvider inv,
+    bool esCajero,
+    bool esAdmin, {
+    required bool isLast,
+  }) {
     final esInactivo = _activoFiltro == 'false';
-    final agotado    = p.stockActual <= 0;
-    final bajo       = !agotado && p.stockActual <= p.stockMinimo;
+    final agotado = p.stockActual <= 0;
+    final bajo = !agotado && p.stockActual <= p.stockMinimo;
 
     final (estadoText, estadoColor, estadoBg) = esInactivo
-        ? ('Inactivo', const Color(0xFF94A3B8), const Color(0xFFF1F5F9))
+        ? ('Inactivo', _muted, const Color(0xFFF3F4F6))
         : agotado
-            ? ('Agotado', const Color(0xFFEF4444), const Color(0xFFFEF2F2))
+            ? ('Agotado', _danger, const Color(0xFFFFF1F2))
             : bajo
-                ? ('Stock bajo', const Color(0xFFF59E0B), const Color(0xFFFFFBEB))
-                : ('Disponible', const Color(0xFF10B981), const Color(0xFFF0FDF4));
+                ? ('Stock bajo', _warning, const Color(0xFFFFF7ED))
+                : ('Disponible', _accentDark, const Color(0xFFF0FDF4));
 
     final estadoIcon = esInactivo
         ? Icons.block_rounded
-        : agotado ? Icons.remove_circle_outline_rounded
-        : bajo ? Icons.warning_amber_rounded
-        : Icons.check_circle_outline_rounded;
+        : agotado
+            ? Icons.remove_circle_outline_rounded
+            : bajo
+                ? Icons.warning_amber_rounded
+                : Icons.check_circle_outline_rounded;
+
+    final costo = p.precioCompra;
+    final venta = p.precio;
+    final mayoreo = p.precioMayoreo;
 
     return Container(
       decoration: BoxDecoration(
-        color: esInactivo ? const Color(0xFFFAFAFA) : Colors.white,
-        border: isLast
-            ? null
-            : const Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
+        color: esInactivo ? const Color(0xFFFCFCFC) : Colors.white,
+        border: isLast ? null : const Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
       ),
-      child: InkWell(
-        onTap: null,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-          child: Row(children: [
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        child: Row(
+          children: [
             Expanded(
               flex: 3,
-              child: Row(children: [
-                if (!esInactivo)
-                  Container(
-                    width: 6, height: 6,
-                    margin: const EdgeInsets.only(right: 8),
-                    decoration: BoxDecoration(
-                      color: agotado
-                          ? const Color(0xFFEF4444)
-                          : bajo
-                              ? const Color(0xFFF59E0B)
-                              : accentColor,
-                      shape: BoxShape.circle,
+              child: Row(
+                children: [
+                  if (!esInactivo)
+                    Container(
+                      width: 9,
+                      height: 9,
+                      margin: const EdgeInsets.only(right: 10),
+                      decoration: BoxDecoration(
+                        color: agotado ? _danger : bajo ? _warning : _accent,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          p.nombre,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                            color: esInactivo ? _muted2 : _text,
+                          ),
+                        ),
+                        if (p.categoria.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              p.categoria,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11,
+                                color: _muted2,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
-                Expanded(
-                  child: Text(p.nombre,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.w700, fontSize: 13,
-                          color: esInactivo
-                              ? const Color(0xFFCBD5E1)
-                              : const Color(0xFF1E293B))),
+                ],
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text(
+                p.referencia.isEmpty ? '—' : p.referencia,
+                style: GoogleFonts.plusJakartaSans(fontSize: 12, color: _muted),
+              ),
+            ),
+            if (esAdmin) ...[
+              Expanded(
+                flex: 2,
+                child: Text(
+                  '${Constants.moneda}${costo.toStringAsFixed(0)}',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: esInactivo ? _muted2 : _muted,
+                  ),
                 ),
-              ]),
-            ),
-            Expanded(
-              flex: 2,
-              child: Text(p.referencia.isEmpty ? '—' : p.referencia,
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  '${Constants.moneda}${venta.toStringAsFixed(0)}',
                   style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12, color: const Color(0xFF94A3B8))),
-            ),
-            Expanded(
-              flex: 2,
-              child: Text('\$${p.precio.toStringAsFixed(0)}',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: esInactivo ? _muted2 : _text,
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: mayoreo != null && mayoreo > 0
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF3F4F6),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${Constants.moneda}${mayoreo.toStringAsFixed(0)}',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: esInactivo ? _muted2 : _text,
+                          ),
+                        ),
+                      )
+                    : Text(
+                        '—',
+                        style: GoogleFonts.plusJakartaSans(fontSize: 12, color: _muted2),
+                      ),
+              ),
+              Expanded(
+                flex: 2,
+                child: esInactivo
+                    ? Text(
+                        '—',
+                        style: GoogleFonts.plusJakartaSans(fontSize: 12, color: _muted2),
+                      )
+                    : Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _margenColor(costo, venta).withOpacity(0.10),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              venta >= costo ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+                              size: 12,
+                              color: _margenColor(costo, venta),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _margenTexto(costo, venta),
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: _margenColor(costo, venta),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+              ),
+            ] else
+              Expanded(
+                flex: 2,
+                child: Text(
+                  '${Constants.moneda}${venta.toStringAsFixed(0)}',
                   style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13, fontWeight: FontWeight.w700,
-                      color: esInactivo
-                          ? const Color(0xFFCBD5E1)
-                          : const Color(0xFF1E293B))),
-            ),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: esInactivo ? _muted2 : _text,
+                  ),
+                ),
+              ),
             Expanded(
               flex: 1,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
                   color: esInactivo
-                      ? const Color(0xFFF1F5F9)
+                      ? const Color(0xFFF3F4F6)
                       : (agotado || bajo)
                           ? estadoBg
                           : const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
                   p.stockActual.toStringAsFixed(0),
                   textAlign: TextAlign.center,
                   style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
-                      fontWeight: (agotado || bajo) && !esInactivo
-                          ? FontWeight.w800 : FontWeight.w600,
-                      color: esInactivo
-                          ? const Color(0xFFCBD5E1)
-                          : agotado ? const Color(0xFFEF4444)
-                          : bajo ? const Color(0xFFF59E0B)
-                          : const Color(0xFF64748B))),
+                    fontSize: 13,
+                    fontWeight: (agotado || bajo) && !esInactivo ? FontWeight.w800 : FontWeight.w700,
+                    color: esInactivo
+                        ? _muted2
+                        : agotado
+                            ? _danger
+                            : bajo
+                                ? _warning
+                                : _text,
+                  ),
+                ),
               ),
             ),
             Expanded(
@@ -854,22 +1059,25 @@ class _InventarioScreenState extends State<InventarioScreen>
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                      color: estadoBg,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                          color: estadoColor.withOpacity(0.2))),
+                    color: estadoBg,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: estadoColor.withOpacity(0.16)),
+                  ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(estadoIcon, size: 11, color: estadoColor),
+                      Icon(estadoIcon, size: 12, color: estadoColor),
                       const SizedBox(width: 5),
-                      Text(estadoText,
-                          style: GoogleFonts.plusJakartaSans(
-                              color: estadoColor, fontSize: 11,
-                              fontWeight: FontWeight.w700)),
+                      Text(
+                        estadoText,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: estadoColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -877,7 +1085,7 @@ class _InventarioScreenState extends State<InventarioScreen>
             ),
             if (!esCajero)
               SizedBox(
-                width: 76,
+                width: 84,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -885,21 +1093,21 @@ class _InventarioScreenState extends State<InventarioScreen>
                       if (esAdmin)
                         _actionBtn(
                           icon: Icons.refresh_rounded,
-                          color: const Color(0xFF10B981),
+                          color: _accentDark,
                           tooltip: 'Reactivar',
                           onTap: () => _confirmarReactivar(context, inv, p),
                         ),
                     ] else ...[
                       _actionBtn(
                         icon: Icons.edit_rounded,
-                        color: const Color(0xFF6366F1),
+                        color: const Color(0xFF334155),
                         tooltip: 'Editar',
                         onTap: () => _abrirFormulario(context, inv, producto: p),
                       ),
                       const SizedBox(width: 8),
                       _actionBtn(
                         icon: Icons.block_rounded,
-                        color: const Color(0xFFEF4444),
+                        color: _danger,
                         tooltip: 'Desactivar',
                         onTap: () => _confirmarEliminar(context, inv, p),
                       ),
@@ -907,7 +1115,7 @@ class _InventarioScreenState extends State<InventarioScreen>
                   ],
                 ),
               ),
-          ]),
+          ],
         ),
       ),
     );
@@ -915,152 +1123,180 @@ class _InventarioScreenState extends State<InventarioScreen>
 
   Widget _actionBtn({
     required IconData icon,
-    required Color    color,
-    required String   tooltip,
+    required Color color,
+    required String tooltip,
     required VoidCallback onTap,
-  }) =>
-    Tooltip(
+  }) {
+    return Tooltip(
       message: tooltip,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
         child: Container(
-          width: 32, height: 32,
+          width: 34,
+          height: 34,
           decoration: BoxDecoration(
             color: color.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withOpacity(0.10)),
           ),
           child: Icon(icon, size: 16, color: color),
         ),
       ),
     );
+  }
 
-  // ══════════════════════════════════════════════════
-  // LOADING STATE
-  // ══════════════════════════════════════════════════
-  Widget _loadingState() => Center(
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(
-          width: 56, height: 56,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
-            borderRadius: BorderRadius.circular(16),
+  Widget _loadingState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 62,
+            height: 62,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: _border),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Padding(
+              padding: EdgeInsets.all(16),
+              child: CircularProgressIndicator(
+                color: _accentDark,
+                strokeWidth: 2.7,
+              ),
+            ),
           ),
-          child: const Padding(
-            padding: EdgeInsets.all(14),
-            child: CircularProgressIndicator(
-              color: Colors.white, strokeWidth: 2.5),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text('Cargando inventario…',
+          const SizedBox(height: 16),
+          Text(
+            'Cargando inventario…',
             style: GoogleFonts.plusJakartaSans(
-                color: const Color(0xFF94A3B8),
-                fontWeight: FontWeight.w600, fontSize: 14)),
-      ],
-    ),
-  );
-
-  // ══════════════════════════════════════════════════
-  // EMPTY STATE
-  // ══════════════════════════════════════════════════
-  Widget _emptyState(bool esCajero) => Center(
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(
-          width: 90, height: 90,
-          decoration: BoxDecoration(
-            color: const Color(0xFFF1F5F9),
-            borderRadius: BorderRadius.circular(24),
+              color: _muted,
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
           ),
-          child: Icon(
-            _activoFiltro == 'false'
-                ? Icons.check_circle_outline_rounded
-                : Icons.inventory_2_outlined,
-            size: 44, color: const Color(0xFFCBD5E1),
-          ),
-        ),
-        const SizedBox(height: 18),
-        Text(
-          _activoFiltro == 'false'
-              ? '¡Sin productos inactivos!'
-              : 'No hay productos aquí',
-          style: GoogleFonts.plusJakartaSans(
-              color: const Color(0xFF475569),
-              fontSize: 17, fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          _activoFiltro == 'false'
-              ? 'Todo tu inventario está activo 🎉'
-              : 'Agrega el primero con "Nuevo Producto"',
-          style: GoogleFonts.plusJakartaSans(
-              color: const Color(0xFF94A3B8), fontSize: 13),
-        ),
-      ],
-    ),
-  );
-
-  // ══════════════════════════════════════════════════
-  // BANNER DE MENSAJES
-  // ══════════════════════════════════════════════════
-  Widget _banner(String msg,
-      {required bool isError, required VoidCallback onClose}) {
-    final color = isError ? const Color(0xFFEF4444) : const Color(0xFF10B981);
-    return Container(
-      margin:  const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color:        color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(14),
-        border:       Border.all(color: color.withOpacity(0.2)),
+        ],
       ),
-      child: Row(children: [
-        Container(
-          width: 30, height: 30,
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(
-            isError ? Icons.error_outline_rounded
-                    : Icons.check_circle_outline_rounded,
-            color: color, size: 18),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(msg,
-              style: GoogleFonts.plusJakartaSans(
-                  color: color.withOpacity(0.85),
-                  fontSize: 13, fontWeight: FontWeight.w600)),
-        ),
-        InkWell(
-          onTap: onClose,
-          borderRadius: BorderRadius.circular(6),
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: Icon(Icons.close_rounded, size: 16,
-                color: color.withOpacity(0.5)),
-          ),
-        ),
-      ]),
     );
   }
 
-  // ══════════════════════════════════════════════════
-  // DIÁLOGOS
-  // ══════════════════════════════════════════════════
-  void _abrirFormulario(BuildContext context, InventarioProvider inv,
-      {Producto? producto}) {
+  Widget _emptyState(bool esCajero) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: _border),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 86,
+              height: 86,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0FDF4),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Icon(
+                _activoFiltro == 'false'
+                    ? Icons.check_circle_outline_rounded
+                    : Icons.inventory_2_outlined,
+                size: 42,
+                color: _accentDark,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              _activoFiltro == 'false' ? 'No hay productos inactivos' : 'No hay productos registrados',
+              style: GoogleFonts.plusJakartaSans(
+                color: _text,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _activoFiltro == 'false'
+                  ? 'Todo tu inventario está activo en este momento.'
+                  : 'Agrega el primero con el botón de nuevo producto.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.plusJakartaSans(
+                color: _muted,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _banner(String msg, {required bool isError, required VoidCallback onClose}) {
+    final color = isError ? _danger : _accentDark;
+    final bg = isError ? const Color(0xFFFFF1F2) : const Color(0xFFF0FDF4);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withOpacity(0.16)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.75),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              isError ? Icons.error_outline_rounded : Icons.check_circle_outline_rounded,
+              color: color,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              msg,
+              style: GoogleFonts.plusJakartaSans(
+                color: color,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          InkWell(
+            onTap: onClose,
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Icon(Icons.close_rounded, size: 16, color: color.withOpacity(0.7)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _abrirFormulario(BuildContext context, InventarioProvider inv, {Producto? producto}) {
     showDialog(
       context: context,
       builder: (_) => ProductoFormDialog(
-        producto:  producto,
-        tiendaId:  _tiendaActiva ?? 0,
+        producto: producto,
+        tiendaId: _tiendaActiva ?? 0,
         empresaId: _empresaActiva,
         onGuardar: (data) async {
           if (_empresaActiva != null) {
@@ -1069,119 +1305,117 @@ class _InventarioScreenState extends State<InventarioScreen>
           final ok = producto == null
               ? await inv.crearProducto(data)
               : await inv.editarProducto(producto.id, data);
-          if (!ok) throw Exception(inv.errorMsg ?? 'Error al guardar');
+          if (ok && mounted) {
+            inv.cargarProductos(tiendaId: _tiendaActiva, activo: _activoFiltro);
+          }
         },
       ),
     );
   }
 
-  void _confirmarEliminar(
-      BuildContext context, InventarioProvider inv, Producto p) {
+  void _confirmarEliminar(BuildContext context, InventarioProvider inv, Producto p) {
     showDialog(
       context: context,
-      builder: (_) => _dialogConfirmacion(
-        titulo:   '¿Desactivar producto?',
-        mensaje:  '"${p.nombre}" quedará inactivo. Podrás reactivarlo luego.',
-        labelOk:  'Desactivar',
-        colorOk:  const Color(0xFFEF4444),
-        iconOk:   Icons.block_rounded,
-        onOk: () async {
-          Navigator.pop(context);
-          final ok = await inv.eliminarProducto(p.id);
-          if (!context.mounted || ok) return;
-          _showSnack(context,
-              '❌ No se pudo desactivar "${p.nombre}"', isError: true);
-        },
-      ),
-    );
-  }
-
-  void _confirmarReactivar(
-      BuildContext context, InventarioProvider inv, Producto p) {
-    showDialog(
-      context: context,
-      builder: (_) => _dialogConfirmacion(
-        titulo:  '¿Reactivar producto?',
-        mensaje: '"${p.nombre}" volverá a estar disponible.',
-        labelOk: 'Reactivar',
-        colorOk: const Color(0xFF10B981),
-        iconOk:  Icons.refresh_rounded,
-        onOk: () async {
-          Navigator.pop(context);
-          final ok = await inv.reactivarProducto(p.id);
-          if (!context.mounted || ok) return;
-          _showSnack(context,
-              '❌ No se pudo reactivar "${p.nombre}"', isError: true);
-        },
-      ),
-    );
-  }
-
-  Widget _dialogConfirmacion({
-    required String       titulo,
-    required String       mensaje,
-    required String       labelOk,
-    required Color        colorOk,
-    required IconData     iconOk,
-    required VoidCallback onOk,
-  }) =>
-    AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-      titlePadding:   const EdgeInsets.fromLTRB(24, 24, 24, 12),
-      title: Text(titulo,
-          style: GoogleFonts.plusJakartaSans(
-              fontWeight: FontWeight.w800, fontSize: 17,
-              color: const Color(0xFF0F172A))),
-      content: Text(mensaje,
-          style: GoogleFonts.plusJakartaSans(
-              fontSize: 14, color: const Color(0xFF64748B))),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text('Cancelar',
-              style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFF94A3B8),
-                  fontWeight: FontWeight.w600)),
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Text(
+          'Desactivar producto',
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: _text),
         ),
-        Container(
-          decoration: BoxDecoration(
-            color: colorOk.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(10)),
-          child: TextButton.icon(
-            icon:  Icon(iconOk, size: 16, color: colorOk),
-            label: Text(labelOk,
-                style: GoogleFonts.plusJakartaSans(
-                    fontWeight: FontWeight.w700, color: colorOk)),
-            onPressed: onOk,
+        content: Text(
+          '¿Desactivar "${p.nombre}"? No aparecerá en ventas ni búsquedas.',
+          style: GoogleFonts.plusJakartaSans(fontSize: 13, color: _muted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancelar',
+              style: GoogleFonts.plusJakartaSans(color: _muted),
+            ),
           ),
-        ),
-      ],
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final ok = await inv.eliminarProducto(p.id);
+              if (ok && mounted) {
+                inv.cargarProductos(tiendaId: _tiendaActiva, activo: _activoFiltro);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _danger,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text(
+              'Desactivar',
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
     );
+  }
 
-  void _showSnack(BuildContext ctx, String msg, {required bool isError}) {
-    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-      content: Text(msg,
-          style: GoogleFonts.plusJakartaSans(fontSize: 13)),
-      backgroundColor: isError
-          ? const Color(0xFFEF4444) : const Color(0xFF10B981),
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: const EdgeInsets.all(16),
-    ));
+  void _confirmarReactivar(BuildContext context, InventarioProvider inv, Producto p) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Text(
+          'Reactivar producto',
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: _text),
+        ),
+        content: Text(
+          '¿Reactivar "${p.nombre}"?',
+          style: GoogleFonts.plusJakartaSans(fontSize: 13, color: _muted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancelar',
+              style: GoogleFonts.plusJakartaSans(color: _muted),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final ok = await inv.reactivarProducto(p.id);
+              if (ok && mounted) {
+                inv.cargarProductos(tiendaId: _tiendaActiva, activo: _activoFiltro);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _accentDark,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text(
+              'Reactivar',
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
-// ── Modelo de dato para stats ──────────────────────
 class _StatData {
-  final IconData    icon;
-  final String      label;
-  final String      value;
-  final List<Color> colors;
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color tone;
+  final Color iconColor;
+
   const _StatData({
     required this.icon,
     required this.label,
     required this.value,
-    required this.colors,
+    required this.tone,
+    required this.iconColor,
   });
 }

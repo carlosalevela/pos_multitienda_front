@@ -5,12 +5,14 @@ import '../services/proveedor_service.dart';
 import '../services/compra_service.dart';
 import '../services/tienda_service.dart';
 import '../services/inventario_service.dart';
+import '../services/empresa_service.dart';
 
 class ProveedoresProvider extends ChangeNotifier {
   final _proveedorService  = ProveedorService();
   final _compraService     = CompraService();
   final _tiendaService     = TiendaService();
   final _inventarioService = InventarioService();
+  final _empresaService    = EmpresaService();
 
   // ── Estado proveedores ────────────────────────────────
   List<Map<String, dynamic>> proveedores       = [];
@@ -28,9 +30,26 @@ class ProveedoresProvider extends ChangeNotifier {
   String? errorMsg;
   String? successMsg;
 
+  // ── Empresas ──────────────────────────────────────────
+  List<Map<String, dynamic>> empresasSimple = [];
+  bool cargandoEmpresas = false;
+
   // ── Tiendas y categorías ──────────────────────────────
   List<Map<String, dynamic>> tiendasSimple    = [];
   List<Map<String, dynamic>> categoriasSimple = [];
+  bool cargandoTiendas = false;
+
+  // ✅ Config mayoreo
+  bool _manejaM   = false;
+  int  _cantidadM = 12;
+  bool _cargandoM = false;
+  bool get manejaM   => _manejaM;
+  int  get cantidadM => _cantidadM;
+  bool get cargandoM => _cargandoM;
+
+  // ✅ Guardamos último tiendaId/estado para refrescar después de crear
+  int?    _ultimaTiendaId;
+  String? _ultimoEstado;
 
   void limpiarMensajes() {
     errorMsg   = null;
@@ -44,8 +63,6 @@ class ProveedoresProvider extends ChangeNotifier {
     cargandoProveedores = true;
     errorProveedores    = null;
     notifyListeners();
-
-    // ✅ FIX: try/catch — evita spinner infinito si la red falla
     try {
       proveedores = await _proveedorService.listar(q: q);
     } catch (e) {
@@ -70,26 +87,21 @@ class ProveedoresProvider extends ChangeNotifier {
     guardando = true;
     errorMsg  = null;
     notifyListeners();
-
     try {
       final res = await _proveedorService.crear(data);
-
       if (res['success'] == true) {
         successMsg = '✅ Proveedor creado correctamente';
-        // ✅ FIX: notificar antes del reload para que el botón deje de girar
-        guardando = false;
+        guardando  = false;
         notifyListeners();
         await cargarProveedores();
         return true;
       }
-
       errorMsg = res['error'] ?? 'Error al crear proveedor';
       return false;
     } catch (e) {
       errorMsg = 'Error inesperado al crear proveedor';
       return false;
     } finally {
-      // ✅ FIX: always reset guardando aunque haya excepción
       guardando = false;
       notifyListeners();
     }
@@ -99,10 +111,8 @@ class ProveedoresProvider extends ChangeNotifier {
     guardando = true;
     errorMsg  = null;
     notifyListeners();
-
     try {
       final res = await _proveedorService.editar(id, data);
-
       if (res['success'] == true) {
         successMsg = '✅ Proveedor actualizado';
         guardando  = false;
@@ -110,7 +120,6 @@ class ProveedoresProvider extends ChangeNotifier {
         await cargarProveedores();
         return true;
       }
-
       errorMsg = res['error'] ?? 'Error al editar proveedor';
       return false;
     } catch (e) {
@@ -125,14 +134,12 @@ class ProveedoresProvider extends ChangeNotifier {
   Future<bool> eliminarProveedor(int id) async {
     try {
       final res = await _proveedorService.eliminar(id);
-
       if (res['success'] == true) {
         proveedores.removeWhere((p) => p['id'] == id);
         successMsg = '🗑️ Proveedor desactivado';
         notifyListeners();
         return true;
       }
-
       errorMsg = res['error'] ?? 'Error al eliminar proveedor';
       notifyListeners();
       return false;
@@ -146,16 +153,15 @@ class ProveedoresProvider extends ChangeNotifier {
   // ── Compras ───────────────────────────────────────────
 
   Future<void> cargarCompras({int? tiendaId, String? estado}) async {
+    // ✅ Guardamos para refrescar después de crear/recibir
+    _ultimaTiendaId = tiendaId;
+    _ultimoEstado   = estado;
     cargandoCompras = true;
     errorCompras    = null;
     notifyListeners();
-
-    // ✅ FIX: try/catch — evita spinner infinito
     try {
       compras = await _compraService.listar(
-        tiendaId: tiendaId,
-        estado:   estado,
-      );
+          tiendaId: tiendaId, estado: estado);
     } catch (e) {
       errorCompras = 'Error al cargar compras';
     } finally {
@@ -171,18 +177,17 @@ class ProveedoresProvider extends ChangeNotifier {
     guardando = true;
     errorMsg  = null;
     notifyListeners();
-
     try {
       final res = await _compraService.crear(data);
-
       if (res['success'] == true) {
         successMsg = '✅ Compra registrada correctamente';
         guardando  = false;
         notifyListeners();
-        await cargarCompras();
+        // ✅ Refresca con los últimos filtros activos
+        await cargarCompras(
+            tiendaId: _ultimaTiendaId, estado: _ultimoEstado);
         return true;
       }
-
       errorMsg = res['error'] ?? 'Error al crear compra';
       return false;
     } catch (e) {
@@ -194,14 +199,21 @@ class ProveedoresProvider extends ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>?> recibirCompra(int id) async {
+  // ✅ Ahora acepta precios y preciosMayoreo
+  Future<Map<String, dynamic>?> recibirCompra(
+    int id, {
+    required Map<String, double> precios,
+    Map<String, double>?         preciosMayoreo,
+  }) async {
     guardando = true;
     errorMsg  = null;
     notifyListeners();
-
     try {
-      final res = await _compraService.recibir(id);
-
+      final res = await _compraService.recibir(
+        id,
+        precios:        precios,
+        preciosMayoreo: preciosMayoreo,
+      );
       if (res['success'] == true) {
         final idx = compras.indexWhere((c) => c['id'] == id);
         if (idx != -1) {
@@ -211,7 +223,6 @@ class ProveedoresProvider extends ChangeNotifier {
         notifyListeners();
         return res['data'];
       }
-
       errorMsg = res['error'] ?? 'Error al recibir compra';
       notifyListeners();
       return null;
@@ -228,7 +239,6 @@ class ProveedoresProvider extends ChangeNotifier {
   Future<bool> cancelarCompra(int id) async {
     try {
       final res = await _compraService.cancelar(id);
-
       if (res['success'] == true) {
         final idx = compras.indexWhere((c) => c['id'] == id);
         if (idx != -1) {
@@ -238,7 +248,6 @@ class ProveedoresProvider extends ChangeNotifier {
         notifyListeners();
         return true;
       }
-
       errorMsg = res['error'] ?? 'Error al cancelar compra';
       notifyListeners();
       return false;
@@ -249,13 +258,90 @@ class ProveedoresProvider extends ChangeNotifier {
     }
   }
 
+  // ── Empresas ──────────────────────────────────────────
+
+  Future<void> cargarEmpresasSimple() async {
+    if (cargandoEmpresas) return;
+    cargandoEmpresas = true;
+    notifyListeners();
+    try {
+      empresasSimple = await _empresaService.listarSimple();
+    } catch (_) {
+      empresasSimple = [];
+    } finally {
+      cargandoEmpresas = false;
+      notifyListeners();
+    }
+  }
+
+  // ✅ Carga config mayoreo desde el backend
+  Future<void> cargarConfigMayoreo(int empresaId) async {
+    _cargandoM = true;
+    notifyListeners();
+    try {
+      final data = await _empresaService.getConfigMayoreo(empresaId);
+      if (data != null) {
+        _manejaM   = data['maneja_mayoreo']   as bool? ?? false;
+        _cantidadM = data['cantidad_mayoreo'] as int?  ?? 12;
+      }
+    } catch (_) {
+    } finally {
+      _cargandoM = false;
+      notifyListeners();
+    }
+  }
+
+  // ✅ Guarda config mayoreo — retorna null si ok, mensaje si error
+  Future<String?> guardarConfigMayoreo(
+    int  empresaId, {
+    required bool manejaM,
+    required int  cantidadM,
+  }) async {
+    guardando = true;
+    errorMsg  = null;
+    notifyListeners();
+    try {
+      final res = await _empresaService.updateConfigMayoreo(
+        empresaId,
+        manejaM:   manejaM,
+        cantidadM: cantidadM,
+      );
+      if (res['success'] == true) {
+        _manejaM   = manejaM;
+        _cantidadM = cantidadM;
+        successMsg = '✅ Configuración guardada correctamente';
+        notifyListeners();
+        return null;
+      }
+      errorMsg = res['error'] ?? 'Error al guardar';
+      notifyListeners();
+      return errorMsg;
+    } catch (e) {
+      errorMsg = 'Error inesperado';
+      notifyListeners();
+      return errorMsg;
+    } finally {
+      guardando = false;
+      notifyListeners();
+    }
+  }
+
   // ── Tiendas ───────────────────────────────────────────
 
-  Future<void> cargarTiendasSimple() async {
+  Future<void> cargarTiendasSimple({int? empresaId}) async {
+    if (cargandoTiendas) return;
+    cargandoTiendas = true;
+    tiendasSimple   = [];
+    notifyListeners();
     try {
-      tiendasSimple = await _tiendaService.getTiendasSimple();
+      tiendasSimple = await _tiendaService.getTiendasSimple(
+          empresaId: empresaId);
+    } catch (_) {
+      tiendasSimple = [];
+    } finally {
+      cargandoTiendas = false;
       notifyListeners();
-    } catch (_) {}
+    }
   }
 
   // ── Categorías ────────────────────────────────────────
@@ -275,9 +361,7 @@ class ProveedoresProvider extends ChangeNotifier {
   }) async {
     try {
       final productos = await _inventarioService.getProductos(
-        q:        q,
-        tiendaId: tiendaId,
-      );
+          q: q, tiendaId: tiendaId);
       return productos.map((p) => p.toJson()).toList();
     } catch (_) {
       return [];
@@ -286,7 +370,6 @@ class ProveedoresProvider extends ChangeNotifier {
 
   // ── Getters ───────────────────────────────────────────
 
-  // ✅ FIX: solo cuenta proveedores activos
   int get totalProveedores =>
       proveedores.where((p) => p['activo'] == true).length;
 

@@ -10,6 +10,7 @@ import '../../models/empresa_model.dart';
 import '../../models/tienda_model.dart';
 import 'widgets/cliente_form.dart';
 import 'widgets/cliente_detalle_sheet.dart';
+import 'widgets/alertas_badge.dart'; // ✅ import nuevo
 
 const _teal   = Color(0xFF01696F);
 const _danger = Color(0xFFE03E3E);
@@ -57,7 +58,7 @@ class _ClientesScreenState extends State<ClientesScreen> {
         if (!mounted) return;
         final prov = context.read<ClienteProvider>();
         await prov.cargarClientes(tiendaId: _tiendaId);
-        await prov.cargarAlertas(tiendaId: _tiendaId); // ✅ fix 1
+        await prov.cargarAlertas(tiendaId: _tiendaId);
       }
     });
   }
@@ -102,7 +103,7 @@ class _ClientesScreenState extends State<ClientesScreen> {
     if (!mounted) return;
     final prov = context.read<ClienteProvider>();
     await prov.cargarClientes(tiendaId: t.id);
-    await prov.cargarAlertas(tiendaId: t.id); // ✅ fix 2
+    await prov.cargarAlertas(tiendaId: t.id);
   }
 
   // ── Recargar tiendas ─────────────────────────────────
@@ -127,7 +128,7 @@ class _ClientesScreenState extends State<ClientesScreen> {
     if (_fase == _Fase.clientes) {
       final prov = context.read<ClienteProvider>();
       prov.limpiarClientes();
-      prov.limpiarAlertas(); // ✅ fix 3
+      prov.limpiarAlertas();
       setState(() {
         _tiendaId     = null;
         _tiendaNombre = '';
@@ -161,18 +162,24 @@ class _ClientesScreenState extends State<ClientesScreen> {
   }
 
   void _abrirFormCrear() {
-    ClienteForm.mostrar(context,
-        onGuardado: () => context
-            .read<ClienteProvider>()
-            .cargarClientes(tiendaId: _tiendaId));
+    ClienteForm.mostrar(
+      context,
+      tiendaId:   _tiendaId,   // ← agrega esto
+      onGuardado: () => context
+          .read<ClienteProvider>()
+          .cargarClientes(tiendaId: _tiendaId),
+    );
   }
 
   void _abrirFormEditar(Cliente c) {
-    ClienteForm.mostrar(context,
-        cliente:    c,
-        onGuardado: () => context
-            .read<ClienteProvider>()
-            .cargarClientes(tiendaId: _tiendaId));
+    ClienteForm.mostrar(
+      context,
+      cliente:    c,
+      tiendaId:   _tiendaId,   // ← agrega esto
+      onGuardado: () => context
+          .read<ClienteProvider>()
+          .cargarClientes(tiendaId: _tiendaId),
+    );
   }
 
   void _verDetalle(Cliente c) {
@@ -241,18 +248,19 @@ class _ClientesScreenState extends State<ClientesScreen> {
         ],
       ),
       actions: [
+        // ✅ Reemplaza el Chip por AlertasBadge con panel
         if (_fase == _Fase.clientes)
           Consumer<ClienteProvider>(
-            builder: (_, p, __) => p.totalAlertas > 0
-                ? Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: Chip(
-                      backgroundColor: Colors.amber,
-                      label: Text('${p.totalAlertas} alertas',
-                          style: const TextStyle(fontSize: 12)),
-                    ),
-                  )
-                : const SizedBox.shrink(),
+            builder: (_, p, __) => Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Center(
+                child: AlertasBadge(
+                  total:     p.totalAlertas,
+                  vencidos:  p.vencidos,
+                  porVencer: p.porVencer,
+                ),
+              ),
+            ),
           ),
       ],
     );
@@ -448,7 +456,7 @@ class _ClientesScreenState extends State<ClientesScreen> {
                               await prov.cargarClientes(
                                   tiendaId: _tiendaId,
                                   q:        _searchCtrl.text);
-                              await prov.cargarAlertas(tiendaId: _tiendaId); // ✅ fix 4
+                              await prov.cargarAlertas(tiendaId: _tiendaId);
                             },
                             color: _teal,
                             child: ListView.separated(

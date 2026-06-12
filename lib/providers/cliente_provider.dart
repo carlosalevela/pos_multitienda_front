@@ -4,21 +4,17 @@ import '../models/separado.dart';
 import '../models/alerta_separado.dart';
 import '../services/cliente_service.dart';
 
-
 class ClienteProvider extends ChangeNotifier {
   final _service = ClienteService();
-
 
   // ── Estado clientes ────────────────────────────────────────
   List<Cliente> clientes            = [];
   List<Cliente> clientesSimple      = [];
   Cliente?      clienteSeleccionado;
 
-
   // ── Estado separados (lista general) ──────────────────────
   List<Separado> separados          = [];
   Separado?      separadoSeleccionado;
-
 
   // ── Estado detalle de cliente ──────────────────────────────
   List<Separado> separadosActivos   = [];
@@ -26,21 +22,17 @@ class ClienteProvider extends ChangeNotifier {
   bool           cargandoDetalle    = false;
   int?           _clienteDetalleId;
 
-
   // ── Estado abonos por fecha ────────────────────────────────
   List<Map<String, dynamic>> abonosPorFecha     = [];
   double                     totalAbonosPorFecha = 0.0;
-
 
   // ── Estado general ─────────────────────────────────────────
   bool    _cargando  = false;
   bool    _guardando = false;
   String? error;
 
-
   bool get cargando  => _cargando;
   bool get guardando => _guardando;
-
 
   // ── Alertas ────────────────────────────────────────────────
   List<AlertaSeparado> _vencidos     = [];
@@ -48,23 +40,19 @@ class ClienteProvider extends ChangeNotifier {
   int                  _totalAlertas = 0;
   int?                 _tiendaIdAlertas;
 
-
   List<AlertaSeparado> get vencidos     => _vencidos;
   List<AlertaSeparado> get porVencer    => _porVencer;
   int                  get totalAlertas => _totalAlertas;
-
 
 
   // ══════════════════════════════════════════════════════════
   // CLIENTES
   // ══════════════════════════════════════════════════════════
 
-
   Future<void> cargarClientes({String? q, int? tiendaId}) async {
     _cargando = true;
     error     = null;
     notifyListeners();
-
 
     try {
       clientes = await _service.getClientes(q: q, tiendaId: tiendaId);
@@ -79,7 +67,6 @@ class ClienteProvider extends ChangeNotifier {
     }
   }
 
-
   Future<void> cargarClientesSimple({String? q}) async {
     try {
       clientesSimple = await _service.getClientesSimple(q: q);
@@ -91,11 +78,9 @@ class ClienteProvider extends ChangeNotifier {
     }
   }
 
-
   Future<void> cargarCliente(int id) async {
     _cargando = true;
     notifyListeners();
-
 
     try {
       clienteSeleccionado = await _service.getCliente(id);
@@ -107,16 +92,13 @@ class ClienteProvider extends ChangeNotifier {
     }
   }
 
-
   Future<bool> crearCliente(Map<String, dynamic> data) async {
     _guardando = true;
     error      = null;
     notifyListeners();
 
-
     final result = await _service.crearCliente(data);
     _guardando   = false;
-
 
     if (result['success'] == true) {
       final nuevo = result['data'] as Cliente;
@@ -125,22 +107,18 @@ class ClienteProvider extends ChangeNotifier {
       return true;
     }
 
-
     error = result['error'] ?? 'No se pudo crear el cliente';
     notifyListeners();
     return false;
   }
-
 
   Future<bool> editarCliente(int id, Map<String, dynamic> data) async {
     _guardando = true;
     error      = null;
     notifyListeners();
 
-
     final result = await _service.editarCliente(id, data);
     _guardando   = false;
-
 
     if (result['success'] == true) {
       final actualizado = result['data'] as Cliente;
@@ -152,16 +130,13 @@ class ClienteProvider extends ChangeNotifier {
       return true;
     }
 
-
     error = result['error'] ?? 'No se pudo editar el cliente';
     notifyListeners();
     return false;
   }
 
-
   Future<bool> desactivarCliente(int id) async {
     final result = await _service.desactivarCliente(id);
-
 
     if (result['success'] == true) {
       clientes = clientes.where((c) => c.id != id).toList();
@@ -170,15 +145,12 @@ class ClienteProvider extends ChangeNotifier {
       error = result['error'];
     }
 
-
     notifyListeners();
     return result['success'] == true;
   }
 
-
   Future<bool> activarCliente(int id) async {
     final result = await _service.activarCliente(id);
-
 
     if (result['success'] == true) {
       final actualizado = result['data'] as Cliente;
@@ -189,11 +161,9 @@ class ClienteProvider extends ChangeNotifier {
       error = result['error'];
     }
 
-
     notifyListeners();
     return result['success'] == true;
   }
-
 
   void limpiarClientes() {
     clientes = [];
@@ -201,19 +171,16 @@ class ClienteProvider extends ChangeNotifier {
   }
 
 
-
   // ══════════════════════════════════════════════════════════
   // DETALLE DE CLIENTE
   // ══════════════════════════════════════════════════════════
 
-
+  // ✅ Fix 1: eliminado el guard "if (_clienteDetalleId == clienteId) return"
   Future<void> cargarDetalleCliente(int clienteId) async {
-    if (_clienteDetalleId == clienteId) return;
     _clienteDetalleId = clienteId;
     cargandoDetalle   = true;
     error             = null;
     notifyListeners();
-
 
     try {
       final results = await Future.wait([
@@ -222,7 +189,6 @@ class ClienteProvider extends ChangeNotifier {
             clienteId: clienteId,
             estados:   ['completado', 'cancelado']),
       ]);
-
 
       separadosActivos = results[0];
       historialCliente = results[1]
@@ -238,14 +204,12 @@ class ClienteProvider extends ChangeNotifier {
     }
   }
 
-
   Future<void> _refrescarDetalleCliente() async {
     if (_clienteDetalleId == null) return;
     final id          = _clienteDetalleId!;
     _clienteDetalleId = null;
     await cargarDetalleCliente(id);
   }
-
 
   void limpiarDetalleCliente() {
     separadosActivos  = [];
@@ -256,11 +220,9 @@ class ClienteProvider extends ChangeNotifier {
   }
 
 
-
   // ══════════════════════════════════════════════════════════
   // SEPARADOS
   // ══════════════════════════════════════════════════════════
-
 
   Future<void> cargarSeparados({
     int? tiendaId, String? estado, int? clienteId,
@@ -268,7 +230,6 @@ class ClienteProvider extends ChangeNotifier {
     _cargando = true;
     error     = null;
     notifyListeners();
-
 
     try {
       separados = await _service.getSeparados(
@@ -286,11 +247,9 @@ class ClienteProvider extends ChangeNotifier {
     }
   }
 
-
   Future<void> cargarSeparado(int id) async {
     _cargando = true;
     notifyListeners();
-
 
     try {
       separadoSeleccionado = await _service.getSeparado(id);
@@ -302,16 +261,13 @@ class ClienteProvider extends ChangeNotifier {
     }
   }
 
-
   Future<bool> crearSeparado(Map<String, dynamic> data) async {
     _guardando = true;
     error      = null;
     notifyListeners();
 
-
     final result = await _service.crearSeparado(data);
     _guardando   = false;
-
 
     if (result['success'] == true) {
       final nuevo = result['data'] as Separado;
@@ -320,25 +276,20 @@ class ClienteProvider extends ChangeNotifier {
       return true;
     }
 
-
     error = result['error'] ?? 'No se pudo crear el separado';
     notifyListeners();
     return false;
   }
-
 
   Future<bool> abonarSeparado(int id, double monto, String metodoPago) async {
     _guardando = true;
     error      = null;
     notifyListeners();
 
-
     final result = await _service.abonarSeparado(id, monto, metodoPago);
-
 
     if (result['success'] == true) {
       final data = result['data'] as Map<String, dynamic>;
-
 
       separados = separados.map((s) {
         if (s.id != id) return s;
@@ -349,23 +300,19 @@ class ClienteProvider extends ChangeNotifier {
         );
       }).toList();
 
-
       if (separadoSeleccionado?.id == id) {
         separadoSeleccionado = separados.firstWhere((s) => s.id == id);
       }
-
 
       await Future.wait([
         _refrescarDetalleCliente(),
         cargarAlertas(tiendaId: _tiendaIdAlertas),
       ]);
 
-
       _guardando = false;
       notifyListeners();
       return true;
     }
-
 
     error      = result['error'] ?? 'Error al registrar abono';
     _guardando = false;
@@ -373,26 +320,21 @@ class ClienteProvider extends ChangeNotifier {
     return false;
   }
 
-
   Future<bool> cancelarSeparado(int id) async {
     _guardando = true;
     error      = null;
     notifyListeners();
 
-
     final result = await _service.cancelarSeparado(id);
-
 
     if (result['success'] == true) {
       separados = separados
           .map((s) => s.id == id ? s.copyWith(estado: 'cancelado') : s)
           .toList();
 
-
       if (separadoSeleccionado?.id == id) {
         separadoSeleccionado = separados.firstWhere((s) => s.id == id);
       }
-
 
       await Future.wait([
         _refrescarDetalleCliente(),
@@ -402,21 +344,17 @@ class ClienteProvider extends ChangeNotifier {
       error = result['error'] ?? 'Error al cancelar separado';
     }
 
-
     _guardando = false;
     notifyListeners();
     return result['success'] == true;
   }
 
 
-
   // ══════════════════════════════════════════════════════════
   // ALERTAS
   // ══════════════════════════════════════════════════════════
 
-
   Future<void> cargarAlertas({int? tiendaId}) async {
-    // ✅ Solo asigna si viene explícito, no reutiliza el anterior
     if (tiendaId != null) _tiendaIdAlertas = tiendaId;
 
     try {
@@ -436,7 +374,6 @@ class ClienteProvider extends ChangeNotifier {
     }
   }
 
-  // ✅ NUEVO: limpiar alertas al cambiar de tienda
   void limpiarAlertas() {
     _vencidos        = [];
     _porVencer       = [];
@@ -446,11 +383,9 @@ class ClienteProvider extends ChangeNotifier {
   }
 
 
-
   // ══════════════════════════════════════════════════════════
   // ABONOS POR FECHA
   // ══════════════════════════════════════════════════════════
-
 
   Future<void> cargarAbonosPorFecha({
     required String fecha,
@@ -458,7 +393,6 @@ class ClienteProvider extends ChangeNotifier {
   }) async {
     _cargando = true;
     notifyListeners();
-
 
     try {
       final data = await _service.getAbonosPorFecha(
@@ -481,29 +415,24 @@ class ClienteProvider extends ChangeNotifier {
   }
 
 
-
   // ══════════════════════════════════════════════════════════
   // HELPERS
   // ══════════════════════════════════════════════════════════
-
 
   void limpiarError() {
     error = null;
     notifyListeners();
   }
 
-
   void seleccionarCliente(Cliente? c) {
     clienteSeleccionado = c;
     notifyListeners();
   }
 
-
   void seleccionarSeparado(Separado? s) {
     separadoSeleccionado = s;
     notifyListeners();
   }
-
 
   void limpiarSeparados() {
     separados            = [];

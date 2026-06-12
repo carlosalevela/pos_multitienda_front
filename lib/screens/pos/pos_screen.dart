@@ -12,6 +12,8 @@ import '../../models/producto.dart';
 import '../../models/cliente.dart';
 import '../../core/constants.dart';
 import '../../providers/caja_provider.dart';
+import '../clientes/widgets/separado_form.dart';
+import 'package:intl/intl.dart';
 
 // ══════════════════════════════════════════════════════════
 // COLORES DEL SISTEMA DE DISEÑO (consistente con las demás pantallas)
@@ -1037,16 +1039,34 @@ class _PosScreenState extends State<PosScreen>
         label: Text(pos.procesando ? 'Guardando…' : 'CREAR SEPARADO',
             style: GoogleFonts.plusJakartaSans(
                 fontSize: 15, fontWeight: FontWeight.w800)),
-        onPressed: habilitado
-            ? () => _crearSeparado(pos, auth, clienteProv) : null,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          foregroundColor: Colors.white,
-          shadowColor:     Colors.transparent,
-          disabledForegroundColor: _kTextSub,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14)),
-        ),
+            onPressed: !habilitado
+            ? null
+            : () async {
+                final clienteProv = context.read<ClienteProvider>();
+
+                await SeparadoForm.mostrar(
+                  context,
+                  tiendaId: auth.tiendaId,
+                  fmt: NumberFormat.currency(
+                    locale: 'es_CO',
+                    symbol: '\$',
+                    decimalDigits: 0,
+                  ),
+                  clienteInicial: _clienteSeleccionado, // 👈 cliente del POS
+                  itemsInciales: pos.carrito,
+                  onCreado: () {
+                    // lo que antes hacías en _crearSeparado cuando todo salía bien
+                    pos.limpiarCarrito();
+                    pos.setMetodoPago('efectivo');
+                    setState(() {
+                      _clienteSeleccionado = null;
+                      _fechaLimite         = null;
+                      _clienteSearchCtrl.clear();
+                      _descuentoCtrl.clear();
+                    });
+                  },
+                );
+              },
       ),
     );
   }

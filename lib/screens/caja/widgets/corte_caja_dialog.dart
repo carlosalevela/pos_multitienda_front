@@ -318,6 +318,8 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                     _MetodoPago('Efectivo',      r.abonos.efectivo,      _sky, Icons.payments_rounded),
                   if (r.abonos.transferencia > 0)
                     _MetodoPago('Transferencia', r.abonos.transferencia, _sky, Icons.swap_horiz_rounded),
+                  if (r.abonos.tarjeta > 0)                           // ← NUEVO
+                    _MetodoPago('Tarjeta',       r.abonos.tarjeta,      _purple, Icons.credit_card_rounded),
                   _SummaryDivider(),
                   _TotalRow('TOTAL ABONOS', _f(r.abonos.total), _sky),
                   const SizedBox(height: 6),
@@ -329,7 +331,8 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                   ),
                 ]),
               ),
-              _InfoTip('Solo abonos en efectivo afectan el cuadre de caja.'),
+              _InfoTip('Tarjeta ${_f(r.abonos.tarjeta)} y transferencia '
+                '${_f(r.abonos.transferencia)} no afectan el cajón físico.'),
             ],
           ])),
 
@@ -743,6 +746,9 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
             _tFila('Efectivo',      _f(r.abonos.efectivo)),
           if (r.abonos.transferencia > 0)
             _tFila('Transfer.',     _f(r.abonos.transferencia)),
+          if (r.abonos.tarjeta > 0)                         // ← NUEVO
+            _tFila('Tarjeta',   _f(r.abonos.tarjeta)),
+          _tDivider(),
           _tFila('TOTAL', _f(r.abonos.total), bold: true),
         ],
 

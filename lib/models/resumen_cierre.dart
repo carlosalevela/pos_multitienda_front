@@ -20,23 +20,24 @@ class VentasCierre {
 
 
 class AbonosCierre {
-  final double total, efectivo, transferencia;
+  final double total, efectivo, transferencia, tarjeta;
   final int    cantidad;
 
   AbonosCierre({
     required this.total, required this.efectivo,
-    required this.transferencia, required this.cantidad,
+    required this.transferencia, required this.tarjeta, required this.cantidad,
   });
 
   factory AbonosCierre.fromJson(Map<String, dynamic> j) => AbonosCierre(
     total:         double.tryParse(j['total']?.toString()         ?? '0') ?? 0.0,
     efectivo:      double.tryParse(j['efectivo']?.toString()      ?? '0') ?? 0.0,
     transferencia: double.tryParse(j['transferencia']?.toString() ?? '0') ?? 0.0,
+    tarjeta:       double.tryParse(j['tarjeta']?.toString()       ?? '0') ?? 0.0,
     cantidad:      j['cantidad'] ?? 0,
   );
 
   factory AbonosCierre.vacio() =>
-      AbonosCierre(total: 0, efectivo: 0, transferencia: 0, cantidad: 0);
+      AbonosCierre(total: 0, efectivo: 0, transferencia: 0,tarjeta: 0, cantidad: 0);
 }
 
 

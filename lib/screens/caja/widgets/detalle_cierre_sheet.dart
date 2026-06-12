@@ -1,11 +1,10 @@
+// lib/widgets/caja/detalle_cierre_sheet.dart
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import '../../../models/sesion_historial.dart';
-
+import 'pdf/cierre_pdf.dart'; // ← único import nuevo
 
 class DetalleCierreSheet extends StatelessWidget {
   final SesionHistorial sesion;
@@ -20,6 +19,7 @@ class DetalleCierreSheet extends StatelessWidget {
   static const _red       = Color(0xFFEF4444);
   static const _yellow    = Color(0xFFF59E0B);
   static const _purple    = Color(0xFF8B5CF6);
+  static const _sky       = Color(0xFF0EA5E9);
   static const _textPri   = Color(0xFFF1F5F9);
   static const _textSec   = Color(0xFF94A3B8);
   static const _textMuted = Color(0xFF475569);
@@ -38,12 +38,9 @@ class DetalleCierreSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final esPositivo = sesion.diferencia >= 0;
     final esExacto   = sesion.diferencia.abs() < 0.01;
-
-    final difColor = esExacto
-        ? _green : esPositivo ? _accent : _red;
-    final difLabel = esExacto
-        ? 'CUADRE EXACTO' : esPositivo ? 'SOBRANTE' : 'FALTANTE';
-    final difIcon  = esExacto
+    final difColor   = esExacto ? _green : esPositivo ? _accent : _red;
+    final difLabel   = esExacto ? 'CUADRE EXACTO' : esPositivo ? 'SOBRANTE' : 'FALTANTE';
+    final difIcon    = esExacto
         ? Icons.check_circle_rounded
         : esPositivo ? Icons.arrow_circle_up_rounded : Icons.warning_rounded;
 
@@ -65,7 +62,6 @@ class DetalleCierreSheet extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
               children: [
 
-                // ── Métricas rápidas ─────────────────────────
                 _QuickMetrics(
                   sesion:     sesion,
                   f:          _f,
@@ -75,16 +71,13 @@ class DetalleCierreSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
 
-                // ── Info general ─────────────────────────────
                 _DarkCard(
                   titulo: 'Información general',
                   icono:  Icons.person_outline_rounded,
                   color:  _accent,
                   child: Column(children: [
-                    _Row(
-                      'Cajero', sesion.empleadoNombre,
-                      leading: _Avatar(sesion.empleadoNombre),
-                    ),
+                    _Row('Cajero', sesion.empleadoNombre,
+                        leading: _Avatar(sesion.empleadoNombre)),
                     const SizedBox(height: 10),
                     _Row('Apertura', _fecha(sesion.fechaApertura),
                         icon: Icons.login_rounded,  iconColor: _green),
@@ -97,7 +90,6 @@ class DetalleCierreSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
 
-                // ── Ventas ───────────────────────────────────
                 _DarkCard(
                   titulo: 'Ventas del turno',
                   icono:  Icons.trending_up_rounded,
@@ -126,7 +118,41 @@ class DetalleCierreSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
 
-                // ── Gastos ───────────────────────────────────
+                if (sesion.abonosTotal > 0) ...[
+                  _DarkCard(
+                    titulo: 'Abonos recibidos',
+                    icono:  Icons.bookmark_added_rounded,
+                    color:  _sky,
+                    child: Column(children: [
+                      if (sesion.abonosEfectivo > 0)
+                        _MetodoRow('Efectivo',      _f(sesion.abonosEfectivo),
+                            _sky,    Icons.payments_rounded),
+                      if (sesion.abonosTransferencia > 0)
+                        _MetodoRow('Transferencia', _f(sesion.abonosTransferencia),
+                            _sky,    Icons.swap_horiz_rounded),
+                      if (sesion.abonosTarjeta > 0)
+                        _MetodoRow('Tarjeta',       _f(sesion.abonosTarjeta),
+                            _purple, Icons.credit_card_rounded),
+                      const _CardDivider(),
+                      _TotalLine('TOTAL ABONOS', _f(sesion.abonosTotal), _sky),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: _Chip(
+                              '${sesion.numAbonos} abono'
+                              '${sesion.numAbonos != 1 ? "s" : ""}', _sky),
+                        ),
+                      ),
+                    ]),
+                  ),
+                  const SizedBox(height: 4),
+                  _InfoTip(
+                      'Tarjeta ${_f(sesion.abonosTarjeta)} y transferencia '
+                      '${_f(sesion.abonosTransferencia)} no afectan el cajón físico.'),
+                  const SizedBox(height: 12),
+                ],
+
                 _DarkCard(
                   titulo: 'Gastos del turno',
                   icono:  Icons.trending_down_rounded,
@@ -136,7 +162,6 @@ class DetalleCierreSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
 
-                // ── Devoluciones ─────────────────────────────
                 if (sesion.numDevoluciones > 0) ...[
                   _DarkCard(
                     titulo: 'Devoluciones del turno',
@@ -159,7 +184,6 @@ class DetalleCierreSheet extends StatelessWidget {
                   const SizedBox(height: 12),
                 ],
 
-                // ── Cuadre de caja ───────────────────────────
                 _CuadreCard(
                   esperado:   _f(sesion.montoFinalSistema),
                   contado:    _f(sesion.montoFinalReal),
@@ -170,7 +194,6 @@ class DetalleCierreSheet extends StatelessWidget {
                   fmt:        _fmt,
                 ),
 
-                // ── Observaciones ────────────────────────────
                 if (sesion.observaciones.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Container(
@@ -181,27 +204,30 @@ class DetalleCierreSheet extends StatelessWidget {
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: _border),
                     ),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                      Row(children: [
-                        const Icon(Icons.notes_rounded,
-                            size: 14, color: _textMuted),
-                        const SizedBox(width: 6),
-                        Text('OBSERVACIONES',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          const Icon(Icons.notes_rounded,
+                              size: 14, color: _textMuted),
+                          const SizedBox(width: 6),
+                          Text('OBSERVACIONES',
+                              style: GoogleFonts.dmSans(
+                                  fontSize: 10, fontWeight: FontWeight.w700,
+                                  color: _textMuted, letterSpacing: 1.2)),
+                        ]),
+                        const SizedBox(height: 8),
+                        Text(sesion.observaciones,
                             style: GoogleFonts.dmSans(
-                                fontSize: 10, fontWeight: FontWeight.w700,
-                                color: _textMuted, letterSpacing: 1.2)),
-                      ]),
-                      const SizedBox(height: 8),
-                      Text(sesion.observaciones,
-                          style: GoogleFonts.dmSans(
-                              fontSize: 13, color: _textSec, height: 1.5)),
-                    ]),
+                                fontSize: 13, color: _textSec, height: 1.5)),
+                      ],
+                    ),
                   ),
                 ],
 
                 const SizedBox(height: 24),
-                _PdfButton(onPressed: () => _exportarPDF(context)),
+                // ✅ Delega al nuevo widget de PDF
+                _PdfButton(onPressed: () => exportarCierrePDF(sesion)),
                 const SizedBox(height: 8),
               ],
             ),
@@ -217,7 +243,7 @@ class DetalleCierreSheet extends StatelessWidget {
       child: Container(
         width: 38, height: 4,
         decoration: BoxDecoration(
-          color: _border, borderRadius: BorderRadius.circular(2)),
+            color: _border, borderRadius: BorderRadius.circular(2)),
       ),
     ),
   );
@@ -240,19 +266,16 @@ class DetalleCierreSheet extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: _accent.withOpacity(0.3)),
           ),
-          child: const Icon(Icons.receipt_long_rounded,
-              color: _accent, size: 20),
+          child: const Icon(Icons.receipt_long_rounded, color: _accent, size: 20),
         ),
         const SizedBox(width: 14),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('Cierre #${sesion.id}',
                 style: GoogleFonts.dmSans(
-                    color: _textPri, fontWeight: FontWeight.w800,
-                    fontSize: 17)),
+                    color: _textPri, fontWeight: FontWeight.w800, fontSize: 17)),
             Text(sesion.tiendaNombre,
-                style: GoogleFonts.dmSans(
-                    color: _textMuted, fontSize: 12)),
+                style: GoogleFonts.dmSans(color: _textMuted, fontSize: 12)),
           ]),
         ),
         Container(
@@ -270,8 +293,7 @@ class DetalleCierreSheet extends StatelessWidget {
                   ? difLabel
                   : '${esPositivo ? '+' : '-'}\$${_fmt.format(sesion.diferencia.abs())}',
               style: GoogleFonts.dmSans(
-                  color: difColor, fontSize: 12,
-                  fontWeight: FontWeight.w800),
+                  color: difColor, fontSize: 12, fontWeight: FontWeight.w800),
             ),
           ]),
         ),
@@ -292,8 +314,7 @@ class DetalleCierreSheet extends StatelessWidget {
         Expanded(
           child: Text(label,
               style: GoogleFonts.dmSans(
-                  color: _textSec, fontSize: 13,
-                  fontWeight: FontWeight.w500)),
+                  color: _textSec, fontSize: 13, fontWeight: FontWeight.w500)),
         ),
         Text(valor,
             style: GoogleFonts.dmSans(
@@ -302,150 +323,19 @@ class DetalleCierreSheet extends StatelessWidget {
       ]),
     );
 
-  // ── PDF ─────────────────────────────────────────────────────
-  Future<void> _exportarPDF(BuildContext context) async {
-    final doc        = pw.Document();
-    final esPositivo = sesion.diferencia >= 0;
-
-    doc.addPage(pw.Page(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.all(36),
-      build: (pw.Context ctx) => pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Container(
-            width: double.infinity,
-            padding: const pw.EdgeInsets.all(22),
-            decoration: const pw.BoxDecoration(
-              color: PdfColor.fromInt(0xFF0A0E1A),
-              borderRadius: pw.BorderRadius.all(pw.Radius.circular(10)),
-            ),
-            child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-              pw.Text(sesion.tiendaNombre,
-                  style: pw.TextStyle(
-                      color: PdfColors.white,
-                      fontSize: 22, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 4),
-              pw.Text('Reporte de Cierre de Caja — #${sesion.id}',
-                  style: const pw.TextStyle(
-                      color: PdfColor.fromInt(0xFF94A3B8), fontSize: 12)),
-            ]),
-          ),
-          pw.SizedBox(height: 22),
-
-          _pdfSeccion('INFORMACIÓN GENERAL'),
-          _pdfFila('Cajero',        sesion.empleadoNombre),
-          _pdfFila('Apertura',      _fecha(sesion.fechaApertura)),
-          _pdfFila('Cierre',        _fecha(sesion.fechaCierre)),
-          _pdfFila('Saldo inicial', _f(sesion.saldoInicial)),
-          pw.SizedBox(height: 16),
-
-          _pdfSeccion('VENTAS DEL TURNO'),
-          _pdfFila('Efectivo',      _f(sesion.ventasEfectivo)),
-          _pdfFila('Tarjeta',       _f(sesion.ventasTarjeta)),
-          _pdfFila('Transferencia', _f(sesion.ventasTransferencia)),
-          if (sesion.ventasMixto > 0)
-            _pdfFila('Mixto',       _f(sesion.ventasMixto)),
-          pw.Divider(color: const PdfColor.fromInt(0xFF1E2D45)),
-          _pdfFila('TOTAL VENTAS',  _f(sesion.ventasTotal), bold: true),
-          pw.SizedBox(height: 16),
-
-          _pdfSeccion('GASTOS DEL TURNO'),
-          _pdfFila('Total gastos',  _f(sesion.gastosTotal)),
-          pw.SizedBox(height: 16),
-
-          if (sesion.numDevoluciones > 0) ...[
-            _pdfSeccion('DEVOLUCIONES DEL TURNO'),
-            _pdfFila('Devuelto en ef.',
-                '-${_f(sesion.devolucionesEfectivo)}',
-                valueColor: PdfColors.red700),
-            _pdfFila('Cantidad', '${sesion.numDevoluciones}'),
-            pw.SizedBox(height: 16),
-          ],
-
-          _pdfSeccion('CUADRE DE CAJA'),
-          _pdfFila('Monto esperado', _f(sesion.montoFinalSistema)),
-          _pdfFila('Monto contado',  _f(sesion.montoFinalReal)),
-          pw.Divider(color: const PdfColor.fromInt(0xFF1E2D45)),
-          _pdfFila(
-            'Diferencia',
-            '${esPositivo ? '+' : ''}\$${_fmt.format(sesion.diferencia)}',
-            bold: true,
-            valueColor: esPositivo ? PdfColors.green700 : PdfColors.red700,
-          ),
-          pw.SizedBox(height: 16),
-
-          if (sesion.observaciones.isNotEmpty) ...[
-            _pdfSeccion('OBSERVACIONES'),
-            pw.Text(sesion.observaciones,
-                style: const pw.TextStyle(
-                    fontSize: 11,
-                    color: PdfColor.fromInt(0xFF475569))),
-            pw.SizedBox(height: 16),
-          ],
-
-          pw.Spacer(),
-          pw.Divider(color: const PdfColor.fromInt(0xFF1E2D45)),
-          pw.SizedBox(height: 6),
-          pw.Text(
-            'Generado el ${DateTime.now().toString().substring(0, 16)} · POS Multitienda',
-            style: const pw.TextStyle(
-                fontSize: 9,
-                color: PdfColor.fromInt(0xFF94A3B8))),
-        ],
-      ),
-    ));
-
-    await Printing.sharePdf(
-      bytes:    await doc.save(),
-      filename: 'cierre_caja_${sesion.id}.pdf',
-    );
-  }
-
-  pw.Widget _pdfSeccion(String titulo) => pw.Padding(
-    padding: const pw.EdgeInsets.only(bottom: 6),
-    child: pw.Text(titulo,
-        style: pw.TextStyle(
-            fontSize: 10, fontWeight: pw.FontWeight.bold,
-            color: const PdfColor.fromInt(0xFF3B82F6))),
-  );
-
-  pw.Widget _pdfFila(String label, String valor,
-      {bool bold = false, PdfColor? valueColor}) =>
-    pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 3),
-      child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        children: [
-          pw.Text(label,
-              style: const pw.TextStyle(
-                  fontSize: 11,
-                  color: PdfColor.fromInt(0xFF64748B))),
-          pw.Text(valor,
-              style: pw.TextStyle(
-                  fontSize: 11,
-                  fontWeight: bold
-                      ? pw.FontWeight.bold : pw.FontWeight.normal,
-                  color: valueColor ??
-                      const PdfColor.fromInt(0xFF0F172A))),
-        ],
-      ),
-    );
+  // ✅ _exportarPDF y _pdfSeccion/_pdfFila eliminados completamente
 }
 
-
 // ══════════════════════════════════════════════════════════
-// COMPONENTES INTERNOS
+// COMPONENTES INTERNOS — sin cambios
 // ══════════════════════════════════════════════════════════
 
 class _QuickMetrics extends StatelessWidget {
-  final SesionHistorial          sesion;
-  final String Function(double)  f;
-  final Color   difColor;
-  final String  difLabel;
-  final bool    esPositivo;
+  final SesionHistorial         sesion;
+  final String Function(double) f;
+  final Color  difColor;
+  final String difLabel;
+  final bool   esPositivo;
 
   const _QuickMetrics({
     required this.sesion,   required this.f,
@@ -482,7 +372,6 @@ class _QuickMetrics extends StatelessWidget {
     )),
   ]);
 }
-
 
 class _MetricTile extends StatelessWidget {
   final String   label, valor;
@@ -528,7 +417,6 @@ class _MetricTile extends StatelessWidget {
   );
 }
 
-
 class _DarkCard extends StatelessWidget {
   final String   titulo;
   final IconData icono;
@@ -571,7 +459,6 @@ class _DarkCard extends StatelessWidget {
   );
 }
 
-
 class _MetodoRow extends StatelessWidget {
   final String   label, valor;
   final Color    color;
@@ -596,8 +483,7 @@ class _MetodoRow extends StatelessWidget {
       Expanded(
         child: Text(label,
             style: GoogleFonts.dmSans(
-                fontSize: 13, color: _textSec,
-                fontWeight: FontWeight.w500)),
+                fontSize: 13, color: _textSec, fontWeight: FontWeight.w500)),
       ),
       Text(valor,
           style: GoogleFonts.dmSans(
@@ -605,7 +491,6 @@ class _MetodoRow extends StatelessWidget {
     ]),
   );
 }
-
 
 class _TotalLine extends StatelessWidget {
   final String label, valor;
@@ -627,7 +512,6 @@ class _TotalLine extends StatelessWidget {
   );
 }
 
-
 class _CardDivider extends StatelessWidget {
   const _CardDivider();
   @override
@@ -636,7 +520,6 @@ class _CardDivider extends StatelessWidget {
     child: Divider(height: 1, color: Color(0xFF1E2D45)),
   );
 }
-
 
 class _Chip extends StatelessWidget {
   final String text;
@@ -656,7 +539,6 @@ class _Chip extends StatelessWidget {
             fontSize: 11, color: color, fontWeight: FontWeight.w700)),
   );
 }
-
 
 class _Avatar extends StatelessWidget {
   final String nombre;
@@ -682,7 +564,6 @@ class _Avatar extends StatelessWidget {
   );
 }
 
-
 class _InfoTip extends StatelessWidget {
   final String msg;
   const _InfoTip(this.msg);
@@ -697,13 +578,11 @@ class _InfoTip extends StatelessWidget {
       Expanded(
         child: Text(msg,
             style: GoogleFonts.dmSans(
-                fontSize: 11, color: _textMuted,
-                fontWeight: FontWeight.w500)),
+                fontSize: 11, color: _textMuted, fontWeight: FontWeight.w500)),
       ),
     ]),
   );
 }
-
 
 class _CuadreCard extends StatelessWidget {
   final String esperado, contado;
@@ -739,8 +618,8 @@ class _CuadreCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: _green.withOpacity(0.3), width: 1.5),
         boxShadow: [BoxShadow(
-          color: _green.withOpacity(0.12),
-          blurRadius: 20, offset: const Offset(0, 6))],
+            color: _green.withOpacity(0.12),
+            blurRadius: 20, offset: const Offset(0, 6))],
       ),
       child: Column(children: [
         Row(children: [
@@ -751,14 +630,12 @@ class _CuadreCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: _green.withOpacity(0.3)),
             ),
-            child: const Icon(Icons.calculate_rounded,
-                color: _green, size: 15),
+            child: const Icon(Icons.calculate_rounded, color: _green, size: 15),
           ),
           const SizedBox(width: 10),
           Text('Cuadre de caja',
               style: GoogleFonts.dmSans(
-                  fontSize: 13, fontWeight: FontWeight.w700,
-                  color: _green)),
+                  fontSize: 13, fontWeight: FontWeight.w700, color: _green)),
         ]),
         const SizedBox(height: 16),
         _CuadreLine('Monto esperado', esperado, _textSec),
@@ -772,8 +649,7 @@ class _CuadreCard extends StatelessWidget {
           children: [
             Text(difLabel,
                 style: GoogleFonts.dmSans(
-                    color: difColor, fontWeight: FontWeight.w800,
-                    fontSize: 12)),
+                    color: difColor, fontWeight: FontWeight.w800, fontSize: 12)),
             Text(difStr,
                 style: GoogleFonts.dmSans(
                     color: Colors.white, fontWeight: FontWeight.w800,
@@ -784,7 +660,6 @@ class _CuadreCard extends StatelessWidget {
     );
   }
 }
-
 
 class _CuadreLine extends StatelessWidget {
   final String label, valor;
@@ -808,7 +683,6 @@ class _CuadreLine extends StatelessWidget {
   );
 }
 
-
 class _PdfButton extends StatelessWidget {
   final VoidCallback onPressed;
   const _PdfButton({required this.onPressed});
@@ -827,8 +701,8 @@ class _PdfButton extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(14),
         boxShadow: [BoxShadow(
-          color: _accent.withOpacity(0.35),
-          blurRadius: 14, offset: const Offset(0, 5))],
+            color: _accent.withOpacity(0.35),
+            blurRadius: 14, offset: const Offset(0, 5))],
       ),
       child: ElevatedButton.icon(
         icon:  const Icon(Icons.picture_as_pdf_rounded, size: 19),

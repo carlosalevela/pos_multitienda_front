@@ -1,3 +1,5 @@
+// lib/services/compra_service.dart
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../core/api_client.dart';
@@ -20,11 +22,10 @@ class CompraService {
   }
 
   // ── Lista con filtros ──────────────────────────────────
-
   Future<List<Map<String, dynamic>>> listar({
     int?    tiendaId,
     String? estado,
-    String? fechaIni,   // ✅ filtros de rango útiles para reportes
+    String? fechaIni,
     String? fechaFin,
   }) async {
     try {
@@ -37,7 +38,6 @@ class CompraService {
           if (fechaFin != null) 'fecha_fin': fechaFin,
         },
       );
-      // ✅ maneja lista directa o paginada
       final List data = res.data is List
           ? res.data
           : res.data['results'] ?? [];
@@ -52,7 +52,6 @@ class CompraService {
   }
 
   // ── Detalle ────────────────────────────────────────────
-
   Future<Map<String, dynamic>?> obtener(int id) async {
     try {
       final res = await ApiClient.instance.get(
@@ -68,44 +67,56 @@ class CompraService {
   }
 
   // ── Crear orden de compra ──────────────────────────────
-  // ✅ empresa NO se envía — backend la inyecta desde el token
-
   Future<Map<String, dynamic>> crear(Map<String, dynamic> data) async {
     try {
-      data.remove('empresa');   // ✅
+      data.remove('empresa');
       final res = await ApiClient.instance.post(
-        '/proveedores/compras/', data: data);
+          '/proveedores/compras/', data: data);
       return {'success': true, 'data': res.data};
     } on DioException catch (e) {
-      return {'success': false, 'error': _extractError(e, 'Error al crear la orden de compra')};
+      return {'success': false,
+              'error': _extractError(e, 'Error al crear la orden de compra')};
     } catch (e) {
       return {'success': false, 'error': 'Error inesperado'};
     }
   }
 
-  // ── Recibir → actualiza inventario ────────────────────
-
-  Future<Map<String, dynamic>> recibir(int id) async {
+  // ── Recibir → actualiza inventario + precios ──────────
+  // ✅ precios:        {detalleId: precioVenta}
+  // ✅ preciosMayoreo: {detalleId: precioMayoreo} (opcional)
+  Future<Map<String, dynamic>> recibir(
+    int id, {
+    required Map<String, double> precios,
+    Map<String, double>?         preciosMayoreo,
+  }) async {
     try {
+      final body = <String, dynamic>{
+        'precios': precios,
+        if (preciosMayoreo != null && preciosMayoreo.isNotEmpty)
+          'precios_mayoreo': preciosMayoreo,
+      };
       final res = await ApiClient.instance.post(
-          '/proveedores/compras/$id/recibir/');
+        '/proveedores/compras/$id/recibir/',
+        data: body,
+      );
       return {'success': true, 'data': res.data};
     } on DioException catch (e) {
-      return {'success': false, 'error': _extractError(e, 'Error al recibir la compra')};
+      return {'success': false,
+              'error': _extractError(e, 'Error al recibir la compra')};
     } catch (e) {
       return {'success': false, 'error': 'Error inesperado'};
     }
   }
 
   // ── Cancelar (solo admin) ──────────────────────────────
-
   Future<Map<String, dynamic>> cancelar(int id) async {
     try {
       final res = await ApiClient.instance.post(
           '/proveedores/compras/$id/cancelar/');
       return {'success': true, 'data': res.data};
     } on DioException catch (e) {
-      return {'success': false, 'error': _extractError(e, 'Error al cancelar la compra')};
+      return {'success': false,
+              'error': _extractError(e, 'Error al cancelar la compra')};
     } catch (e) {
       return {'success': false, 'error': 'Error inesperado'};
     }

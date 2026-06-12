@@ -12,6 +12,10 @@ class Empresa {
   final bool activo;
   final String createdAt;
 
+  // ✅ Configuración de mayoreo
+  final bool manejaMayoreo;
+  final int cantidadMayoreo;
+
   Empresa({
     required this.id,
     required this.nombre,
@@ -23,6 +27,8 @@ class Empresa {
     required this.logo,
     required this.activo,
     required this.createdAt,
+    required this.manejaMayoreo,
+    required this.cantidadMayoreo,
   });
 
   factory Empresa.fromJson(Map<String, dynamic> j) => Empresa(
@@ -36,6 +42,9 @@ class Empresa {
         logo: j['logo']?.toString() ?? '',
         activo: j['activo'] == null ? true : j['activo'] == true,
         createdAt: j['created_at']?.toString() ?? '',
+        manejaMayoreo: j['maneja_mayoreo'] == true,
+        cantidadMayoreo:
+            int.tryParse(j['cantidad_mayoreo']?.toString() ?? '') ?? 0,
       );
 
   Map<String, dynamic> toJson() => {
@@ -46,5 +55,7 @@ class Empresa {
         'direccion': direccion,
         'ciudad': ciudad,
         'activo': activo,
+        'maneja_mayoreo': manejaMayoreo,
+        'cantidad_mayoreo': cantidadMayoreo,
       };
 }

@@ -27,13 +27,15 @@ class AuthProvider extends ChangeNotifier {
   String get tiendaNombre  => _tiendaNombre;
   String get empresaId     => _empresaId;
   String get empresaNombre => _empresaNombre;
+  
 
   // ── Helpers de rol ─────────────────────────────────────
-
+  bool get esSuperadmin       => _rol == 'superadmin';
   bool get esAdmin            => _rol == 'admin';
   bool get esSupervisor       => _rol == 'supervisor';
   bool get esCajero           => _rol == 'cajero';
   bool get esAdminOSupervisor => esAdmin || esSupervisor;
+  bool get debeElegirEmpresa  => esSuperadmin; 
 
   // ── Login ──────────────────────────────────────────────
 
