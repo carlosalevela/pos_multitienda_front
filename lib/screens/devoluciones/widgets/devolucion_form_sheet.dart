@@ -166,12 +166,24 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
     setState(() => _buscandoProducto = true);
     final auth     = context.read<AuthProvider>();
     final tiendaId = auth.tiendaId != 0 ? auth.tiendaId : null;
-    final lista    = await _inventarioSvc.getProductos(q: query, tiendaId: tiendaId);
+    final result   = await _inventarioSvc.getProductos(q: query, tiendaId: tiendaId);
     if (!mounted) return;
-    setState(() {
-      _resultadosProducto = lista;
-      _buscandoProducto   = false;
-    });
+
+    if (result['success'] == true) {
+      setState(() {
+        _resultadosProducto = result['data'] as List<Producto>;
+        _buscandoProducto   = false;
+      });
+    } else {
+      setState(() {
+        _resultadosProducto = [];
+        _buscandoProducto   = false;
+      });
+      _showSnack(
+        result['error']?.toString() ?? 'Error al buscar productos',
+        error: true,
+      );
+    }
   }
 
   void _seleccionarProductoNuevo(Producto p) {

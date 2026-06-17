@@ -10,6 +10,7 @@ class Producto {
   String unidadMedida;
   double stockActual;
   double stockMinimo;
+  double stockMaximo;
   bool   activo;
 
   Producto({
@@ -24,6 +25,7 @@ class Producto {
     this.unidadMedida = 'unidad',
     this.stockActual  = 0,
     this.stockMinimo  = 0,
+    this.stockMaximo  = 0,
     this.activo       = true,
   });
 
@@ -41,6 +43,7 @@ class Producto {
     unidadMedida:  json['unidad_medida']    ?? 'unidad',
     stockActual:   double.parse((json['stock_actual']   ?? 0).toString()),
     stockMinimo:   double.parse((json['stock_minimo']   ?? 0).toString()),
+    stockMaximo:   double.parse((json['stock_maximo']   ?? 0).toString()),
     activo:        json['activo']           ?? true,
   );
 
@@ -56,6 +59,7 @@ class Producto {
     'unidad_medida':    unidadMedida,
     'stock_actual':     stockActual.toString(),
     'stock_minimo':     stockMinimo.toString(),
+    'stock_maximo':     stockMaximo.toString(),
     'activo':           activo,
   };
 }

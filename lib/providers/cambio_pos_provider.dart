@@ -226,10 +226,17 @@ class CambioPOSProvider extends ChangeNotifier {
     _buscandoProducto = true;
     notifyListeners();
 
-    _resultadosBusqueda = await _inventarioService.getProductos(
+    final result = await _inventarioService.getProductos(
       q:        query,
       tiendaId: tiendaId,
     );
+
+    if (result['success'] == true) {
+      _resultadosBusqueda = result['data'] as List<Producto>;
+    } else {
+      _resultadosBusqueda = [];
+      _errorMsg = result['error'] ?? 'Error al buscar productos';
+    }
 
     _buscandoProducto = false;
     notifyListeners();

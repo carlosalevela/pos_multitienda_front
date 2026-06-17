@@ -84,10 +84,17 @@ class PosProvider extends ChangeNotifier {
     _buscando = true;
     notifyListeners();
 
-    _resultados = await _inventarioService.getProductos(
+    final result = await _inventarioService.getProductos(
       q:        query,
       tiendaId: tiendaId,
     );
+
+    if (result['success'] == true) {
+      _resultados = result['data'] as List<Producto>;
+    } else {
+      _resultados = [];
+      _errorMsg = result['error'] ?? 'Error al buscar productos';
+    }
 
     _buscando = false;
     notifyListeners();

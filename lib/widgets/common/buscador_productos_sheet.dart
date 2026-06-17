@@ -49,13 +49,20 @@ class _BuscadorProductosSheetState extends State<BuscadorProductosSheet> {
     setState(() => _cargando = true);
 
     try {
-      _productos = await _service.getProductos(
+      final result = await _service.getProductos(
         q: _ctrl.text,
         tiendaId: widget.tiendaId,
       );
+
+      if (result['success'] == true) {
+        _productos = result['data'] as List<Producto>;
+      } else {
+        debugPrint('❌ Error buscando productos: ${result['error']}');
+        _productos = [];
+      }
     } catch (e) {
       debugPrint('❌ Error buscando productos: $e');
-      _productos.clear();
+      _productos = [];
     }
 
     if (mounted) setState(() => _cargando = false);

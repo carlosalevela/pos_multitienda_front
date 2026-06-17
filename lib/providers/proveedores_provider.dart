@@ -1,6 +1,7 @@
 // lib/providers/proveedores_provider.dart
 
 import 'package:flutter/material.dart';
+import '../models/producto.dart';
 import '../services/proveedor_service.dart';
 import '../services/compra_service.dart';
 import '../services/tienda_service.dart';
@@ -348,7 +349,10 @@ class ProveedoresProvider extends ChangeNotifier {
 
   Future<void> cargarCategoriasSimple() async {
     try {
-      categoriasSimple = await _inventarioService.getCategorias();
+      final result = await _inventarioService.getCategorias();
+      if (result['success'] == true) {
+        categoriasSimple = result['data'] as List<Map<String, dynamic>>;
+      }
       notifyListeners();
     } catch (_) {}
   }
@@ -360,9 +364,13 @@ class ProveedoresProvider extends ChangeNotifier {
     int? tiendaId,
   }) async {
     try {
-      final productos = await _inventarioService.getProductos(
+      final result = await _inventarioService.getProductos(
           q: q, tiendaId: tiendaId);
-      return productos.map((p) => p.toJson()).toList();
+      if (result['success'] == true) {
+        final productos = result['data'] as List<Producto>;
+        return productos.map((p) => p.toJson()).toList();
+      }
+      return [];
     } catch (_) {
       return [];
     }
