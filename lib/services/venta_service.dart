@@ -134,6 +134,31 @@ class VentaService {
   }
 
 
+  // ── Dashboard Admin ────────────────────────────────────
+
+  Future<Map<String, dynamic>> getDashboardAdmin({
+    int?   tiendaId,
+    String periodo  = 'mensual',
+    int?   empresaId,
+  }) async {
+    try {
+      final r = await ApiClient.instance.get(
+        '/ventas/dashboard/',
+        queryParameters: {
+          if (tiendaId  != null) 'tienda_id': tiendaId.toString(),
+          if (empresaId != null) 'empresa':   empresaId.toString(),
+          'periodo': periodo,
+        },
+      );
+      return {'success': true, 'data': r.data};
+    } on DioException catch (e) {
+      return {'success': false, 'error': _extractError(e, 'Error al cargar el dashboard')};
+    } catch (e) {
+      return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
+
+
   // ── Cambio POS ─────────────────────────────────────────
 
   /// Procesa un cambio POS completo.

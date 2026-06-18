@@ -1,234 +1,148 @@
-// lib/widgets/caja/detalle_cierre_sheet.dart
+// lib/screens/caja/widgets/detalle_cierre_sheet.dart
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../models/sesion_historial.dart';
-import 'pdf/cierre_pdf.dart'; // ← único import nuevo
+import 'pdf/cierre_pdf.dart';
+
+// ── Palette (Enterprise POS – DESIGN.md) ─────────────────
+const _cGreen     = Color(0xFF006C49);
+const _cGreenCont = Color(0xFF6CF8BB);
+const _cGreenText = Color(0xFF00714D);
+const _cNavy      = Color(0xFF131B2E);
+const _cNavyMuted = Color(0xFF7C839B);
+const _cRed       = Color(0xFFBA1A1A);
+const _cRedCont   = Color(0xFFFFDAD6);
+const _cRedText   = Color(0xFF93000A);
+const _cOnSurf    = Color(0xFF191C1E);
+const _cOnVar     = Color(0xFF45464D);
+const _cOutline   = Color(0xFF76777D);
+const _cOutVar    = Color(0xFFC6C6CD);
+const _cWhite     = Color(0xFFFFFFFF);
+const _cSurface   = Color(0xFFF7F9FB);
+const _cSurfLow   = Color(0xFFF2F4F6);
+const _cSurfHigh  = Color(0xFFE6E8EA);
+
+// ── Formatters ────────────────────────────────────────────
+final _numFmt = NumberFormat('#,##0.00', 'en_US');
+String _money(double v) => '\$${_numFmt.format(v)}';
+
+const _meses = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+                 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+String _fecFmt(String raw) {
+  if (raw.isEmpty) return '—';
+  try {
+    final dt = DateTime.parse(raw.replaceAll(' ', 'T')).toLocal();
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return '${dt.day} ${_meses[dt.month]} ${dt.year}, $h:$m';
+  } catch (_) {
+    return raw.length >= 16 ? raw.substring(0, 16) : raw;
+  }
+}
+
+String _horaFmt(String raw) {
+  if (raw.isEmpty) return '—';
+  try {
+    final dt = DateTime.parse(raw.replaceAll(' ', 'T')).toLocal();
+    return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  } catch (_) { return '—'; }
+}
+
+// ── Synthetic movement record ─────────────────────────────
+class _Mov {
+  final String hora;
+  final String desc;
+  final String tipo; // INFO | INGRESO | EGRESO | INICIAL
+  final double monto;
+  const _Mov(this.hora, this.desc, this.tipo, this.monto);
+}
+
+List<_Mov> _buildMovs(SesionHistorial s) {
+  final list = <_Mov>[];
+  list.add(_Mov(_horaFmt(s.fechaApertura), 'Apertura de Turno', 'INICIAL', s.saldoInicial));
+  if (s.ventasEfectivo > 0) {
+    list.add(_Mov('—', 'Ventas Efectivo', 'INGRESO', s.ventasEfectivo));
+  }
+  if (s.ventasTarjeta > 0) {
+    list.add(_Mov('—', 'Ventas Tarjeta', 'INGRESO', s.ventasTarjeta));
+  }
+  if (s.ventasTransferencia > 0) {
+    list.add(_Mov('—', 'Ventas Transferencia', 'INGRESO', s.ventasTransferencia));
+  }
+  if (s.ventasMixto > 0) {
+    list.add(_Mov('—', 'Ventas Mixto', 'INGRESO', s.ventasMixto));
+  }
+  if (s.abonosTotal > 0) {
+    list.add(_Mov('—', 'Abonos (${s.numAbonos})', 'INGRESO', s.abonosTotal));
+  }
+  if (s.devolucionesEfectivo > 0) {
+    list.add(_Mov('—', 'Devoluciones Efectivo', 'EGRESO', s.devolucionesEfectivo));
+  }
+  if (s.gastosTotal > 0) {
+    list.add(_Mov('—', 'Gastos del Turno', 'EGRESO', s.gastosTotal));
+  }
+  list.add(_Mov(_horaFmt(s.fechaCierre), 'Cierre de Caja Final', 'INFO', s.montoFinalReal));
+  return list;
+}
+
+// ═════════════════════════════════════════════════════════
+// MAIN WIDGET
+// ═════════════════════════════════════════════════════════
 
 class DetalleCierreSheet extends StatelessWidget {
   final SesionHistorial sesion;
   const DetalleCierreSheet({super.key, required this.sesion});
 
-  static const _bg        = Color(0xFF0A0E1A);
-  static const _surface   = Color(0xFF111827);
-  static const _card      = Color(0xFF1A2236);
-  static const _border    = Color(0xFF1E2D45);
-  static const _accent    = Color(0xFF3B82F6);
-  static const _green     = Color(0xFF10B981);
-  static const _red       = Color(0xFFEF4444);
-  static const _yellow    = Color(0xFFF59E0B);
-  static const _purple    = Color(0xFF8B5CF6);
-  static const _sky       = Color(0xFF0EA5E9);
-  static const _textPri   = Color(0xFFF1F5F9);
-  static const _textSec   = Color(0xFF94A3B8);
-  static const _textMuted = Color(0xFF475569);
-
-  static final _fmt = NumberFormat('#,##0', 'en_US');
-
-  String _f(double v) => '\$${_fmt.format(v)}';
-
-  String _fecha(String f) {
-    if (f.isEmpty) return '—';
-    final c = f.replaceAll('T', ' ');
-    return c.length >= 16 ? c.substring(0, 16) : c;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final esPositivo = sesion.diferencia >= 0;
     final esExacto   = sesion.diferencia.abs() < 0.01;
-    final difColor   = esExacto ? _green : esPositivo ? _accent : _red;
-    final difLabel   = esExacto ? 'CUADRE EXACTO' : esPositivo ? 'SOBRANTE' : 'FALTANTE';
-    final difIcon    = esExacto
-        ? Icons.check_circle_rounded
-        : esPositivo ? Icons.arrow_circle_up_rounded : Icons.warning_rounded;
+    final esPositivo = sesion.diferencia >= 0;
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.92,
+      initialChildSize: 0.97,
       minChildSize:     0.5,
-      maxChildSize:     0.97,
-      builder: (_, controller) => Container(
+      maxChildSize:     1.0,
+      builder: (_, ctrl) => Container(
         decoration: const BoxDecoration(
-          color: _surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          color: _cSurface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(children: [
-          _buildHandle(),
-          _buildHeader(esPositivo, esExacto, difColor, difLabel, difIcon),
+          // Drag handle
+          const Padding(
+            padding: EdgeInsets.only(top: 12, bottom: 6),
+            child: Center(child: SizedBox(
+              width: 36, height: 4,
+              child: DecoratedBox(decoration: BoxDecoration(
+                color: _cOutVar,
+                borderRadius: BorderRadius.all(Radius.circular(2)),
+              )),
+            )),
+          ),
+          // Header (status + title + actions)
+          _SheetHeader(sesion: sesion, esExacto: esExacto, esPositivo: esPositivo),
+          // Scrollable body
           Expanded(
             child: ListView(
-              controller: controller,
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+              controller: ctrl,
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 40),
               children: [
-
-                _QuickMetrics(
-                  sesion:     sesion,
-                  f:          _f,
-                  difColor:   difColor,
-                  difLabel:   difLabel,
-                  esPositivo: esPositivo,
-                ),
-                const SizedBox(height: 20),
-
-                _DarkCard(
-                  titulo: 'Información general',
-                  icono:  Icons.person_outline_rounded,
-                  color:  _accent,
-                  child: Column(children: [
-                    _Row('Cajero', sesion.empleadoNombre,
-                        leading: _Avatar(sesion.empleadoNombre)),
-                    const SizedBox(height: 10),
-                    _Row('Apertura', _fecha(sesion.fechaApertura),
-                        icon: Icons.login_rounded,  iconColor: _green),
-                    _Row('Cierre',   _fecha(sesion.fechaCierre),
-                        icon: Icons.logout_rounded, iconColor: _red),
-                    _Row('Saldo inicial', _f(sesion.saldoInicial),
-                        icon: Icons.account_balance_wallet_rounded,
-                        iconColor: _accent),
-                  ]),
-                ),
+                _ArqueoCard(sesion: sesion, esExacto: esExacto, esPositivo: esPositivo),
                 const SizedBox(height: 12),
-
-                _DarkCard(
-                  titulo: 'Ventas del turno',
-                  icono:  Icons.trending_up_rounded,
-                  color:  _green,
-                  child: Column(children: [
-                    _MetodoRow('Efectivo',      _f(sesion.ventasEfectivo),
-                        _green,  Icons.payments_rounded),
-                    _MetodoRow('Tarjeta',       _f(sesion.ventasTarjeta),
-                        _accent, Icons.credit_card_rounded),
-                    _MetodoRow('Transferencia', _f(sesion.ventasTransferencia),
-                        _purple, Icons.swap_horiz_rounded),
-                    if (sesion.ventasMixto > 0)
-                      _MetodoRow('Mixto', _f(sesion.ventasMixto),
-                          _yellow, Icons.compare_arrows_rounded),
-                    const _CardDivider(),
-                    _TotalLine('TOTAL VENTAS', _f(sesion.ventasTotal), _textPri),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: _Chip(
-                            '${sesion.numTransacciones} transacciones', _green),
-                      ),
-                    ),
-                  ]),
-                ),
-                const SizedBox(height: 12),
-
-                if (sesion.abonosTotal > 0) ...[
-                  _DarkCard(
-                    titulo: 'Abonos recibidos',
-                    icono:  Icons.bookmark_added_rounded,
-                    color:  _sky,
-                    child: Column(children: [
-                      if (sesion.abonosEfectivo > 0)
-                        _MetodoRow('Efectivo',      _f(sesion.abonosEfectivo),
-                            _sky,    Icons.payments_rounded),
-                      if (sesion.abonosTransferencia > 0)
-                        _MetodoRow('Transferencia', _f(sesion.abonosTransferencia),
-                            _sky,    Icons.swap_horiz_rounded),
-                      if (sesion.abonosTarjeta > 0)
-                        _MetodoRow('Tarjeta',       _f(sesion.abonosTarjeta),
-                            _purple, Icons.credit_card_rounded),
-                      const _CardDivider(),
-                      _TotalLine('TOTAL ABONOS', _f(sesion.abonosTotal), _sky),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: _Chip(
-                              '${sesion.numAbonos} abono'
-                              '${sesion.numAbonos != 1 ? "s" : ""}', _sky),
-                        ),
-                      ),
-                    ]),
-                  ),
-                  const SizedBox(height: 4),
-                  _InfoTip(
-                      'Tarjeta ${_f(sesion.abonosTarjeta)} y transferencia '
-                      '${_f(sesion.abonosTransferencia)} no afectan el cajón físico.'),
-                  const SizedBox(height: 12),
-                ],
-
-                _DarkCard(
-                  titulo: 'Gastos del turno',
-                  icono:  Icons.trending_down_rounded,
-                  color:  _red,
-                  child: _Row('Total gastos', '-${_f(sesion.gastosTotal)}',
-                      valueColor: _red),
-                ),
-                const SizedBox(height: 12),
-
-                if (sesion.numDevoluciones > 0) ...[
-                  _DarkCard(
-                    titulo: 'Devoluciones del turno',
-                    icono:  Icons.assignment_return_rounded,
-                    color:  _yellow,
-                    child: Column(children: [
-                      _Row('Devuelto en efectivo',
-                          '-${_f(sesion.devolucionesEfectivo)}',
-                          valueColor: _red),
-                      const _CardDivider(),
-                      _TotalLine(
-                        '${sesion.numDevoluciones} devolución'
-                        '${sesion.numDevoluciones != 1 ? "es" : ""}',
-                        '', _textMuted,
-                      ),
-                    ]),
-                  ),
-                  const SizedBox(height: 4),
-                  _InfoTip('Solo las devoluciones en efectivo reducen el cuadre de caja.'),
-                  const SizedBox(height: 12),
-                ],
-
-                _CuadreCard(
-                  esperado:   _f(sesion.montoFinalSistema),
-                  contado:    _f(sesion.montoFinalReal),
-                  diferencia: sesion.diferencia,
-                  esPositivo: esPositivo,
-                  esExacto:   esExacto,
-                  difColor:   difColor,
-                  fmt:        _fmt,
-                ),
-
+                _MetricsGrid(sesion: sesion),
+                const SizedBox(height: 16),
+                _DesglosePagos(sesion: sesion),
                 if (sesion.observaciones.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: _card,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: _border),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(children: [
-                          const Icon(Icons.notes_rounded,
-                              size: 14, color: _textMuted),
-                          const SizedBox(width: 6),
-                          Text('OBSERVACIONES',
-                              style: GoogleFonts.dmSans(
-                                  fontSize: 10, fontWeight: FontWeight.w700,
-                                  color: _textMuted, letterSpacing: 1.2)),
-                        ]),
-                        const SizedBox(height: 8),
-                        Text(sesion.observaciones,
-                            style: GoogleFonts.dmSans(
-                                fontSize: 13, color: _textSec, height: 1.5)),
-                      ],
-                    ),
-                  ),
+                  const SizedBox(height: 10),
+                  _NotaCierre(nota: sesion.observaciones),
                 ],
-
+                const SizedBox(height: 16),
+                _MovimientosTable(sesion: sesion),
                 const SizedBox(height: 24),
-                // ✅ Delega al nuevo widget de PDF
-                _PdfButton(onPressed: () => exportarCierrePDF(sesion)),
-                const SizedBox(height: 8),
+                _ExportButton(onTap: () => exportarCierrePDF(sesion)),
               ],
             ),
           ),
@@ -236,487 +150,771 @@ class DetalleCierreSheet extends StatelessWidget {
       ),
     );
   }
-
-  Widget _buildHandle() => Padding(
-    padding: const EdgeInsets.only(top: 12, bottom: 4),
-    child: Center(
-      child: Container(
-        width: 38, height: 4,
-        decoration: BoxDecoration(
-            color: _border, borderRadius: BorderRadius.circular(2)),
-      ),
-    ),
-  );
-
-  Widget _buildHeader(
-    bool esPositivo, bool esExacto,
-    Color difColor, String difLabel, IconData difIcon,
-  ) =>
-    Container(
-      decoration: const BoxDecoration(
-        color: _bg,
-        border: Border(bottom: BorderSide(color: _border)),
-      ),
-      padding: const EdgeInsets.fromLTRB(22, 10, 22, 20),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-        Container(
-          width: 44, height: 44,
-          decoration: BoxDecoration(
-            color: _accent.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: _accent.withOpacity(0.3)),
-          ),
-          child: const Icon(Icons.receipt_long_rounded, color: _accent, size: 20),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Cierre #${sesion.id}',
-                style: GoogleFonts.dmSans(
-                    color: _textPri, fontWeight: FontWeight.w800, fontSize: 17)),
-            Text(sesion.tiendaNombre,
-                style: GoogleFonts.dmSans(color: _textMuted, fontSize: 12)),
-          ]),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          decoration: BoxDecoration(
-            color: difColor.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: difColor.withOpacity(0.3)),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(difIcon, size: 13, color: difColor),
-            const SizedBox(width: 5),
-            Text(
-              esExacto
-                  ? difLabel
-                  : '${esPositivo ? '+' : '-'}\$${_fmt.format(sesion.diferencia.abs())}',
-              style: GoogleFonts.dmSans(
-                  color: difColor, fontSize: 12, fontWeight: FontWeight.w800),
-            ),
-          ]),
-        ),
-      ]),
-    );
-
-  static Widget _Row(String label, String valor,
-      {Color? valueColor, Widget? leading,
-       IconData? icon, Color? iconColor}) =>
-    Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(children: [
-        if (leading != null) ...[leading, const SizedBox(width: 10)],
-        if (icon != null && leading == null) ...[
-          Icon(icon, size: 14, color: iconColor ?? _textMuted),
-          const SizedBox(width: 8),
-        ],
-        Expanded(
-          child: Text(label,
-              style: GoogleFonts.dmSans(
-                  color: _textSec, fontSize: 13, fontWeight: FontWeight.w500)),
-        ),
-        Text(valor,
-            style: GoogleFonts.dmSans(
-                fontSize: 13, fontWeight: FontWeight.w700,
-                color: valueColor ?? _textPri)),
-      ]),
-    );
-
-  // ✅ _exportarPDF y _pdfSeccion/_pdfFila eliminados completamente
 }
 
-// ══════════════════════════════════════════════════════════
-// COMPONENTES INTERNOS — sin cambios
-// ══════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════
+// HEADER
+// ═════════════════════════════════════════════════════════
 
-class _QuickMetrics extends StatelessWidget {
-  final SesionHistorial         sesion;
-  final String Function(double) f;
-  final Color  difColor;
-  final String difLabel;
-  final bool   esPositivo;
-
-  const _QuickMetrics({
-    required this.sesion,   required this.f,
-    required this.difColor, required this.difLabel,
+class _SheetHeader extends StatelessWidget {
+  final SesionHistorial sesion;
+  final bool esExacto, esPositivo;
+  const _SheetHeader({
+    required this.sesion,
+    required this.esExacto,
     required this.esPositivo,
   });
 
-  static const _green = Color(0xFF10B981);
-  static const _red   = Color(0xFFEF4444);
-  static final _fmt   = NumberFormat('#,##0', 'en_US');
-
   @override
-  Widget build(BuildContext context) => Row(children: [
-    Expanded(child: _MetricTile(
-      label: 'Total ventas',
-      valor: f(sesion.ventasTotal),
-      color: _green,
-      icon:  Icons.trending_up_rounded,
-    )),
-    const SizedBox(width: 10),
-    Expanded(child: _MetricTile(
-      label: 'Total gastos',
-      valor: f(sesion.gastosTotal),
-      color: _red,
-      icon:  Icons.trending_down_rounded,
-    )),
-    const SizedBox(width: 10),
-    Expanded(child: _MetricTile(
-      label: difLabel,
-      valor: '${esPositivo ? '+' : '-'}\$${_fmt.format(sesion.diferencia.abs())}',
-      color: difColor,
-      icon:  esPositivo
-          ? Icons.arrow_circle_up_rounded : Icons.warning_rounded,
-    )),
-  ]);
-}
+  Widget build(BuildContext context) {
+    final difColor = esExacto
+        ? _cGreen
+        : esPositivo ? _cGreen : _cRed;
+    final difLabel = esExacto ? 'CUADRE EXACTO' : esPositivo ? 'SOBRANTE' : 'FALTANTE';
+    final difStr   = esExacto
+        ? '\$0.00'
+        : '${esPositivo ? '+' : '-'}${_money(sesion.diferencia.abs())}';
+    final difIcon  = esExacto
+        ? Icons.check_circle_rounded
+        : esPositivo ? Icons.arrow_circle_up_rounded : Icons.warning_rounded;
 
-class _MetricTile extends StatelessWidget {
-  final String   label, valor;
-  final Color    color;
-  final IconData icon;
-  const _MetricTile({
-    required this.label, required this.valor,
-    required this.color, required this.icon,
-  });
-
-  static const _card    = Color(0xFF1A2236);
-  static const _border  = Color(0xFF1E2D45);
-  static const _textSec = Color(0xFF94A3B8);
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: _card,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: _border),
-    ),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Container(
-        width: 26, height: 26,
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(7),
-        ),
-        child: Icon(icon, size: 13, color: color),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 6, 12, 14),
+      decoration: const BoxDecoration(
+        color: _cWhite,
+        border: Border(bottom: BorderSide(color: _cOutVar)),
       ),
-      const SizedBox(height: 10),
-      Text(valor,
-          style: GoogleFonts.dmSans(
-              fontSize: 16, fontWeight: FontWeight.w800, color: color),
-          maxLines: 1, overflow: TextOverflow.ellipsis),
-      const SizedBox(height: 2),
-      Text(label,
-          style: GoogleFonts.dmSans(
-              fontSize: 10, color: _textSec, fontWeight: FontWeight.w600),
-          maxLines: 1, overflow: TextOverflow.ellipsis),
-    ]),
-  );
-}
-
-class _DarkCard extends StatelessWidget {
-  final String   titulo;
-  final IconData icono;
-  final Color    color;
-  final Widget   child;
-  const _DarkCard({
-    required this.titulo, required this.icono,
-    required this.color,  required this.child,
-  });
-
-  static const _card   = Color(0xFF1A2236);
-  static const _border = Color(0xFF1E2D45);
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(18),
-    decoration: BoxDecoration(
-      color: _card,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: _border),
-    ),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        Container(
-          width: 30, height: 30,
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Row 1: status badge + session id + pdf button
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: _cRedCont,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                width: 6, height: 6,
+                decoration: const BoxDecoration(
+                  color: _cRed, shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text('CAJA CERRADA',
+                  style: GoogleFonts.inter(
+                      fontSize: 10, fontWeight: FontWeight.w700,
+                      color: _cRedText, letterSpacing: 0.8)),
+            ]),
           ),
-          child: Icon(icono, size: 15, color: color),
-        ),
-        const SizedBox(width: 10),
-        Text(titulo,
-            style: GoogleFonts.dmSans(
-                fontSize: 13, fontWeight: FontWeight.w700, color: color)),
+          const SizedBox(width: 10),
+          Text('Sesión #${sesion.id}',
+              style: GoogleFonts.inter(fontSize: 12, color: _cOutline)),
+          const Spacer(),
+          IconButton(
+            onPressed: () => exportarCierrePDF(sesion),
+            icon: const Icon(Icons.picture_as_pdf_rounded, size: 20),
+            color: _cNavy,
+            tooltip: 'Exportar PDF',
+            visualDensity: VisualDensity.compact,
+            style: IconButton.styleFrom(
+              backgroundColor: _cSurfHigh,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 6),
+        // Row 2: title
+        Text('Resumen de Cierre',
+            style: GoogleFonts.inter(
+                fontSize: 22, fontWeight: FontWeight.w700,
+                color: _cOnSurf, letterSpacing: -0.3)),
+        const SizedBox(height: 4),
+        // Row 3: fecha + diferencia chip
+        Row(children: [
+          const Icon(Icons.calendar_today_rounded, size: 12, color: _cOutline),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              'Cierre: ${_fecFmt(sesion.fechaCierre)}',
+              style: GoogleFonts.inter(fontSize: 12, color: _cOutline),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: (esExacto || esPositivo)
+                  ? _cGreenCont.withValues(alpha: 0.35)
+                  : _cRedCont,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(difIcon, size: 11, color: difColor),
+              const SizedBox(width: 4),
+              Text('$difLabel $difStr',
+                  style: GoogleFonts.inter(
+                      fontSize: 11, fontWeight: FontWeight.w700,
+                      color: difColor)),
+            ]),
+          ),
+        ]),
       ]),
-      const SizedBox(height: 14),
-      child,
-    ]),
-  );
+    );
+  }
 }
 
-class _MetodoRow extends StatelessWidget {
-  final String   label, valor;
-  final Color    color;
-  final IconData icon;
-  const _MetodoRow(this.label, this.valor, this.color, this.icon);
+// ═════════════════════════════════════════════════════════
+// ARQUEO DE CAJA CARD
+// ═════════════════════════════════════════════════════════
 
-  static const _textSec = Color(0xFF94A3B8);
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 5),
-    child: Row(children: [
-      Container(
-        width: 28, height: 28,
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(icon, size: 13, color: color),
-      ),
-      const SizedBox(width: 10),
-      Expanded(
-        child: Text(label,
-            style: GoogleFonts.dmSans(
-                fontSize: 13, color: _textSec, fontWeight: FontWeight.w500)),
-      ),
-      Text(valor,
-          style: GoogleFonts.dmSans(
-              fontSize: 13, color: color, fontWeight: FontWeight.w700)),
-    ]),
-  );
-}
-
-class _TotalLine extends StatelessWidget {
-  final String label, valor;
-  final Color  color;
-  const _TotalLine(this.label, this.valor, this.color);
-
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    children: [
-      Text(label,
-          style: GoogleFonts.dmSans(
-              fontSize: 13, color: color, fontWeight: FontWeight.w800)),
-      if (valor.isNotEmpty)
-        Text(valor,
-            style: GoogleFonts.dmSans(
-                fontSize: 14, color: color, fontWeight: FontWeight.w800)),
-    ],
-  );
-}
-
-class _CardDivider extends StatelessWidget {
-  const _CardDivider();
-  @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.symmetric(vertical: 10),
-    child: Divider(height: 1, color: Color(0xFF1E2D45)),
-  );
-}
-
-class _Chip extends StatelessWidget {
-  final String text;
-  final Color  color;
-  const _Chip(this.text, this.color);
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-    decoration: BoxDecoration(
-      color: color.withOpacity(0.1),
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: color.withOpacity(0.25)),
-    ),
-    child: Text(text,
-        style: GoogleFonts.dmSans(
-            fontSize: 11, color: color, fontWeight: FontWeight.w700)),
-  );
-}
-
-class _Avatar extends StatelessWidget {
-  final String nombre;
-  const _Avatar(this.nombre);
-
-  static const _accent = Color(0xFF3B82F6);
-  static const _purple = Color(0xFF8B5CF6);
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 32, height: 32,
-    decoration: BoxDecoration(
-      gradient: const LinearGradient(colors: [_accent, _purple]),
-      borderRadius: BorderRadius.circular(10),
-    ),
-    child: Center(
-      child: Text(
-        nombre.isNotEmpty ? nombre[0].toUpperCase() : '?',
-        style: const TextStyle(
-            color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14),
-      ),
-    ),
-  );
-}
-
-class _InfoTip extends StatelessWidget {
-  final String msg;
-  const _InfoTip(this.msg);
-  static const _textMuted = Color(0xFF475569);
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(left: 2, top: 4),
-    child: Row(children: [
-      const Icon(Icons.info_outline_rounded, size: 12, color: _textMuted),
-      const SizedBox(width: 5),
-      Expanded(
-        child: Text(msg,
-            style: GoogleFonts.dmSans(
-                fontSize: 11, color: _textMuted, fontWeight: FontWeight.w500)),
-      ),
-    ]),
-  );
-}
-
-class _CuadreCard extends StatelessWidget {
-  final String esperado, contado;
-  final double diferencia;
-  final bool   esPositivo, esExacto;
-  final Color  difColor;
-  final NumberFormat fmt;
-  const _CuadreCard({
-    required this.esperado,   required this.contado,
-    required this.diferencia, required this.esPositivo,
-    required this.esExacto,   required this.difColor,
-    required this.fmt,
+class _ArqueoCard extends StatelessWidget {
+  final SesionHistorial sesion;
+  final bool esExacto, esPositivo;
+  const _ArqueoCard({
+    required this.sesion,
+    required this.esExacto,
+    required this.esPositivo,
   });
-
-  static const _green   = Color(0xFF10B981);
-  static const _textSec = Color(0xFF94A3B8);
 
   @override
   Widget build(BuildContext context) {
-    final difLabel = esExacto
-        ? 'CUADRE EXACTO' : esPositivo ? 'SOBRANTE' : 'FALTANTE';
+    final difColor = esExacto ? _cGreen : esPositivo ? _cGreen : _cRed;
+    final difBg    = (esExacto || esPositivo)
+        ? _cGreenCont.withValues(alpha: 0.3)
+        : _cRedCont.withValues(alpha: 0.6);
+    final difLabel = esExacto ? 'CUADRE EXACTO' : esPositivo ? 'SOBRANTE' : 'FALTANTE';
     final difStr   = esExacto
-        ? '\$0'
-        : '${esPositivo ? '+' : '-'}\$${fmt.format(diferencia.abs())}';
+        ? '\$0.00'
+        : '${esPositivo ? '+' : '-'}${_money(sesion.diferencia.abs())}';
+    final difIcon  = esExacto
+        ? Icons.check_circle_rounded
+        : esPositivo ? Icons.arrow_circle_up_rounded : Icons.warning_rounded;
+    final difValColor = (esExacto || esPositivo) ? _cGreen : _cRedText;
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF063A26), Color(0xFF0A4D33)],
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _green.withOpacity(0.3), width: 1.5),
+        color: _cWhite,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _cOutVar),
         boxShadow: [BoxShadow(
-            color: _green.withOpacity(0.12),
-            blurRadius: 20, offset: const Offset(0, 6))],
+          color: Colors.black.withValues(alpha: 0.04),
+          blurRadius: 12, offset: const Offset(0, 4),
+        )],
       ),
-      child: Column(children: [
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Label
         Row(children: [
-          Container(
-            width: 30, height: 30,
-            decoration: BoxDecoration(
-              color: _green.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: _green.withOpacity(0.3)),
-            ),
-            child: const Icon(Icons.calculate_rounded, color: _green, size: 15),
-          ),
-          const SizedBox(width: 10),
-          Text('Cuadre de caja',
-              style: GoogleFonts.dmSans(
-                  fontSize: 13, fontWeight: FontWeight.w700, color: _green)),
+          const Icon(Icons.account_balance_wallet_outlined,
+              size: 13, color: _cOutline),
+          const SizedBox(width: 6),
+          Text('ARQUEO DE CAJA',
+              style: GoogleFonts.inter(
+                  fontSize: 10, fontWeight: FontWeight.w700,
+                  color: _cOutline, letterSpacing: 0.7)),
         ]),
-        const SizedBox(height: 16),
-        _CuadreLine('Monto esperado', esperado, _textSec),
-        _CuadreLine('Monto contado',  contado,  _textSec),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Container(height: 1, color: _green.withOpacity(0.2)),
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(difLabel,
-                style: GoogleFonts.dmSans(
-                    color: difColor, fontWeight: FontWeight.w800, fontSize: 12)),
-            Text(difStr,
-                style: GoogleFonts.dmSans(
-                    color: Colors.white, fontWeight: FontWeight.w800,
-                    fontSize: 22, letterSpacing: -0.5)),
-          ],
+        const SizedBox(height: 14),
+        // Saldo real
+        Text('Saldo Real Contado',
+            style: GoogleFonts.inter(fontSize: 13, color: _cOnVar)),
+        const SizedBox(height: 4),
+        Text(_money(sesion.montoFinalReal),
+            style: GoogleFonts.inter(
+                fontSize: 30, fontWeight: FontWeight.w700,
+                color: _cOnSurf, letterSpacing: -0.5)),
+        const SizedBox(height: 12),
+        const Divider(height: 1, color: _cOutVar),
+        const SizedBox(height: 12),
+        // Saldo esperado
+        Text('Saldo Esperado en Sistema',
+            style: GoogleFonts.inter(fontSize: 13, color: _cOnVar)),
+        const SizedBox(height: 4),
+        Text(_money(sesion.montoFinalSistema),
+            style: GoogleFonts.inter(
+                fontSize: 20, fontWeight: FontWeight.w600,
+                color: _cOutline)),
+        const SizedBox(height: 14),
+        // Difference badge
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: difBg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: difColor.withValues(alpha: 0.2)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(difLabel,
+                    style: GoogleFonts.inter(
+                        fontSize: 10, fontWeight: FontWeight.w700,
+                        color: difColor, letterSpacing: 0.6)),
+                const SizedBox(height: 3),
+                Text(difStr,
+                    style: GoogleFonts.inter(
+                        fontSize: 22, fontWeight: FontWeight.w700,
+                        color: difValColor)),
+              ]),
+              Icon(difIcon, size: 30, color: difColor),
+            ],
+          ),
         ),
       ]),
     );
   }
 }
 
-class _CuadreLine extends StatelessWidget {
-  final String label, valor;
-  final Color  color;
-  const _CuadreLine(this.label, this.valor, this.color);
+// ═════════════════════════════════════════════════════════
+// 4-METRIC GRID
+// ═════════════════════════════════════════════════════════
+
+class _MetricsGrid extends StatelessWidget {
+  final SesionHistorial sesion;
+  const _MetricsGrid({required this.sesion});
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label,
-            style: GoogleFonts.dmSans(
-                fontSize: 13, color: color.withOpacity(0.75))),
-        Text(valor,
-            style: GoogleFonts.dmSans(
-                fontSize: 13, color: color, fontWeight: FontWeight.w600)),
-      ],
+  Widget build(BuildContext context) {
+    final ingresoTotal = sesion.ventasTotal + sesion.abonosTotal;
+    return Column(children: [
+      Row(children: [
+        Expanded(child: _MetricCard(
+          icon: Icons.start_rounded,
+          iconBg: _cSurfHigh,
+          iconColor: _cOnVar,
+          label: 'Monto Inicial',
+          value: _money(sesion.saldoInicial),
+        )),
+        const SizedBox(width: 10),
+        Expanded(child: _MetricCard(
+          icon: Icons.add_circle_outline_rounded,
+          iconBg: _cGreenCont.withValues(alpha: 0.4),
+          iconColor: _cGreen,
+          label: 'Ingresos Totales',
+          value: _money(ingresoTotal),
+        )),
+      ]),
+      const SizedBox(height: 10),
+      Row(children: [
+        Expanded(child: _MetricCard(
+          icon: Icons.remove_circle_outline_rounded,
+          iconBg: _cRedCont,
+          iconColor: _cRed,
+          label: 'Egresos / Gastos',
+          value: _money(sesion.gastosTotal),
+        )),
+        const SizedBox(width: 10),
+        Expanded(child: _MetricCardDark(
+          icon: Icons.receipt_long_rounded,
+          label: 'Ventas Realizadas',
+          count: sesion.numTransacciones,
+        )),
+      ]),
+    ]);
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  final IconData icon;
+  final Color    iconBg, iconColor;
+  final String   label, value;
+  const _MetricCard({
+    required this.icon,     required this.iconBg,
+    required this.iconColor, required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: _cWhite,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: _cOutVar),
+      boxShadow: [BoxShadow(
+        color: Colors.black.withValues(alpha: 0.03),
+        blurRadius: 8, offset: const Offset(0, 2),
+      )],
     ),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+      Container(
+        width: 42, height: 42,
+        decoration: BoxDecoration(
+          color: iconBg,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, size: 20, color: iconColor),
+      ),
+      const SizedBox(width: 10),
+      Expanded(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label,
+              style: GoogleFonts.inter(
+                  fontSize: 10, fontWeight: FontWeight.w600,
+                  color: _cOutline),
+              maxLines: 1, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 3),
+          Text(value,
+              style: GoogleFonts.inter(
+                  fontSize: 15, fontWeight: FontWeight.w700,
+                  color: _cOnSurf),
+              maxLines: 1, overflow: TextOverflow.ellipsis),
+        ],
+      )),
+    ]),
   );
 }
 
-class _PdfButton extends StatelessWidget {
-  final VoidCallback onPressed;
-  const _PdfButton({required this.onPressed});
+class _MetricCardDark extends StatelessWidget {
+  final IconData icon;
+  final String   label;
+  final int      count;
+  const _MetricCardDark({
+    required this.icon, required this.label, required this.count,
+  });
 
-  static const _accent = Color(0xFF3B82F6);
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: _cNavy,
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+      Container(
+        width: 42, height: 42,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, size: 20, color: Colors.white70),
+      ),
+      const SizedBox(width: 10),
+      Expanded(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label,
+              style: GoogleFonts.inter(
+                  fontSize: 10, fontWeight: FontWeight.w600,
+                  color: _cNavyMuted),
+              maxLines: 1, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 3),
+          Text(
+            '$count Transacciones',
+            style: GoogleFonts.inter(
+                fontSize: 15, fontWeight: FontWeight.w700,
+                color: Colors.white),
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      )),
+    ]),
+  );
+}
+
+// ═════════════════════════════════════════════════════════
+// DESGLOSE DE PAGOS
+// ═════════════════════════════════════════════════════════
+
+class _DesglosePagos extends StatelessWidget {
+  final SesionHistorial sesion;
+  const _DesglosePagos({required this.sesion});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = sesion.ventasTotal > 0 ? sesion.ventasTotal : 1.0;
+    final items = <_PagoItem>[
+      if (sesion.ventasEfectivo > 0)
+        _PagoItem('Efectivo', sesion.ventasEfectivo, _cGreen,
+            sesion.ventasEfectivo / total),
+      if (sesion.ventasTarjeta > 0)
+        _PagoItem('Tarjeta (Débito/Crédito)', sesion.ventasTarjeta,
+            const Color(0xFF3F465C), sesion.ventasTarjeta / total),
+      if (sesion.ventasTransferencia > 0)
+        _PagoItem('Transferencias / Otros', sesion.ventasTransferencia,
+            const Color(0xFF3A485C), sesion.ventasTransferencia / total),
+      if (sesion.ventasMixto > 0)
+        _PagoItem('Pago Mixto', sesion.ventasMixto,
+            const Color(0xFF005236), sesion.ventasMixto / total),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: _cWhite,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _cOutVar),
+        boxShadow: [BoxShadow(
+          color: Colors.black.withValues(alpha: 0.03),
+          blurRadius: 8, offset: const Offset(0, 2),
+        )],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text('Desglose de Pagos',
+              style: GoogleFonts.inter(
+                  fontSize: 15, fontWeight: FontWeight.w700,
+                  color: _cOnSurf)),
+          const Icon(Icons.donut_large_rounded, size: 18, color: _cOutline),
+        ]),
+        const SizedBox(height: 16),
+        if (items.isEmpty)
+          Text('Sin ventas en este turno',
+              style: GoogleFonts.inter(fontSize: 13, color: _cOutline))
+        else
+          for (final item in items) _PagoRow(item: item),
+        // Abonos
+        if (sesion.abonosTotal > 0) ...[
+          const SizedBox(height: 10),
+          const Divider(height: 1, color: _cOutVar),
+          const SizedBox(height: 10),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Row(children: [
+              Container(
+                width: 10, height: 10,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF0EA5E9), shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text('Abonos recibidos (${sesion.numAbonos})',
+                  style: GoogleFonts.inter(fontSize: 13, color: _cOnVar)),
+            ]),
+            Text(_money(sesion.abonosTotal),
+                style: GoogleFonts.inter(
+                    fontSize: 14, fontWeight: FontWeight.w700,
+                    color: _cOnSurf)),
+          ]),
+        ],
+        // Cajero info
+        const SizedBox(height: 14),
+        const Divider(height: 1, color: _cOutVar),
+        const SizedBox(height: 12),
+        _InfoRow(Icons.person_outline_rounded, 'Cajero',
+            sesion.empleadoNombre.isNotEmpty ? sesion.empleadoNombre : '—'),
+        const SizedBox(height: 6),
+        _InfoRow(Icons.store_outlined, 'Tienda',
+            sesion.tiendaNombre.isNotEmpty ? sesion.tiendaNombre : '—'),
+        const SizedBox(height: 6),
+        _InfoRow(Icons.login_rounded, 'Apertura', _fecFmt(sesion.fechaApertura)),
+        if (sesion.numDevoluciones > 0) ...[
+          const SizedBox(height: 6),
+          _InfoRow(Icons.assignment_return_rounded, 'Devoluciones',
+              '${sesion.numDevoluciones} • ${_money(sesion.devolucionesEfectivo)} efectivo'),
+        ],
+      ]),
+    );
+  }
+}
+
+class _PagoItem {
+  final String label;
+  final double monto, pct;
+  final Color  color;
+  const _PagoItem(this.label, this.monto, this.color, this.pct);
+}
+
+class _PagoRow extends StatelessWidget {
+  final _PagoItem item;
+  const _PagoRow({required this.item});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 14),
+    child: Column(children: [
+      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Row(children: [
+          Container(
+            width: 10, height: 10,
+            decoration: BoxDecoration(
+              color: item.color, shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(item.label,
+              style: GoogleFonts.inter(fontSize: 13, color: _cOnVar)),
+        ]),
+        Text(_money(item.monto),
+            style: GoogleFonts.inter(
+                fontSize: 14, fontWeight: FontWeight.w700,
+                color: _cOnSurf)),
+      ]),
+      const SizedBox(height: 6),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(3),
+        child: LinearProgressIndicator(
+          value: item.pct.clamp(0.0, 1.0),
+          minHeight: 6,
+          backgroundColor: _cSurfHigh,
+          valueColor: AlwaysStoppedAnimation<Color>(item.color),
+        ),
+      ),
+    ]),
+  );
+}
+
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String   label, value;
+  const _InfoRow(this.icon, this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) => Row(children: [
+    Icon(icon, size: 13, color: _cOutline),
+    const SizedBox(width: 7),
+    Text('$label: ',
+        style: GoogleFonts.inter(
+            fontSize: 12, color: _cOutline, fontWeight: FontWeight.w600)),
+    Expanded(
+      child: Text(value,
+          style: GoogleFonts.inter(fontSize: 12, color: _cOnVar),
+          overflow: TextOverflow.ellipsis),
+    ),
+  ]);
+}
+
+// ═════════════════════════════════════════════════════════
+// NOTA DE CIERRE
+// ═════════════════════════════════════════════════════════
+
+class _NotaCierre extends StatelessWidget {
+  final String nota;
+  const _NotaCierre({required this.nota});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: _cWhite,
+      borderRadius: BorderRadius.circular(12),
+      border: Border(
+        top:    BorderSide(color: _cOutVar),
+        right:  BorderSide(color: _cOutVar),
+        bottom: BorderSide(color: _cOutVar),
+        left:   BorderSide(color: _cGreen, width: 4),
+      ),
+    ),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('NOTA DE CIERRE',
+          style: GoogleFonts.inter(
+              fontSize: 10, fontWeight: FontWeight.w700,
+              color: _cGreen, letterSpacing: 0.5)),
+      const SizedBox(height: 6),
+      Text('"$nota"',
+          style: GoogleFonts.inter(
+              fontSize: 13, color: _cOnVar,
+              fontStyle: FontStyle.italic, height: 1.5)),
+    ]),
+  );
+}
+
+// ═════════════════════════════════════════════════════════
+// MOVIMIENTOS TABLE
+// ═════════════════════════════════════════════════════════
+
+class _MovimientosTable extends StatelessWidget {
+  final SesionHistorial sesion;
+  const _MovimientosTable({required this.sesion});
+
+  @override
+  Widget build(BuildContext context) {
+    final movs = _buildMovs(sesion);
+    return Container(
+      decoration: BoxDecoration(
+        color: _cWhite,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _cOutVar),
+        boxShadow: [BoxShadow(
+          color: Colors.black.withValues(alpha: 0.03),
+          blurRadius: 8, offset: const Offset(0, 2),
+        )],
+      ),
+      child: Column(children: [
+        // Table header bar
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Movimientos de la Sesión',
+                  style: GoogleFonts.inter(
+                      fontSize: 15, fontWeight: FontWeight.w700,
+                      color: _cOnSurf)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _cSurfHigh,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text('${movs.length} registros',
+                    style: GoogleFonts.inter(
+                        fontSize: 10, fontWeight: FontWeight.w700,
+                        color: _cOutline)),
+              ),
+            ],
+          ),
+        ),
+        // Column headers
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          color: _cSurfLow,
+          child: Row(children: [
+            SizedBox(width: 40,
+              child: Text('HORA',
+                  style: GoogleFonts.inter(
+                      fontSize: 9, fontWeight: FontWeight.w700,
+                      color: _cOutline, letterSpacing: 0.5))),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text('DESCRIPCIÓN',
+                  style: GoogleFonts.inter(
+                      fontSize: 9, fontWeight: FontWeight.w700,
+                      color: _cOutline, letterSpacing: 0.5))),
+            SizedBox(width: 56,
+              child: Text('TIPO',
+                  style: GoogleFonts.inter(
+                      fontSize: 9, fontWeight: FontWeight.w700,
+                      color: _cOutline, letterSpacing: 0.5))),
+            SizedBox(width: 78,
+              child: Text('MONTO',
+                  textAlign: TextAlign.right,
+                  style: GoogleFonts.inter(
+                      fontSize: 9, fontWeight: FontWeight.w700,
+                      color: _cOutline, letterSpacing: 0.5))),
+          ]),
+        ),
+        // Rows
+        for (int i = 0; i < movs.length; i++) ...[
+          if (i > 0)
+            const Divider(height: 1, color: _cOutVar, indent: 16, endIndent: 16),
+          _MovRow(mov: movs[i]),
+        ],
+        // Footer link-style
+        const Divider(height: 1, color: _cOutVar),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Center(
+            child: Text(
+              'Resumen sintético — ver PDF para detalle completo',
+              style: GoogleFonts.inter(
+                  fontSize: 11, color: _cOutline,
+                  fontStyle: FontStyle.italic),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+class _MovRow extends StatelessWidget {
+  final _Mov mov;
+  const _MovRow({required this.mov});
+
+  Color get _tipoBg {
+    switch (mov.tipo) {
+      case 'INGRESO': return _cGreenCont.withValues(alpha: 0.45);
+      case 'EGRESO':  return _cRedCont;
+      case 'INICIAL': return _cGreenCont.withValues(alpha: 0.45);
+      default:        return _cSurfHigh;
+    }
+  }
+
+  Color get _tipoText {
+    switch (mov.tipo) {
+      case 'INGRESO': return _cGreenText;
+      case 'EGRESO':  return _cRedText;
+      case 'INICIAL': return _cGreenText;
+      default:        return _cOutline;
+    }
+  }
+
+  Color get _montoColor {
+    switch (mov.tipo) {
+      case 'INGRESO': return _cGreen;
+      case 'EGRESO':  return _cRed;
+      case 'INICIAL': return _cGreen;
+      default:        return _cOnSurf;
+    }
+  }
+
+  String get _prefix {
+    switch (mov.tipo) {
+      case 'INGRESO': return '+';
+      case 'EGRESO':  return '-';
+      default:        return '';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+    child: Row(children: [
+      SizedBox(width: 40,
+        child: Text(mov.hora,
+            style: GoogleFonts.inter(fontSize: 11, color: _cOnVar))),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(mov.desc,
+            style: GoogleFonts.inter(fontSize: 13, color: _cOnSurf),
+            overflow: TextOverflow.ellipsis),
+      ),
+      SizedBox(width: 56,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+          decoration: BoxDecoration(
+            color: _tipoBg,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(mov.tipo,
+              style: GoogleFonts.inter(
+                  fontSize: 9, fontWeight: FontWeight.w700,
+                  color: _tipoText, letterSpacing: 0.3),
+              overflow: TextOverflow.ellipsis),
+        ),
+      ),
+      SizedBox(width: 78,
+        child: Text(
+          '$_prefix${_money(mov.monto)}',
+          textAlign: TextAlign.right,
+          style: GoogleFonts.inter(
+              fontSize: 12, fontWeight: FontWeight.w700,
+              color: _montoColor),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    ]),
+  );
+}
+
+// ═════════════════════════════════════════════════════════
+// EXPORT BUTTON
+// ═════════════════════════════════════════════════════════
+
+class _ExportButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _ExportButton({required this.onTap});
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: double.infinity,
-    height: 52,
-    child: Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [_accent, Color(0xFF2563EB)],
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(
-            color: _accent.withOpacity(0.35),
-            blurRadius: 14, offset: const Offset(0, 5))],
-      ),
-      child: ElevatedButton.icon(
-        icon:  const Icon(Icons.picture_as_pdf_rounded, size: 19),
-        label: Text('Guardar / Compartir PDF',
-            style: GoogleFonts.dmSans(
-                fontWeight: FontWeight.w700, fontSize: 15)),
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          foregroundColor: Colors.white,
-          shadowColor:     Colors.transparent,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14)),
-        ),
+    width: double.infinity, height: 52,
+    child: ElevatedButton.icon(
+      icon:  const Icon(Icons.picture_as_pdf_rounded, size: 18),
+      label: Text('Guardar / Compartir PDF',
+          style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 15)),
+      onPressed: onTap,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: _cNavy,
+        foregroundColor: Colors.white,
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14)),
       ),
     ),
   );

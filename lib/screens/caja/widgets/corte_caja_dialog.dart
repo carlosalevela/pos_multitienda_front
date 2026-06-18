@@ -6,6 +6,26 @@ import 'package:intl/intl.dart';
 import '../../../providers/caja_provider.dart';
 import '../../../models/resumen_cierre.dart';
 
+// ── Enterprise palette ─────────────────────────────────────────
+const _cGreen    = Color(0xFF006C49);
+const _cGreenLt  = Color(0xFFD6F5E7);
+const _cNavy     = Color(0xFF131B2E);
+const _cRed      = Color(0xFFBA1A1A);
+const _cRedLt    = Color(0xFFFFDAD6);
+const _cBlue     = Color(0xFF0047AB);
+const _cBlueLt   = Color(0xFFD8E4FF);
+const _cAmber    = Color(0xFFB45309);
+const _cAmberLt  = Color(0xFFFEF3C7);
+const _cPurple   = Color(0xFF6750A4);
+const _cSky      = Color(0xFF0369A1);
+const _cSkyLt    = Color(0xFFDCF0FB);
+const _cBg       = Color(0xFFF4F6F8);
+const _cSurface  = Color(0xFFFFFFFF);
+const _cBorder   = Color(0xFFE0E3E7);
+const _cText     = Color(0xFF191C1E);
+const _cTextSec  = Color(0xFF43474E);
+const _cTextMuted = Color(0xFF73777F);
+
 class CorteCajaDialog extends StatefulWidget {
   const CorteCajaDialog({super.key});
 
@@ -27,29 +47,14 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
 
   static const _pasoLabels = ['Resumen', 'Conteo', 'Resultado'];
 
-  // ── Paleta ────────────────────────────────────────────────
-  static const _bg        = Color(0xFF0A0E1A);
-  static const _surface   = Color(0xFF111827);
-  static const _card      = Color(0xFF1A2236);
-  static const _border    = Color(0xFF1E2D45);
-  static const _accent    = Color(0xFF3B82F6);
-  static const _green     = Color(0xFF10B981);
-  static const _red       = Color(0xFFEF4444);
-  static const _yellow    = Color(0xFFF59E0B);
-  static const _purple    = Color(0xFF8B5CF6);
-  static const _sky       = Color(0xFF0EA5E9);
-  static const _textPri   = Color(0xFFF1F5F9);
-  static const _textSec   = Color(0xFF94A3B8);
-  static const _textMuted = Color(0xFF475569);
-
   @override
   void initState() {
     super.initState();
     _stepCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 380));
-    _fadeAnim = CurvedAnimation(parent: _stepCtrl, curve: Curves.easeOut);
+        vsync: this, duration: const Duration(milliseconds: 340));
+    _fadeAnim  = CurvedAnimation(parent: _stepCtrl, curve: Curves.easeOut);
     _slideAnim = Tween<Offset>(
-      begin: const Offset(0.04, 0),
+      begin: const Offset(0.03, 0),
       end:   Offset.zero,
     ).animate(CurvedAnimation(parent: _stepCtrl, curve: Curves.easeOut));
     _stepCtrl.forward();
@@ -87,26 +92,26 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
 
     if (resumen == null) {
       return Dialog(
-        backgroundColor: _surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        child: SizedBox(
-          width: 420,
+        backgroundColor: _cSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: const SizedBox(
+          width: 360,
           child: Padding(
-            padding: const EdgeInsets.all(56),
+            padding: EdgeInsets.all(56),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const CircularProgressIndicator(color: _accent),
-              const SizedBox(height: 20),
+              CircularProgressIndicator(color: _cGreen, strokeWidth: 2.5),
+              SizedBox(height: 20),
               Text('Cargando resumen del turno…',
-                  style: GoogleFonts.dmSans(color: _textSec, fontSize: 14)),
+                  style: TextStyle(color: _cTextMuted, fontSize: 13)),
             ]),
           ),
         ),
       );
     }
 
-    final screenSize = MediaQuery.of(context).size;
-    final dialogWidth  = (screenSize.width  * 0.88).clamp(680.0, 860.0);
-    final dialogHeight = (screenSize.height * 0.90).clamp(500.0, 900.0);
+    final screenSize   = MediaQuery.of(context).size;
+    final dialogWidth  = (screenSize.width  * 0.88).clamp(700.0, 880.0);
+    final dialogHeight = (screenSize.height * 0.92).clamp(520.0, 920.0);
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -115,14 +120,14 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
         width:  dialogWidth,
         height: dialogHeight,
         decoration: BoxDecoration(
-          color: _surface,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: _border, width: 1),
+          color: _cBg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: _cBorder),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.6),
-              blurRadius: 48,
-              offset: const Offset(0, 20),
+              color: Colors.black.withValues(alpha: 0.14),
+              blurRadius: 40,
+              offset: const Offset(0, 16),
             ),
           ],
         ),
@@ -142,75 +147,66 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
               ),
             ),
           ),
-          _buildFooter(cont, resumen),
+          _buildFooter(cont),
         ]),
       ),
     );
   }
 
   // ══════════════════════════════════════════════════
-  // HEADER — dark con stepper
+  // HEADER — verde institucional con stepper
   // ══════════════════════════════════════════════════
   Widget _buildHeader(ResumenCierre r) {
     return Container(
-      decoration: const BoxDecoration(
-        color: _bg,
-        border: Border(bottom: BorderSide(color: _border)),
-      ),
+      color: _cGreen,
       child: Column(children: [
-        // Top bar
         Padding(
-          padding: const EdgeInsets.fromLTRB(28, 22, 20, 18),
+          padding: const EdgeInsets.fromLTRB(24, 18, 20, 14),
           child: Row(children: [
             Container(
-              width: 38, height: 38,
+              width: 40, height: 40,
               decoration: BoxDecoration(
-                color: _accent.withOpacity(0.15),
+                color: _cGreen,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: _accent.withOpacity(0.3)),
               ),
-              child: const Icon(Icons.receipt_long_rounded, color: _accent, size: 18),
+              child: const Icon(Icons.receipt_long_rounded, color: Colors.white, size: 18),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('Corte de Caja',
-                    style: GoogleFonts.dmSans(
-                        color: _textPri, fontWeight: FontWeight.w700, fontSize: 17)),
+                    style: GoogleFonts.inter(
+                        color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
                 Text(r.tiendaNombre,
-                    style: GoogleFonts.dmSans(color: _textMuted, fontSize: 12)),
+                    style: GoogleFonts.inter(color: Colors.white60, fontSize: 12)),
               ]),
             ),
-            // Cajero badge
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: _card,
+                color: Colors.white.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: _border),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
               ),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
                 Container(
-                  width: 20, height: 20,
+                  width: 22, height: 22,
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                        colors: [_accent, _purple]),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                      color: Colors.white.withValues(alpha: 0.25),
+                      borderRadius: BorderRadius.circular(11)),
                   child: Center(
                     child: Text(
                       r.empleadoNombre.isNotEmpty
                           ? r.empleadoNombre[0].toUpperCase() : '?',
                       style: const TextStyle(
-                          color: Colors.white, fontSize: 10,
-                          fontWeight: FontWeight.w800),
+                          color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800),
                     ),
                   ),
                 ),
                 const SizedBox(width: 7),
                 Text(r.empleadoNombre,
-                    style: GoogleFonts.dmSans(
-                        color: _textSec, fontSize: 12, fontWeight: FontWeight.w600)),
+                    style: GoogleFonts.inter(
+                        color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
               ]),
             ),
           ]),
@@ -218,32 +214,24 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
 
         // Stepper
         Padding(
-          padding: const EdgeInsets.fromLTRB(28, 0, 28, 20),
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 18),
           child: Row(children: List.generate(3, (i) {
             final idx    = i + 1;
             final activo = idx == _paso;
             final pasado = idx < _paso;
-            final futuro = idx > _paso;
             return Expanded(child: Row(children: [
-              Expanded(child: _StepItem(
-                index: idx,
-                label: _pasoLabels[i],
-                activo: activo,
-                pasado: pasado,
-                futuro: futuro,
+              Expanded(child: _StepDot(
+                index: idx, label: _pasoLabels[i],
+                activo: activo, pasado: pasado,
               )),
               if (i < 2)
                 Expanded(
                   child: Container(
                     height: 1.5,
-                    margin: const EdgeInsets.only(bottom: 28),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: pasado
-                            ? [_green, _green.withOpacity(0.3)]
-                            : [_border, _border],
-                      ),
-                    ),
+                    margin: const EdgeInsets.only(bottom: 22),
+                    color: pasado
+                        ? _cGreen
+                        : Colors.white.withValues(alpha: 0.15),
                   ),
                 ),
             ]));
@@ -254,145 +242,145 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
   }
 
   // ══════════════════════════════════════════════════
-  // PASO 1 — Resumen (2 columnas)
+  // PASO 1 — Resumen completo en 4 cards
   // ══════════════════════════════════════════════════
   Widget _buildPaso1(ResumenCierre r) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(28),
+      padding: const EdgeInsets.all(22),
       child: Column(children: [
-        // Info del turno
-        _TurnoInfoBar(r: r, formatFecha: _formatFecha),
-        const SizedBox(height: 20),
 
-        // Grid 2 columnas
+        // Barra de info del turno
+        _TurnoBar(r: r, formatFecha: _formatFecha),
+        const SizedBox(height: 16),
+
+        // Fila 1: Ventas | Gastos
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Columna izquierda
-          Expanded(child: Column(children: [
-            _SummaryCard(
-              titulo: 'Ventas del turno',
-              icono: Icons.trending_up_rounded,
-              accentColor: _accent,
-              child: Column(children: [
-                _MetodoPago('Efectivo',      r.ventas.efectivo,      _green,  Icons.payments_rounded),
-                _MetodoPago('Tarjeta',       r.ventas.tarjeta,       _accent, Icons.credit_card_rounded),
-                _MetodoPago('Transferencia', r.ventas.transferencia, _purple, Icons.swap_horiz_rounded),
-                if (r.ventas.mixto > 0)
-                  _MetodoPago('Mixto', r.ventas.mixto, _yellow, Icons.compare_arrows_rounded),
-                _SummaryDivider(),
-                _TotalRow('TOTAL VENTAS', _f(r.ventas.total), _textPri),
-                const SizedBox(height: 6),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: _Badge('${r.ventas.numTransacciones} transacciones', _accent),
-                ),
-              ]),
-            ),
-            const SizedBox(height: 14),
-
-            _SummaryCard(
-              titulo: 'Gastos del turno',
-              icono: Icons.trending_down_rounded,
-              accentColor: _red,
-              child: r.gastos.detalle.isEmpty
-                  ? _EmptyState('Sin gastos registrados')
-                  : Column(children: [
-                      ...r.gastos.detalle.map((g) => _DetalleRow(
-                        '${g.categoria}',
-                        '${g.metodoPago}',
-                        '-${_f(g.monto)}',
-                        _red,
-                      )),
-                      _SummaryDivider(),
-                      _TotalRow('TOTAL GASTOS', '-${_f(r.gastos.total)}', _red),
-                    ]),
-            ),
-
-            if (r.abonos.total > 0) ...[
-              const SizedBox(height: 14),
-              _SummaryCard(
-                titulo: 'Abonos recibidos',
-                icono: Icons.bookmark_added_rounded,
-                accentColor: _sky,
-                child: Column(children: [
-                  if (r.abonos.efectivo > 0)
-                    _MetodoPago('Efectivo',      r.abonos.efectivo,      _sky, Icons.payments_rounded),
-                  if (r.abonos.transferencia > 0)
-                    _MetodoPago('Transferencia', r.abonos.transferencia, _sky, Icons.swap_horiz_rounded),
-                  if (r.abonos.tarjeta > 0)                           // ← NUEVO
-                    _MetodoPago('Tarjeta',       r.abonos.tarjeta,      _purple, Icons.credit_card_rounded),
-                  _SummaryDivider(),
-                  _TotalRow('TOTAL ABONOS', _f(r.abonos.total), _sky),
-                  const SizedBox(height: 6),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: _Badge(
-                        '${r.abonos.cantidad} abono${r.abonos.cantidad != 1 ? "s" : ""}',
-                        _sky),
-                  ),
-                ]),
+          Expanded(child: _DataCard(
+            titulo: 'Ventas del Turno',
+            icono: Icons.trending_up_rounded,
+            accentColor: _cGreen,
+            accentBg: _cGreenLt,
+            child: Column(children: [
+              _ItemRow('Efectivo',      r.ventas.efectivo,      _cGreen,  Icons.payments_rounded),
+              _ItemRow('Tarjeta',       r.ventas.tarjeta,       _cBlue,   Icons.credit_card_rounded),
+              _ItemRow('Transferencia', r.ventas.transferencia, _cPurple, Icons.swap_horiz_rounded),
+              if (r.ventas.mixto > 0)
+                _ItemRow('Mixto',       r.ventas.mixto,         _cAmber,  Icons.compare_arrows_rounded),
+              const _CardDiv(),
+              _TotalRow('TOTAL VENTAS', _f(r.ventas.total), _cNavy),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerRight,
+                child: _Chip('${r.ventas.numTransacciones} transacciones', _cBlue, _cBlueLt),
               ),
-              _InfoTip('Tarjeta ${_f(r.abonos.tarjeta)} y transferencia '
-                '${_f(r.abonos.transferencia)} no afectan el cajón físico.'),
-            ],
-          ])),
-
-          const SizedBox(width: 14),
-
-          // Columna derecha
-          Expanded(child: Column(children: [
-            // Devoluciones
-            if (r.devoluciones.cantidad > 0) ...[
-              _SummaryCard(
-                titulo: 'Devoluciones',
-                icono: Icons.assignment_return_rounded,
-                accentColor: _yellow,
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  if (r.devoluciones.cambiosProducto > 0) ...[
-                    _BadgeRow(
-                      icono: Icons.swap_horiz_rounded,
-                      color: _purple,
-                      label: 'Cambio por producto',
-                      valor: '${r.devoluciones.cambiosProducto} cambio${r.devoluciones.cambiosProducto != 1 ? "s" : ""}',
-                      sub: 'No sale dinero del cajón',
-                    ),
-                    if (r.devoluciones.efectivo > 0 ||
-                        r.devoluciones.cambiosDevolver > 0 ||
-                        r.devoluciones.cambiosCobrar > 0)
-                      _SummaryDivider(),
-                  ],
-                  if (r.devoluciones.efectivo > 0)
-                    _DetalleRow('Dev. efectivo', '', '-${_f(r.devoluciones.efectivo)}', _red),
-                  if (r.devoluciones.cambiosDevolver > 0)
-                    _DetalleRow('Dif. devuelta', '', '-${_f(r.devoluciones.cambiosDevolver)}', _red),
-                  if (r.devoluciones.cambiosCobrar > 0)
-                    _DetalleRow('Dif. cobrada', '', '+${_f(r.devoluciones.cambiosCobrar)}', _green),
-                  if (r.devoluciones.efectivo == 0 &&
-                      r.devoluciones.cambiosDevolver == 0 &&
-                      r.devoluciones.cambiosCobrar == 0)
-                    _EmptyState('Sin devoluciones en efectivo'),
-                  _SummaryDivider(),
-                  _TotalRow('NETO EFECTIVO', '-${_f(r.devoluciones.netoEfectivo.abs())}', _yellow),
-                  const SizedBox(height: 6),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: _Badge(
-                        '${r.devoluciones.cantidad} devolución${r.devoluciones.cantidad != 1 ? "es" : ""}',
-                        _yellow),
-                  ),
-                ]),
-              ),
-              _InfoTip('Solo las devoluciones en efectivo reducen el cuadre.'),
-              const SizedBox(height: 14),
-            ],
-
-            // Cálculo caja física — destacado
-            _CajaEsperadaCard(r: r, f: _f),
-            const SizedBox(height: 8),
-            _InfoTip(
-                'Tarjeta ${_f(r.ventas.tarjeta)} y transferencia '
-                '${_f(r.ventas.transferencia)} van al banco.'),
-          ])),
+            ]),
+          )),
+          const SizedBox(width: 12),
+          Expanded(child: _DataCard(
+            titulo: 'Gastos del Turno',
+            icono: Icons.trending_down_rounded,
+            accentColor: _cRed,
+            accentBg: _cRedLt,
+            child: r.gastos.detalle.isEmpty
+                ? const _EmptyHint('Sin gastos registrados en este turno')
+                : Column(children: [
+                    ...r.gastos.detalle.map(
+                      (g) => _GastoRow(g.categoria, g.metodoPago, g.monto)),
+                    const _CardDiv(),
+                    _TotalRow('TOTAL GASTOS', '-${_f(r.gastos.total)}', _cRed),
+                  ]),
+          )),
         ]),
+        const SizedBox(height: 12),
+
+        // Fila 2: Abonos | Devoluciones
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(child: _DataCard(
+            titulo: 'Abonos / Separados',
+            icono: Icons.bookmark_added_rounded,
+            accentColor: _cSky,
+            accentBg: _cSkyLt,
+            child: r.abonos.total <= 0
+                ? const _EmptyHint('Sin abonos recibidos en este turno')
+                : Column(children: [
+                    if (r.abonos.efectivo > 0)
+                      _ItemRow('Efectivo',      r.abonos.efectivo,      _cGreen,  Icons.payments_rounded),
+                    if (r.abonos.tarjeta > 0)
+                      _ItemRow('Tarjeta',       r.abonos.tarjeta,       _cBlue,   Icons.credit_card_rounded),
+                    if (r.abonos.transferencia > 0)
+                      _ItemRow('Transferencia', r.abonos.transferencia, _cPurple, Icons.swap_horiz_rounded),
+                    const _CardDiv(),
+                    _TotalRow('TOTAL ABONOS', _f(r.abonos.total), _cSky),
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: _Chip(
+                        '${r.abonos.cantidad} abono${r.abonos.cantidad != 1 ? "s" : ""}',
+                        _cSky, _cSkyLt,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Row(children: [
+                        const Icon(Icons.info_outline_rounded, size: 11, color: _cTextMuted),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            'Tarjeta y transferencia no afectan el cajon fisico.',
+                            style: GoogleFonts.inter(fontSize: 10, color: _cTextMuted),
+                          ),
+                        ),
+                      ]),
+                    ),
+                  ]),
+          )),
+          const SizedBox(width: 12),
+          Expanded(child: _DataCard(
+            titulo: 'Devoluciones',
+            icono: Icons.assignment_return_rounded,
+            accentColor: _cAmber,
+            accentBg: _cAmberLt,
+            child: r.devoluciones.cantidad == 0
+                ? const _EmptyHint('Sin devoluciones en este turno')
+                : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    if (r.devoluciones.cambiosProducto > 0) ...[
+                      _DevRow(
+                        icono:  Icons.swap_horiz_rounded,
+                        color:  _cPurple,
+                        label:  'Cambio por producto',
+                        valor:  '${r.devoluciones.cambiosProducto} cambio${r.devoluciones.cambiosProducto != 1 ? "s" : ""}',
+                        sub:    'Sin salida de efectivo',
+                      ),
+                      if (r.devoluciones.efectivo > 0 ||
+                          r.devoluciones.cambiosDevolver > 0 ||
+                          r.devoluciones.cambiosCobrar > 0)
+                        const _CardDiv(),
+                    ],
+                    if (r.devoluciones.efectivo > 0)
+                      _MontoRow('Dev. efectivo',  r.devoluciones.efectivo,        isNeg: true),
+                    if (r.devoluciones.cambiosDevolver > 0)
+                      _MontoRow('Dif. devuelta',  r.devoluciones.cambiosDevolver, isNeg: true),
+                    if (r.devoluciones.cambiosCobrar > 0)
+                      _MontoRow('Dif. cobrada',   r.devoluciones.cambiosCobrar,   isNeg: false),
+                    if (r.devoluciones.netoEfectivo > 0) ...[
+                      const _CardDiv(),
+                      _TotalRow('NETO EFECTIVO', '-${_f(r.devoluciones.netoEfectivo)}', _cRed),
+                    ],
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: _Chip(
+                        '${r.devoluciones.cantidad} devolucion${r.devoluciones.cantidad != 1 ? "es" : ""}',
+                        _cAmber, _cAmberLt,
+                      ),
+                    ),
+                  ]),
+          )),
+        ]),
+        const SizedBox(height: 12),
+
+        // Card calculo caja fisica — ancho completo
+        _CajaEsperadaCard(r: r, f: _f),
       ]),
     );
   }
@@ -402,71 +390,62 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
   // ══════════════════════════════════════════════════
   Widget _buildPaso2(ResumenCierre r) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.all(28),
       child: Column(children: [
-        // Hero del monto esperado
+        // Hero monto esperado
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(32, 28, 32, 28),
+          padding: const EdgeInsets.all(28),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF064E3B), Color(0xFF065F46)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _green.withOpacity(0.3)),
-            boxShadow: [BoxShadow(
-              color: _green.withOpacity(0.2),
-              blurRadius: 32, offset: const Offset(0, 8),
-            )],
+            color: _cGreen,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1.5),
           ),
           child: Column(children: [
             Text('Esperado en caja',
-                style: GoogleFonts.dmSans(
-                    color: _green.withOpacity(0.75), fontSize: 13,
+                style: GoogleFonts.inter(
+                    color: Colors.white70, fontSize: 12,
                     fontWeight: FontWeight.w600, letterSpacing: 0.5)),
             const SizedBox(height: 10),
             Text(_f(r.montoEsperadoCaja),
-                style: GoogleFonts.dmSans(
+                style: GoogleFonts.inter(
                     color: Colors.white, fontWeight: FontWeight.w800,
-                    fontSize: 52, letterSpacing: -2)),
-            const SizedBox(height: 18),
-            // Chips
+                    fontSize: 48, letterSpacing: -2)),
+            const SizedBox(height: 16),
             Wrap(
               alignment: WrapAlignment.center,
-              spacing: 12, runSpacing: 8,
+              spacing: 10, runSpacing: 6,
               children: [
-                _EsperadoChip('Inicial',      _f(r.montoInicial)),
-                _EsperadoChip('Ef. ventas',   _f(r.ventas.efectivo)),
+                _EsperadoChip('Inicial',     _f(r.montoInicial)),
+                _EsperadoChip('Ventas ef.',  _f(r.ventas.efectivo)),
                 if (r.abonos.efectivo > 0)
-                  _EsperadoChip('Abonos ef.',  _f(r.abonos.efectivo)),
+                  _EsperadoChip('Abonos ef.', _f(r.abonos.efectivo)),
                 if (r.gastos.efectivo > 0)
-                  _EsperadoChip('- Gastos',    _f(r.gastos.efectivo),
-                      isNeg: true),
+                  _EsperadoChip('- Gastos',   _f(r.gastos.efectivo),  isNeg: true),
                 if (r.devoluciones.netoEfectivo > 0)
-                  _EsperadoChip('- Devoluc.',  _f(r.devoluciones.netoEfectivo),
-                      isNeg: true),
+                  _EsperadoChip('- Devoluc.', _f(r.devoluciones.netoEfectivo), isNeg: true),
               ],
             ),
           ]),
         ),
-        const SizedBox(height: 32),
+        const SizedBox(height: 26),
 
-        // Entrada del monto
         Align(
           alignment: Alignment.centerLeft,
-          child: Text('¿Cuánto hay físicamente en el cajón?',
-              style: GoogleFonts.dmSans(
-                  fontSize: 15, color: _textSec, fontWeight: FontWeight.w600)),
+          child: Text('Cuenta el efectivo fisico en el cajon',
+              style: GoogleFonts.inter(
+                  fontSize: 14, color: _cText, fontWeight: FontWeight.w600)),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
 
         Container(
           decoration: BoxDecoration(
-            color: _card,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: _border),
+            color: _cSurface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: _cBorder),
+            boxShadow: [BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04), blurRadius: 8,
+            )],
           ),
           child: Column(children: [
             Padding(
@@ -487,58 +466,55 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                         offset: _montoCtrl.text.length);
                   }
                 },
-                style: GoogleFonts.dmSans(
-                    fontSize: 40, fontWeight: FontWeight.w800,
-                    color: _textPri, letterSpacing: -1.5),
+                style: GoogleFonts.inter(
+                    fontSize: 38, fontWeight: FontWeight.w800,
+                    color: _cText, letterSpacing: -1.5),
                 decoration: InputDecoration(
                   labelText: 'Monto contado',
                   prefixText: '\$ ',
-                  labelStyle: GoogleFonts.dmSans(
-                      fontSize: 13, color: _textMuted),
-                  prefixStyle: GoogleFonts.dmSans(
-                      fontSize: 40, fontWeight: FontWeight.w800,
-                      color: _textMuted),
+                  labelStyle: GoogleFonts.inter(fontSize: 13, color: _cTextMuted),
+                  prefixStyle: GoogleFonts.inter(
+                      fontSize: 38, fontWeight: FontWeight.w800, color: _cTextMuted),
                   filled: true,
                   fillColor: Colors.transparent,
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none),
                   enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none),
                   focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
             ),
-            const Divider(height: 1, color: _border),
+            const Divider(height: 1, color: _cBorder),
             Padding(
               padding: const EdgeInsets.all(22),
               child: TextField(
                 controller: _obsCtrl,
                 maxLines: 3,
-                style: GoogleFonts.dmSans(
-                    fontSize: 13, color: _textSec),
+                style: GoogleFonts.inter(fontSize: 13, color: _cTextSec),
                 decoration: InputDecoration(
                   labelText: 'Observaciones (opcional)',
-                  hintText: 'Ej: billetes contados, diferencias…',
-                  labelStyle: GoogleFonts.dmSans(
-                      fontSize: 12, color: _textMuted),
-                  hintStyle: GoogleFonts.dmSans(
-                      fontSize: 12, color: _textMuted.withOpacity(0.5)),
+                  hintText: 'Ej: billetes contados, diferencias encontradas…',
+                  labelStyle: GoogleFonts.inter(fontSize: 12, color: _cTextMuted),
+                  hintStyle: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: _cTextMuted.withValues(alpha: 0.6)),
                   filled: true,
-                  fillColor: _bg.withOpacity(0.5),
+                  fillColor: _cBg,
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: _border)),
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: _cBorder)),
                   enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: _border)),
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: _cBorder)),
                   focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: _accent, width: 1.5)),
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: _cGreen, width: 1.5)),
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
@@ -551,19 +527,16 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
   }
 
   // ══════════════════════════════════════════════════
-  // PASO 3 — Resultado / Ticket
+  // PASO 3 — Resultado
   // ══════════════════════════════════════════════════
   Widget _buildPaso3(ResumenCierre r) {
     final dif        = _diferencia;
     final esExacto   = dif.abs() < 0.01;
     final esSobrante = dif > 0;
 
-    final color     = esExacto
-        ? _green : esSobrante ? _accent : _red;
-    final bgColor   = esExacto
-        ? const Color(0xFF022C22)
-        : esSobrante ? const Color(0xFF0E1B4E) : const Color(0xFF2D0A0A);
-    final icono     = esExacto
+    final color   = esExacto ? _cGreen : esSobrante ? _cBlue : _cRed;
+    final bgColor = esExacto ? _cGreenLt : esSobrante ? _cBlueLt : _cRedLt;
+    final icono   = esExacto
         ? Icons.check_circle_rounded
         : esSobrante ? Icons.arrow_circle_up_rounded : Icons.warning_rounded;
     final resultado = esExacto ? 'CUADRE EXACTO'
@@ -578,69 +551,62 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
         '${now.minute.toString().padLeft(2, '0')}';
 
     return Row(children: [
-      // ── Columna izquierda: resultado visual ─────────
+      // Columna izquierda: resultado visual
       Expanded(
         flex: 5,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(28),
+          padding: const EdgeInsets.all(24),
           child: Column(children: [
-            // Hero resultado
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
                 color: bgColor,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: color.withOpacity(0.3), width: 1.5),
-                boxShadow: [BoxShadow(
-                  color: color.withOpacity(0.15),
-                  blurRadius: 32, offset: const Offset(0, 8),
-                )],
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5),
               ),
               child: Column(children: [
                 Container(
-                  width: 64, height: 64,
+                  width: 58, height: 58,
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: color.withOpacity(0.4)),
+                    color: color.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: color.withValues(alpha: 0.35)),
                   ),
-                  child: Icon(icono, color: color, size: 32),
+                  child: Icon(icono, color: color, size: 28),
                 ),
                 const SizedBox(height: 14),
                 Text(resultado,
-                    style: GoogleFonts.dmSans(
+                    style: GoogleFonts.inter(
                         color: color, fontWeight: FontWeight.w800,
-                        fontSize: 13, letterSpacing: 1.5)),
+                        fontSize: 12, letterSpacing: 1.5)),
                 if (!esExacto) ...[
                   const SizedBox(height: 6),
                   Text(_f(dif.abs()),
-                      style: GoogleFonts.dmSans(
-                          color: Colors.white, fontWeight: FontWeight.w800,
+                      style: GoogleFonts.inter(
+                          color: color, fontWeight: FontWeight.w800,
                           fontSize: 44, letterSpacing: -2)),
                 ] else ...[
                   const SizedBox(height: 6),
-                  Text('¡Todo cuadra perfectamente!',
-                      style: GoogleFonts.dmSans(
-                          color: _green.withOpacity(0.75), fontSize: 13)),
+                  Text('Todo cuadra perfectamente',
+                      style: GoogleFonts.inter(color: color, fontSize: 13)),
                 ],
               ]),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
-            // Tabla resumen rápido
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: _card,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: _border),
+                color: _cSurface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: _cBorder),
               ),
               child: Column(children: [
-                _ResultRow('Contado físico', _f(_montoIngresado), _textPri),
-                _ResultRow('Esperado',       _f(r.montoEsperadoCaja), _textSec),
-                const Divider(color: _border, height: 20),
-                _ResultRow(
+                _ResRow('Contado fisico', _f(_montoIngresado), _cText),
+                _ResRow('Esperado',       _f(r.montoEsperadoCaja), _cTextSec),
+                const Divider(color: _cBorder, height: 20),
+                _ResRow(
                   esSobrante ? 'Sobrante' : esExacto ? 'Diferencia' : 'Faltante',
                   '${dif >= 0 ? '+' : '-'}${_f(dif.abs())}',
                   color,
@@ -648,47 +614,45 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                 ),
               ]),
             ),
-            const SizedBox(height: 14),
 
-            // Observaciones
-            if (_obsCtrl.text.isNotEmpty)
+            if (_obsCtrl.text.isNotEmpty) ...[
+              const SizedBox(height: 12),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: _card,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: _border),
+                  color: _cSurface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _cBorder),
                 ),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('OBSERVACIONES',
-                      style: GoogleFonts.dmSans(
-                          color: _textMuted, fontSize: 10,
+                      style: GoogleFonts.inter(
+                          color: _cTextMuted, fontSize: 10,
                           fontWeight: FontWeight.w700, letterSpacing: 1.2)),
                   const SizedBox(height: 6),
                   Text(_obsCtrl.text,
-                      style: GoogleFonts.dmSans(
-                          color: _textSec, fontSize: 13)),
+                      style: GoogleFonts.inter(color: _cTextSec, fontSize: 13)),
                 ]),
               ),
+            ],
           ]),
         ),
       ),
 
-      // Separador vertical
-      Container(width: 1, color: _border),
+      Container(width: 1, color: _cBorder),
 
-      // ── Columna derecha: ticket ──────────────────────
+      // Columna derecha: comprobante
       Expanded(
         flex: 4,
         child: Container(
-          color: _bg,
+          color: _cBg,
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-              child: Text('COMPROBANTE',
-                  style: GoogleFonts.dmSans(
-                      color: _textMuted, fontSize: 10,
+              child: Text('COMPROBANTE DE CIERRE',
+                  style: GoogleFonts.inter(
+                      color: _cTextMuted, fontSize: 10,
                       fontWeight: FontWeight.w700, letterSpacing: 1.5)),
             ),
             Expanded(
@@ -707,123 +671,123 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
       Color color, String hora, double dif) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF0D1117),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
+        color: _cSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _cBorder),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Center(child: Column(children: [
-          Text('─────────────────────', style: _monoStyle(_border)),
-          Text('  CORTE #${r.sesionId}  ', style: _monoStyle(_textPri, bold: true)),
-          Text('  ${r.tiendaNombre}  ', style: _monoStyle(_textSec)),
-          Text('  $hora  ', style: _monoStyle(_textMuted)),
-          Text('─────────────────────', style: _monoStyle(_border)),
+          Text('─────────────────────', style: _mono(_cBorder)),
+          Text('  CORTE #${r.sesionId}  ', style: _mono(_cText, bold: true)),
+          Text('  ${r.tiendaNombre}  ',     style: _mono(_cTextSec)),
+          Text('  $hora  ',                 style: _mono(_cTextMuted)),
+          Text('─────────────────────', style: _mono(_cBorder)),
         ])),
         const SizedBox(height: 10),
 
-        _tSeccion('RESPONSABLE'),
+        _tSec('RESPONSABLE'),
         _tFila('Cajero',   r.empleadoNombre),
         _tFila('Apertura', _formatFecha(r.fechaApertura)),
         _tFila('Cierre',   hora),
 
-        const SizedBox(height: 8),
-        _tSeccion('VENTAS'),
+        const SizedBox(height: 2),
+        _tSec('VENTAS'),
         _tFila('Efectivo',      _f(r.ventas.efectivo)),
         _tFila('Tarjeta',       _f(r.ventas.tarjeta)),
         _tFila('Transferencia', _f(r.ventas.transferencia)),
-        if (r.ventas.mixto > 0)
-          _tFila('Mixto', _f(r.ventas.mixto)),
-        _tDivider(),
-        _tFila('TOTAL', _f(r.ventas.total), bold: true),
+        if (r.ventas.mixto > 0) _tFila('Mixto', _f(r.ventas.mixto)),
+        _tDiv(),
+        _tFila('TOTAL',         _f(r.ventas.total), bold: true),
         _tFila('Transacciones', '${r.ventas.numTransacciones}'),
 
         if (r.abonos.total > 0) ...[
-          const SizedBox(height: 8),
-          _tSeccion('ABONOS'),
-          if (r.abonos.efectivo > 0)
-            _tFila('Efectivo',      _f(r.abonos.efectivo)),
-          if (r.abonos.transferencia > 0)
-            _tFila('Transfer.',     _f(r.abonos.transferencia)),
-          if (r.abonos.tarjeta > 0)                         // ← NUEVO
-            _tFila('Tarjeta',   _f(r.abonos.tarjeta)),
-          _tDivider(),
-          _tFila('TOTAL', _f(r.abonos.total), bold: true),
+          const SizedBox(height: 2),
+          _tSec('ABONOS / SEPARADOS'),
+          if (r.abonos.efectivo > 0)      _tFila('Efectivo',  _f(r.abonos.efectivo)),
+          if (r.abonos.tarjeta > 0)       _tFila('Tarjeta',   _f(r.abonos.tarjeta)),
+          if (r.abonos.transferencia > 0) _tFila('Transfer.', _f(r.abonos.transferencia)),
+          _tDiv(),
+          _tFila('TOTAL',  _f(r.abonos.total),      bold: true),
+          _tFila('Abonos', '${r.abonos.cantidad}'),
         ],
 
-        const SizedBox(height: 8),
-        _tSeccion('GASTOS'),
+        const SizedBox(height: 2),
+        _tSec('GASTOS'),
         if (r.gastos.detalle.isEmpty)
-          _tFila('Sin gastos', _f(0))
+          _tFila('Sin gastos', '--')
         else ...[
-          ...r.gastos.detalle.map((g) =>
-              _tFila(g.categoria, '-${_f(g.monto)}')),
-          _tDivider(),
+          ...r.gastos.detalle.map((g) => _tFila(g.categoria, '-${_f(g.monto)}')),
+          _tDiv(),
           _tFila('TOTAL', '-${_f(r.gastos.total)}', bold: true),
         ],
 
         if (r.devoluciones.cantidad > 0) ...[
-          const SizedBox(height: 8),
-          _tSeccion('DEVOLUCIONES'),
+          const SizedBox(height: 2),
+          _tSec('DEVOLUCIONES'),
           if (r.devoluciones.cambiosProducto > 0)
-            _tFila('Cambios prod.', '${r.devoluciones.cambiosProducto}'),
+            _tFila('Cambio producto', '${r.devoluciones.cambiosProducto}'),
           if (r.devoluciones.efectivo > 0)
-            _tFila('Dev. efectivo', '-${_f(r.devoluciones.efectivo)}'),
+            _tFila('Dev. efectivo',   '-${_f(r.devoluciones.efectivo)}'),
           if (r.devoluciones.cambiosDevolver > 0)
-            _tFila('Dif. devuelta', '-${_f(r.devoluciones.cambiosDevolver)}'),
+            _tFila('Dif. devuelta',   '-${_f(r.devoluciones.cambiosDevolver)}'),
           if (r.devoluciones.cambiosCobrar > 0)
-            _tFila('Dif. cobrada', '+${_f(r.devoluciones.cambiosCobrar)}'),
-          _tDivider(),
+            _tFila('Dif. cobrada',    '+${_f(r.devoluciones.cambiosCobrar)}'),
+          _tDiv(),
           _tFila('NETO EF.', '-${_f(r.devoluciones.netoEfectivo)}', bold: true),
         ],
 
-        const SizedBox(height: 8),
-        _tSeccion('RESULTADO FINAL'),
+        const SizedBox(height: 2),
+        _tSec('RESULTADO FINAL'),
         _tFila('Contado',  _f(_montoIngresado)),
         _tFila('Esperado', _f(r.montoEsperadoCaja)),
-        _tDivider(),
-        _tFila(resultado, '${dif >= 0 ? '+' : ''}${_f(dif)}',
+        _tDiv(),
+        _tFila(resultado,  '${dif >= 0 ? '+' : ''}${_f(dif)}',
             bold: true, color: color),
 
         if (_obsCtrl.text.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          _tSeccion('OBSERVACIONES'),
-          Text(_obsCtrl.text, style: _monoStyle(_textMuted)),
+          const SizedBox(height: 2),
+          _tSec('OBSERVACIONES'),
+          Text(_obsCtrl.text, style: _mono(Colors.white38)),
         ],
 
         const SizedBox(height: 12),
-        Center(child: Text('── POS Multitienda ──', style: _monoStyle(_border))),
+        Center(child: Text('── POS Multitienda ──', style: _mono(Colors.white12))),
       ]),
     );
   }
 
   // ══════════════════════════════════════════════════
-  // FOOTER — acciones
+  // FOOTER
   // ══════════════════════════════════════════════════
-  Widget _buildFooter(CajaProvider cont, ResumenCierre resumen) {
+  Widget _buildFooter(CajaProvider cont) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 14, 24, 18),
-      decoration: const BoxDecoration(
-        color: _bg,
-        border: Border(top: BorderSide(color: _border)),
+      padding: const EdgeInsets.fromLTRB(24, 14, 24, 16),
+      decoration: BoxDecoration(
+        color: _cSurface,
+        border: const Border(top: BorderSide(color: _cBorder)),
+        boxShadow: [BoxShadow(
+          color: Colors.black.withValues(alpha: 0.04),
+          blurRadius: 8, offset: const Offset(0, -2),
+        )],
       ),
       child: Row(children: [
         if (_paso > 1)
-          _GhostButton(
-            label: 'Atrás',
+          _GhostBtn(
+            label: 'Atras',
             icon: Icons.arrow_back_rounded,
             onPressed: () => _irAPaso(_paso - 1),
           ),
         const Spacer(),
         if (_paso == 1)
-          _GhostButton(
+          _GhostBtn(
             label: 'Cancelar',
             icon: Icons.close_rounded,
             onPressed: () => Navigator.pop(context),
           ),
         const SizedBox(width: 10),
-        _ActionButton(
+        _ActionBtn(
           paso: _paso,
           procesando: cont.procesando,
           onPressed: cont.procesando ? null : () async {
@@ -833,12 +797,11 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
               final monto = double.tryParse(_montoCtrl.text);
               if (monto == null || monto < 0) {
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text('Ingresa un monto válido',
-                      style: GoogleFonts.dmSans(color: Colors.white)),
-                  backgroundColor: _red,
+                  content: Text('Ingresa un monto valido',
+                      style: GoogleFonts.inter(color: Colors.white)),
+                  backgroundColor: _cRed,
                   behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   margin: const EdgeInsets.all(16),
                 ));
                 return;
@@ -850,7 +813,7 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                 montoFinalReal: _montoIngresado,
                 observaciones:  _obsCtrl.text.trim(),
               );
-              if (ok && context.mounted) Navigator.pop(context);
+              if (ok && mounted) Navigator.pop(context);
             }
           },
         ),
@@ -858,18 +821,18 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
     );
   }
 
-  // ── Helpers ticket ──────────────────────────────────────────
-  TextStyle _monoStyle(Color c, {bool bold = false}) => TextStyle(
-    fontFamily: 'monospace', fontSize: 11.5, color: c,
+  // ── Ticket helpers ──────────────────────────────────────────
+  TextStyle _mono(Color c, {bool bold = false}) => TextStyle(
+    fontFamily: 'monospace', fontSize: 11, color: c,
     fontWeight: bold ? FontWeight.bold : FontWeight.normal,
   );
 
-  Widget _tSeccion(String t) => Padding(
-    padding: const EdgeInsets.only(top: 8, bottom: 4),
+  Widget _tSec(String t) => Padding(
+    padding: const EdgeInsets.only(top: 8, bottom: 3),
     child: Text(t,
-        style: GoogleFonts.dmSans(
-            fontSize: 9.5, fontWeight: FontWeight.w800,
-            color: _textMuted, letterSpacing: 1.2)),
+        style: GoogleFonts.inter(
+            fontSize: 9, fontWeight: FontWeight.w800,
+            color: _cGreen, letterSpacing: 1.2)),
   );
 
   Widget _tFila(String label, String valor,
@@ -879,257 +842,295 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: _monoStyle(color ?? _textSec, bold: bold)),
-          Text(valor,  style: _monoStyle(color ?? _textPri, bold: bold)),
+          Text(label, style: _mono(color ?? _cTextSec,  bold: bold)),
+          Text(valor,  style: _mono(color ?? _cText,     bold: bold)),
         ],
       ),
     );
 
-  Widget _tDivider() => Padding(
+  Widget _tDiv() => Padding(
     padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Text('─────────────────────', style: _monoStyle(_border)),
+    child: Text('─────────────────────', style: _mono(_cBorder)),
   );
 }
 
-// ══════════════════════════════════════════════════════════
-// COMPONENTES AUXILIARES
-// ══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// COMPONENTES
+// ═══════════════════════════════════════════════════════════════
 
-class _StepItem extends StatelessWidget {
+class _StepDot extends StatelessWidget {
   final int    index;
   final String label;
-  final bool   activo, pasado, futuro;
-  const _StepItem({
+  final bool   activo, pasado;
+  const _StepDot({
     required this.index, required this.label,
-    required this.activo, required this.pasado, required this.futuro,
+    required this.activo, required this.pasado,
   });
-
-  static const _green  = Color(0xFF10B981);
-  static const _accent = Color(0xFF3B82F6);
-  static const _border = Color(0xFF1E2D45);
-  static const _textSec = Color(0xFF94A3B8);
-  static const _textMuted = Color(0xFF475569);
 
   @override
   Widget build(BuildContext context) {
-    final circleColor = pasado
-        ? _green : activo ? _accent : _border;
-    final textColor = activo
-        ? Colors.white : pasado ? _green : _textMuted;
-
     return Column(children: [
       AnimatedContainer(
         duration: const Duration(milliseconds: 250),
-        width: 34, height: 34,
+        width: 32, height: 32,
         decoration: BoxDecoration(
-          color: circleColor.withOpacity(activo ? 1 : pasado ? 0.2 : 0.5),
-          borderRadius: BorderRadius.circular(17),
+          color: (pasado || activo)
+              ? _cGreen
+              : Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(16),
           border: activo
-              ? Border.all(color: _accent.withOpacity(0.5), width: 2)
-              : Border.all(color: circleColor.withOpacity(0.3)),
+              ? Border.all(color: _cGreen, width: 2)
+              : Border.all(color: Colors.white.withValues(alpha: 0.2)),
         ),
         child: Center(
           child: pasado
-              ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
+              ? const Icon(Icons.check_rounded, size: 15, color: Colors.white)
               : Text('$index',
-                  style: GoogleFonts.dmSans(
-                      color: activo ? Colors.white : textColor,
+                  style: GoogleFonts.inter(
+                      color: activo ? Colors.white : Colors.white38,
                       fontSize: 13, fontWeight: FontWeight.w800)),
         ),
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 5),
       Text(label,
-          style: GoogleFonts.dmSans(
-              color: activo ? Colors.white : _textSec,
-              fontSize: 11, fontWeight: FontWeight.w600)),
+          style: GoogleFonts.inter(
+              color: activo ? Colors.white : Colors.white54,
+              fontSize: 10, fontWeight: FontWeight.w600)),
     ]);
   }
 }
 
-class _TurnoInfoBar extends StatelessWidget {
+class _TurnoBar extends StatelessWidget {
   final ResumenCierre r;
   final String Function(String) formatFecha;
-  const _TurnoInfoBar({required this.r, required this.formatFecha});
-
-  static const _card   = Color(0xFF1A2236);
-  static const _border = Color(0xFF1E2D45);
-  static const _textPri   = Color(0xFFF1F5F9);
-  static const _textSec   = Color(0xFF94A3B8);
-  static const _textMuted = Color(0xFF475569);
-  static const _green  = Color(0xFF10B981);
-  static const _accent = Color(0xFF3B82F6);
+  const _TurnoBar({required this.r, required this.formatFecha});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
+        color: _cSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _cBorder),
       ),
       child: Row(children: [
         Container(
-          width: 44, height: 44,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [_accent, Color(0xFF8B5CF6)]),
-            borderRadius: BorderRadius.circular(12),
-          ),
+          width: 36, height: 36,
+          decoration: BoxDecoration(color: _cGreen, borderRadius: BorderRadius.circular(10)),
           child: Center(
             child: Text(
-              r.empleadoNombre.isNotEmpty
-                  ? r.empleadoNombre[0].toUpperCase() : '?',
-              style: const TextStyle(color: Colors.white,
-                  fontWeight: FontWeight.w800, fontSize: 18),
+              r.empleadoNombre.isNotEmpty ? r.empleadoNombre[0].toUpperCase() : '?',
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
             ),
           ),
         ),
-        const SizedBox(width: 14),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(r.empleadoNombre,
-                style: GoogleFonts.dmSans(
-                    fontWeight: FontWeight.w700, fontSize: 14,
-                    color: _textPri)),
-            const SizedBox(height: 2),
+                style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w700, fontSize: 13, color: _cText)),
             Text('Apertura: ${formatFecha(r.fechaApertura)}',
-                style: GoogleFonts.dmSans(
-                    fontSize: 12, color: _textMuted)),
+                style: GoogleFonts.inter(fontSize: 11, color: _cTextMuted)),
           ]),
         ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: _green.withOpacity(0.1),
+            color: _cGreenLt,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _green.withOpacity(0.3)),
+            border: Border.all(color: _cGreen.withValues(alpha: 0.3)),
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Container(width: 6, height: 6,
-                decoration: BoxDecoration(
-                    color: _green, borderRadius: BorderRadius.circular(3))),
+                decoration: BoxDecoration(color: _cGreen, borderRadius: BorderRadius.circular(3))),
             const SizedBox(width: 6),
             Text('Turno activo',
-                style: GoogleFonts.dmSans(
-                    color: _green, fontSize: 11, fontWeight: FontWeight.w600)),
+                style: GoogleFonts.inter(
+                    color: _cGreen, fontSize: 10, fontWeight: FontWeight.w700)),
           ]),
         ),
+        const SizedBox(width: 12),
+        Text('#${r.sesionId}',
+            style: GoogleFonts.inter(
+                color: _cTextMuted, fontSize: 12, fontWeight: FontWeight.w500)),
       ]),
     );
   }
 }
 
-class _SummaryCard extends StatelessWidget {
+class _DataCard extends StatelessWidget {
   final String   titulo;
   final IconData icono;
-  final Color    accentColor;
+  final Color    accentColor, accentBg;
   final Widget   child;
-  const _SummaryCard({
-    required this.titulo, required this.icono,
-    required this.accentColor, required this.child,
+  const _DataCard({
+    required this.titulo,      required this.icono,
+    required this.accentColor, required this.accentBg,
+    required this.child,
   });
-
-  static const _card   = Color(0xFF1A2236);
-  static const _border = Color(0xFF1E2D45);
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 0),
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
+        color: _cSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _cBorder),
+        boxShadow: [BoxShadow(
+          color: Colors.black.withValues(alpha: 0.03), blurRadius: 6,
+        )],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Container(
-            width: 30, height: 30,
-            decoration: BoxDecoration(
-              color: accentColor.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icono, color: accentColor, size: 15),
+            width: 26, height: 26,
+            decoration: BoxDecoration(color: accentBg, borderRadius: BorderRadius.circular(7)),
+            child: Icon(icono, color: accentColor, size: 13),
           ),
-          const SizedBox(width: 10),
-          Text(titulo,
-              style: GoogleFonts.dmSans(
-                  fontWeight: FontWeight.w700, fontSize: 13,
-                  color: accentColor)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(titulo,
+                style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w700, fontSize: 12, color: _cText)),
+          ),
         ]),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         child,
       ]),
     );
   }
 }
 
-class _MetodoPago extends StatelessWidget {
-  final String label;
-  final double valor;
-  final Color  color;
+class _ItemRow extends StatelessWidget {
+  final String   label;
+  final double   valor;
+  final Color    color;
   final IconData icono;
-  const _MetodoPago(this.label, this.valor, this.color, this.icono);
-
+  const _ItemRow(this.label, this.valor, this.color, this.icono);
   static final _fmt = NumberFormat('#,##0', 'en_US');
-  String _f(double v) => '\$${_fmt.format(v)}';
-
-  static const _textMuted = Color(0xFF475569);
-  static const _textSec   = Color(0xFF94A3B8);
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 3.5),
       child: Row(children: [
         Container(
-          width: 26, height: 26,
+          width: 22, height: 22,
           decoration: BoxDecoration(
-            color: color.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(7),
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(6),
           ),
-          child: Icon(icono, size: 13, color: color),
+          child: Icon(icono, size: 11, color: color),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         Expanded(
           child: Text(label,
-              style: GoogleFonts.dmSans(
-                  fontSize: 13, color: _textSec, fontWeight: FontWeight.w500)),
+              style: GoogleFonts.inter(
+                  fontSize: 12, color: _cTextSec, fontWeight: FontWeight.w500)),
         ),
-        Text(_f(valor),
-            style: GoogleFonts.dmSans(
+        Text('\$${_fmt.format(valor)}',
+            style: GoogleFonts.inter(
                 fontSize: 13, color: color, fontWeight: FontWeight.w700)),
       ]),
     );
   }
 }
 
-class _DetalleRow extends StatelessWidget {
-  final String label, sub, valor;
-  final Color  color;
-  const _DetalleRow(this.label, this.sub, this.valor, this.color);
-
-  static const _textSec = Color(0xFF94A3B8);
-  static const _textMuted = Color(0xFF475569);
+class _GastoRow extends StatelessWidget {
+  final String categoria, metodoPago;
+  final double monto;
+  const _GastoRow(this.categoria, this.metodoPago, this.monto);
+  static final _fmt = NumberFormat('#,##0', 'en_US');
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(children: [
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label,
-              style: GoogleFonts.dmSans(
-                  fontSize: 13, color: _textSec, fontWeight: FontWeight.w500)),
-          if (sub.isNotEmpty)
-            Text(sub,
-                style: GoogleFonts.dmSans(
-                    fontSize: 11, color: _textMuted)),
+          Text(categoria,
+              style: GoogleFonts.inter(
+                  fontSize: 12, color: _cTextSec, fontWeight: FontWeight.w500)),
+          if (metodoPago.isNotEmpty)
+            Text(metodoPago,
+                style: GoogleFonts.inter(fontSize: 10, color: _cTextMuted)),
         ])),
-        Text(valor,
-            style: GoogleFonts.dmSans(
-                fontSize: 13, color: color, fontWeight: FontWeight.w700)),
+        Text('-\$${_fmt.format(monto)}',
+            style: GoogleFonts.inter(
+                fontSize: 13, color: _cRed, fontWeight: FontWeight.w700)),
+      ]),
+    );
+  }
+}
+
+class _MontoRow extends StatelessWidget {
+  final String label;
+  final double monto;
+  final bool   isNeg;
+  const _MontoRow(this.label, this.monto, {required this.isNeg});
+  static final _fmt = NumberFormat('#,##0', 'en_US');
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isNeg ? _cRed : _cGreen;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: GoogleFonts.inter(
+                  fontSize: 12, color: _cTextSec, fontWeight: FontWeight.w500)),
+          Text('${isNeg ? '-' : '+'}\$${_fmt.format(monto)}',
+              style: GoogleFonts.inter(
+                  fontSize: 13, color: color, fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+class _DevRow extends StatelessWidget {
+  final IconData icono;
+  final Color    color;
+  final String   label, valor, sub;
+  const _DevRow({
+    required this.icono, required this.color,
+    required this.label, required this.valor, required this.sub,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icono, size: 10, color: color),
+            const SizedBox(width: 3),
+            Text(label,
+                style: GoogleFonts.inter(
+                    fontSize: 10, fontWeight: FontWeight.w700, color: color)),
+          ]),
+        ),
+        const Spacer(),
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text(valor,
+              style: GoogleFonts.inter(
+                  fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+          Text(sub,
+              style: GoogleFonts.inter(
+                  fontSize: 10, color: _cTextMuted, fontStyle: FontStyle.italic)),
+        ]),
       ]),
     );
   }
@@ -1148,10 +1149,10 @@ class _TotalRow extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label,
-              style: GoogleFonts.dmSans(
-                  fontSize: 13, color: color, fontWeight: FontWeight.w800)),
+              style: GoogleFonts.inter(
+                  fontSize: 12, color: color, fontWeight: FontWeight.w800)),
           Text(valor,
-              style: GoogleFonts.dmSans(
+              style: GoogleFonts.inter(
                   fontSize: 14, color: color, fontWeight: FontWeight.w800)),
         ],
       ),
@@ -1159,102 +1160,48 @@ class _TotalRow extends StatelessWidget {
   }
 }
 
-class _SummaryDivider extends StatelessWidget {
-  const _SummaryDivider();
+class _CardDiv extends StatelessWidget {
+  const _CardDiv();
   @override
   Widget build(BuildContext context) => const Padding(
     padding: EdgeInsets.symmetric(vertical: 8),
-    child: Divider(height: 1, color: Color(0xFF1E2D45)),
+    child: Divider(height: 1, color: _cBorder),
   );
 }
 
-class _Badge extends StatelessWidget {
+class _Chip extends StatelessWidget {
   final String text;
-  final Color  color;
-  const _Badge(this.text, this.color);
+  final Color  color, bg;
+  const _Chip(this.text, this.color, this.bg);
+
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
     decoration: BoxDecoration(
-      color: color.withOpacity(0.1),
+      color: bg,
       borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: color.withOpacity(0.25)),
+      border: Border.all(color: color.withValues(alpha: 0.35)),
     ),
     child: Text(text,
-        style: GoogleFonts.dmSans(
-            fontSize: 11, color: color, fontWeight: FontWeight.w700)),
+        style: GoogleFonts.inter(
+            fontSize: 10, color: color, fontWeight: FontWeight.w700)),
   );
 }
 
-class _BadgeRow extends StatelessWidget {
-  final IconData icono;
-  final Color    color;
-  final String   label, valor, sub;
-  const _BadgeRow({
-    required this.icono, required this.color,
-    required this.label, required this.valor, required this.sub,
-  });
-  static const _textMuted = Color(0xFF475569);
-  @override
-  Widget build(BuildContext context) {
-    return Row(children: [
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icono, size: 12, color: color),
-          const SizedBox(width: 4),
-          Text(label,
-              style: GoogleFonts.dmSans(
-                  fontSize: 11, fontWeight: FontWeight.w700, color: color)),
-        ]),
-      ),
-      const Spacer(),
-      Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-        Text(valor,
-            style: GoogleFonts.dmSans(
-                fontSize: 12, fontWeight: FontWeight.w700, color: color)),
-        Text(sub,
-            style: GoogleFonts.dmSans(
-                fontSize: 10, color: _textMuted,
-                fontStyle: FontStyle.italic)),
-      ]),
-    ]);
-  }
-}
-
-class _EmptyState extends StatelessWidget {
+class _EmptyHint extends StatelessWidget {
   final String msg;
-  const _EmptyState(this.msg);
-  static const _textMuted = Color(0xFF475569);
+  const _EmptyHint(this.msg);
+
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 6),
-    child: Text(msg,
-        style: GoogleFonts.dmSans(
-            fontSize: 12, color: _textMuted,
-            fontStyle: FontStyle.italic)),
-  );
-}
-
-class _InfoTip extends StatelessWidget {
-  final String msg;
-  const _InfoTip(this.msg);
-  static const _textMuted = Color(0xFF475569);
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 6, left: 2),
+    padding: const EdgeInsets.symmetric(vertical: 4),
     child: Row(children: [
-      const Icon(Icons.info_outline_rounded,
-          size: 12, color: _textMuted),
-      const SizedBox(width: 5),
+      const Icon(Icons.info_outline_rounded, size: 12, color: _cTextMuted),
+      const SizedBox(width: 6),
       Expanded(
         child: Text(msg,
-            style: GoogleFonts.dmSans(
-                fontSize: 11, color: _textMuted, fontWeight: FontWeight.w500)),
+            style: GoogleFonts.inter(
+                fontSize: 11, color: _cTextMuted, fontStyle: FontStyle.italic)),
       ),
     ]),
   );
@@ -1265,103 +1212,110 @@ class _CajaEsperadaCard extends StatelessWidget {
   final String Function(double) f;
   const _CajaEsperadaCard({required this.r, required this.f});
 
-  static const _green  = Color(0xFF10B981);
-  static const _red    = Color(0xFFEF4444);
-  static const _sky    = Color(0xFF0EA5E9);
-  static const _yellow = Color(0xFFF59E0B);
-  static const _border = Color(0xFF1E2D45);
-  static const _textSec = Color(0xFF94A3B8);
-  static const _textMuted = Color(0xFF475569);
-
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF063A26), Color(0xFF0A4D33)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _green.withOpacity(0.3), width: 1.5),
-        boxShadow: [BoxShadow(
-          color: _green.withOpacity(0.12),
-          blurRadius: 20, offset: const Offset(0, 6),
-        )],
+        color: _cGreen,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1.5),
       ),
       child: Column(children: [
         Row(children: [
           Container(
-            width: 32, height: 32,
+            width: 30, height: 30,
             decoration: BoxDecoration(
-              color: _green.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: _green.withOpacity(0.3)),
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
             ),
-            child: const Icon(Icons.calculate_rounded, color: _green, size: 16),
+            child: const Icon(Icons.calculate_rounded, color: Colors.white, size: 15),
           ),
           const SizedBox(width: 10),
-          Text('Cálculo de caja física',
-              style: GoogleFonts.dmSans(
-                  fontWeight: FontWeight.w700, fontSize: 13, color: _green)),
+          Text('Calculo de Caja Fisica',
+              style: GoogleFonts.inter(
+                  fontWeight: FontWeight.w700, fontSize: 13, color: Colors.white)),
+          const Spacer(),
+          Text('Solo efectivo',
+              style: GoogleFonts.inter(
+                  fontSize: 10, color: Colors.white54, fontStyle: FontStyle.italic)),
         ]),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
 
-        _LineaCalculo('Saldo inicial',       f(r.montoInicial),        _textSec,  '+'),
-        _LineaCalculo('Ventas efectivo',      f(r.ventas.efectivo),     _green,    '+'),
-        if (r.ventas.mixto > 0)
-          _LineaCalculo('Ventas mixto',       f(r.ventas.mixto),        _green,    '+'),
+        _CalcLine('Saldo inicial',    f(r.montoInicial),          Colors.white70,  '+'),
+        _CalcLine('Ventas efectivo',  f(r.ventas.efectivo),       Colors.white,    '+'),
         if (r.abonos.efectivo > 0)
-          _LineaCalculo('Abonos efectivo',    f(r.abonos.efectivo),     _sky,      '+'),
-        _LineaCalculo('Gastos efectivo',      f(r.gastos.efectivo),     _red,      '−'),
+          _CalcLine('Abonos efectivo', f(r.abonos.efectivo),     const Color(0xFF7DD3FC), '+'),
+        _CalcLine('Gastos efectivo',  f(r.gastos.efectivo),      const Color(0xFFFFB4AB), '-'),
         if (r.devoluciones.netoEfectivo > 0)
-          _LineaCalculo('Devoluciones ef.',   f(r.devoluciones.netoEfectivo), _yellow, '−'),
+          _CalcLine('Devoluciones ef.', f(r.devoluciones.netoEfectivo), const Color(0xFFFFB4AB), '-'),
 
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Container(
-              height: 1,
-              color: _green.withOpacity(0.2)),
+          child: Container(height: 1, color: Colors.white.withValues(alpha: 0.25)),
         ),
 
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text('ESPERADO EN CAJA',
-                style: GoogleFonts.dmSans(
-                    color: _green, fontWeight: FontWeight.w800, fontSize: 12)),
+                style: GoogleFonts.inter(
+                    color: Colors.white70, fontWeight: FontWeight.w800,
+                    fontSize: 11, letterSpacing: 0.5)),
             Text(f(r.montoEsperadoCaja),
-                style: GoogleFonts.dmSans(
+                style: GoogleFonts.inter(
                     color: Colors.white, fontWeight: FontWeight.w800,
-                    fontSize: 22, letterSpacing: -0.5)),
+                    fontSize: 24, letterSpacing: -0.5)),
           ],
+        ),
+        const SizedBox(height: 10),
+
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(children: [
+            const Icon(Icons.info_outline_rounded, size: 11, color: Colors.white54),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Tarjeta ${f(r.ventas.tarjeta)} y transferencia '
+                '${f(r.ventas.transferencia)} se depositan al banco.',
+                style: GoogleFonts.inter(fontSize: 10, color: Colors.white60),
+              ),
+            ),
+          ]),
         ),
       ]),
     );
   }
 }
 
-class _LineaCalculo extends StatelessWidget {
+class _CalcLine extends StatelessWidget {
   final String label, valor, signo;
   final Color  color;
-  const _LineaCalculo(this.label, this.valor, this.color, this.signo);
+  const _CalcLine(this.label, this.valor, this.color, this.signo);
+
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3.5),
+      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(children: [
         Text(signo,
-            style: TextStyle(color: color.withOpacity(0.6),
+            style: TextStyle(
+                color: color.withValues(alpha: 0.7),
                 fontSize: 13, fontWeight: FontWeight.w700)),
         const SizedBox(width: 8),
         Expanded(
           child: Text(label,
-              style: GoogleFonts.dmSans(
-                  fontSize: 12, color: color.withOpacity(0.75))),
+              style: GoogleFonts.inter(fontSize: 12, color: Colors.white70)),
         ),
         Text(valor,
-            style: GoogleFonts.dmSans(
+            style: GoogleFonts.inter(
                 fontSize: 13, color: color, fontWeight: FontWeight.w600)),
       ]),
     );
@@ -1372,34 +1326,36 @@ class _EsperadoChip extends StatelessWidget {
   final String label, valor;
   final bool   isNeg;
   const _EsperadoChip(this.label, this.valor, {this.isNeg = false});
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.07),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
+        color: Colors.white.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       ),
       child: Column(children: [
         Text(label,
             style: TextStyle(
-                color: isNeg ? Colors.red.shade300 : Colors.white60,
-                fontSize: 10, fontWeight: FontWeight.w600)),
+                color: isNeg ? Colors.red.shade300 : Colors.white54,
+                fontSize: 9, fontWeight: FontWeight.w600)),
         Text(valor,
             style: TextStyle(
                 color: isNeg ? Colors.red.shade300 : Colors.white,
-                fontSize: 13, fontWeight: FontWeight.w800)),
+                fontSize: 12, fontWeight: FontWeight.w800)),
       ]),
     );
   }
 }
 
-class _ResultRow extends StatelessWidget {
+class _ResRow extends StatelessWidget {
   final String label, valor;
   final Color  color;
   final bool   bold;
-  const _ResultRow(this.label, this.valor, this.color, {this.bold = false});
+  const _ResRow(this.label, this.valor, this.color, {this.bold = false});
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -1408,13 +1364,14 @@ class _ResultRow extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label,
-              style: GoogleFonts.dmSans(
-                  color: color.withOpacity(bold ? 1 : 0.8),
+              style: GoogleFonts.inter(
+                  color: color.withValues(alpha: bold ? 1.0 : 0.8),
                   fontSize: bold ? 14 : 13,
                   fontWeight: bold ? FontWeight.w800 : FontWeight.w500)),
           Text(valor,
-              style: GoogleFonts.dmSans(
-                  color: color, fontSize: bold ? 18 : 13,
+              style: GoogleFonts.inter(
+                  color: color,
+                  fontSize: bold ? 18 : 13,
                   fontWeight: FontWeight.w800)),
         ],
       ),
@@ -1422,76 +1379,57 @@ class _ResultRow extends StatelessWidget {
   }
 }
 
-class _GhostButton extends StatelessWidget {
+class _GhostBtn extends StatelessWidget {
   final String   label;
   final IconData icon;
   final VoidCallback? onPressed;
-  const _GhostButton({required this.label, required this.icon, this.onPressed});
-  static const _textMuted = Color(0xFF475569);
+  const _GhostBtn({required this.label, required this.icon, this.onPressed});
+
   @override
   Widget build(BuildContext context) => TextButton.icon(
-    icon: Icon(icon, size: 15),
-    label: Text(label, style: GoogleFonts.dmSans(fontWeight: FontWeight.w600, fontSize: 13)),
+    icon: Icon(icon, size: 14),
+    label: Text(label,
+        style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13)),
     onPressed: onPressed,
     style: TextButton.styleFrom(
-      foregroundColor: _textMuted,
+      foregroundColor: _cTextMuted,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
     ),
   );
 }
 
-class _ActionButton extends StatelessWidget {
+class _ActionBtn extends StatelessWidget {
   final int  paso;
   final bool procesando;
   final VoidCallback? onPressed;
-  const _ActionButton({
+  const _ActionBtn({
     required this.paso, required this.procesando, this.onPressed,
   });
 
-  static const _accent = Color(0xFF3B82F6);
-  static const _red    = Color(0xFFEF4444);
-
   @override
   Widget build(BuildContext context) {
-    final esFinal   = paso == 3;
-    final startColor = esFinal ? _red : _accent;
-    final endColor   = esFinal
-        ? const Color(0xFFDC2626)
-        : const Color(0xFF2563EB);
-    final label = paso == 1
-        ? 'Continuar'
+    final esFinal = paso == 3;
+    final bgColor = esFinal ? _cRed : _cGreen;
+    final label   = paso == 1 ? 'Continuar'
         : paso == 2 ? 'Ver resultado'
-        : procesando ? 'Cerrando…' : 'Confirmar cierre';
-    final icon = procesando && esFinal
+        : procesando ? 'Cerrando...' : 'Confirmar cierre';
+    final icon = (procesando && esFinal)
         ? const SizedBox(
-            width: 15, height: 15,
+            width: 14, height: 14,
             child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-        : Icon(
-            esFinal ? Icons.lock_rounded : Icons.arrow_forward_rounded,
-            size: 16);
+        : Icon(esFinal ? Icons.lock_rounded : Icons.arrow_forward_rounded, size: 15);
 
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [startColor, endColor]),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(
-          color: startColor.withOpacity(0.35),
-          blurRadius: 12, offset: const Offset(0, 4),
-        )],
-      ),
-      child: ElevatedButton.icon(
-        icon: icon,
-        label: Text(label,
-            style: GoogleFonts.dmSans(
-                fontWeight: FontWeight.w700, fontSize: 13)),
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          foregroundColor: Colors.white,
-          shadowColor:     Colors.transparent,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
+    return ElevatedButton.icon(
+      icon: icon,
+      label: Text(label,
+          style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13)),
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: bgColor,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 0,
       ),
     );
   }

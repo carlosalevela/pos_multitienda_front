@@ -114,6 +114,30 @@ class CajaService {
     }
   }
 
+  // ── Dashboard Caja Admin ───────────────────────────────
+
+  Future<Map<String, dynamic>> getDashboardCaja({
+    int?   tiendaId,
+    String periodo  = 'mensual',
+    int?   empresaId,
+  }) async {
+    try {
+      final r = await ApiClient.instance.get(
+        '/caja/dashboard/',
+        queryParameters: {
+          if (tiendaId  != null) 'tienda_id': tiendaId.toString(),
+          if (empresaId != null) 'empresa':   empresaId.toString(),
+          'periodo': periodo,
+        },
+      );
+      return {'success': true, 'data': r.data};
+    } on DioException catch (e) {
+      return {'success': false, 'error': _extractError(e, 'Error al cargar el dashboard de caja')};
+    } catch (e) {
+      return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
+
   // ── Historial de sesiones ──────────────────────────────
 
   Future<List<Map<String, dynamic>>> getHistorialSesiones({

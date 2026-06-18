@@ -32,6 +32,7 @@ class SesionHistorial {
   final double diferencia;
   // Stats
   final int    numTransacciones;
+  final int    numCambiosProducto;
 
   SesionHistorial({
     required this.id,
@@ -57,6 +58,7 @@ class SesionHistorial {
     //
     required this.devolucionesEfectivo,
     required this.numDevoluciones,
+    required this.numCambiosProducto,
     required this.montoFinalSistema,
     required this.montoFinalReal,
     required this.diferencia,
@@ -86,7 +88,8 @@ class SesionHistorial {
     numAbonos:             (j['num_abonos']        as num?)?.toInt() ?? 0,
     //
     devolucionesEfectivo:  double.tryParse(j['devoluciones_efectivo']?.toString()      ?? '0') ?? 0.0,
-    numDevoluciones:       (j['num_devoluciones']  as num?)?.toInt() ?? 0,
+    numDevoluciones:       (j['num_devoluciones']       as num?)?.toInt() ?? 0,
+    numCambiosProducto:    (j['num_cambios_producto']   as num?)?.toInt() ?? 0,
     montoFinalSistema:     double.tryParse(j['monto_esperado']?.toString()             ?? '0') ?? 0.0,
     montoFinalReal:        double.tryParse(j['monto_final_real']?.toString()           ?? '0') ?? 0.0,
     diferencia:            double.tryParse(j['diferencia']?.toString()                 ?? '0') ?? 0.0,
