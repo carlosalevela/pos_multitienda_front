@@ -23,6 +23,7 @@ import '../compras/compras_screen.dart';
 import '../empresas/empresas_screen.dart';
 import '../devoluciones/devoluciones_screen.dart';
 import '../caja/caja_dashboard_admin.dart';
+import '../cajero_inicio/cajero_dashboard.dart';
 
 class _C {
   static const bg = Color(0xFFF5F7F8);
@@ -159,6 +160,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Widget _buildScreenByKey(String screen, String rol, String userName) {
     switch (screen) {
       case 'dashboard':
+        if (rol == 'cajero') return CajeroDashboard(onNavigate: _navigate);
         return _DashboardBody(userName: userName.split(' ').first, onNavigate: _navigate);
       case 'pos': return const PosScreen();
       case 'inventory': return const InventarioScreen();

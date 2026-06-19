@@ -330,6 +330,49 @@ class InventarioService {
     }
   }
 
+  // ── Averías ────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> getAverias({int? tiendaId}) async {
+    try {
+      final r = await ApiClient.instance.get(
+        '/productos/averias/',
+        queryParameters: {
+          if (tiendaId != null) 'tienda_id': tiendaId.toString(),
+        },
+      );
+      final List data = r.data is List ? r.data : r.data['results'] ?? [];
+      return {'success': true, 'data': data.cast<Map<String, dynamic>>()};
+    } on DioException catch (e) {
+      debugPrint('❌ getAverias error: ${e.response?.data}');
+      return {
+        'success': false,
+        'data': <Map<String, dynamic>>[],
+        'error': _extractError(e, 'Error al cargar averías'),
+      };
+    } catch (e) {
+      return {'success': false, 'data': <Map<String, dynamic>>[], 'error': 'Error inesperado'};
+    }
+  }
+
+  Future<Map<String, dynamic>> recuperarAveria({
+    required int    productoId,
+    required int    tiendaId,
+    required String accion,     // "recuperar" | "descartar"
+    required double cantidad,
+  }) async {
+    try {
+      final r = await ApiClient.instance.post(
+        '/productos/$productoId/inventario/$tiendaId/recuperar-averia/',
+        data: {'accion': accion, 'cantidad': cantidad},
+      );
+      return {'success': true, 'data': r.data};
+    } on DioException catch (e) {
+      return {'success': false, 'error': _extractError(e, 'Error al procesar avería')};
+    } catch (e) {
+      return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
+
   // ── Importar productos desde archivo Excel ─────────────
 
   Future<Map<String, dynamic>> importarProductosExcel({

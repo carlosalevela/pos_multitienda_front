@@ -12,6 +12,7 @@ import '../../services/empleado_service.dart';
 import '../../services/inventario_service.dart';
 import 'widgets/producto_form_dialog.dart';
 import 'widgets/importar_excel_dialog.dart';
+import 'widgets/averias_dialog.dart';
 
 class InventarioScreen extends StatefulWidget {
   const InventarioScreen({super.key});
@@ -101,7 +102,7 @@ class _InventarioScreenState extends State<InventarioScreen>
           activo:   _activoFiltro,
         );
       }
-      _cargarInsights();
+      if (auth.rol != 'cajero') _cargarInsights();
     });
   }
 
@@ -214,6 +215,16 @@ class _InventarioScreenState extends State<InventarioScreen>
       builder: (_) => ImportarExcelDialog(
         tiendaId:     _tiendaActiva ?? 0,
         empresaId:    _empresaActiva,
+        nombreTienda: _nombreTiendaActual(),
+      ),
+    );
+  }
+
+  void _abrirAverias() {
+    showDialog(
+      context: context,
+      builder: (_) => AveriasDialog(
+        tiendaId:     _tiendaActiva,
         nombreTienda: _nombreTiendaActual(),
       ),
     );
@@ -353,8 +364,10 @@ class _InventarioScreenState extends State<InventarioScreen>
   Widget build(BuildContext context) {
     final inv      = context.watch<InventarioProvider>();
     final auth     = context.watch<AuthProvider>();
-    final esCajero = auth.rol == 'cajero';
-    final esAdmin  = auth.rol == 'admin' || auth.rol == 'superadmin';
+    final esCajero    = auth.rol == 'cajero';
+    final esAdmin     = auth.rol == 'admin' || auth.rol == 'superadmin';
+    final esSupervisor = auth.rol == 'supervisor';
+    final puedeGestionar = esAdmin || esSupervisor;
 
     return FadeTransition(
       opacity: _fadeAnim,
@@ -396,7 +409,7 @@ class _InventarioScreenState extends State<InventarioScreen>
                                   inv.productos, esCajero, esAdmin, inv),
                     ),
                     // ── Panel insights ───────────────────
-                    if (esAdmin) ...[
+                    if (puedeGestionar) ...[
                       const SizedBox(width: 16),
                       SizedBox(
                         width: 280,
@@ -460,6 +473,12 @@ class _InventarioScreenState extends State<InventarioScreen>
             icon:  Icons.table_chart_rounded,
             label: 'Importar Excel',
             onTap: () => _abrirImportarExcel(inv),
+          ),
+          const SizedBox(width: 10),
+          _btnSecundario(
+            icon:  Icons.warning_amber_rounded,
+            label: 'Averías',
+            onTap: () => _abrirAverias(),
           ),
           const SizedBox(width: 10),
           _btnPrimario(
