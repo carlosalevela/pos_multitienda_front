@@ -127,6 +127,11 @@ class CajaAbiertaCard extends StatelessWidget {
 
         const SizedBox(height: 28),
 
+        // ── Gastos del turno ─────────────────────────────────
+        _GastosSection(caja: caja, sesionId: sesion.id),
+
+        const SizedBox(height: 28),
+
         // ── Historial de cierres ─────────────────────────────
         _HistorialSection(caja: caja),
       ]),
@@ -516,6 +521,489 @@ class _HistorialTable extends StatelessWidget {
           fontSize: 11, fontWeight: FontWeight.w600,
           color: _C.textFaint, letterSpacing: 0.5));
 }
+
+// ════════════════════════════════════════════════════════════════
+// Gastos del Turno
+// ════════════════════════════════════════════════════════════════
+
+class _GastosSection extends StatefulWidget {
+  final CajaProvider caja;
+  final int          sesionId;
+  const _GastosSection({required this.caja, required this.sesionId});
+  @override
+  State<_GastosSection> createState() => _GastosSectionState();
+}
+
+class _GastosSectionState extends State<_GastosSection> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.caja.cargarGastosSesion(widget.sesionId);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final gastos   = widget.caja.gastosSesion;
+    final total    = widget.caja.gastosTotalSesion;
+    final cargando = widget.caja.cargandoGastos;
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Gastos del Turno',
+              style: GoogleFonts.inter(
+                  fontSize: 20, fontWeight: FontWeight.w600, color: _C.textPrimary)),
+          Text('Egresos registrados en este turno',
+              style: GoogleFonts.inter(fontSize: 13, color: _C.textFaint)),
+        ]),
+        const Spacer(),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.add_rounded, size: 16),
+          label: Text('Registrar Gasto',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13)),
+          onPressed: () => showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (_) => _RegistrarGastoDialog(
+              caja:     widget.caja,
+              sesionId: widget.sesionId,
+            ),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _C.green,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          ),
+        ),
+      ]),
+      const SizedBox(height: 12),
+      const Divider(color: _C.divider),
+      const SizedBox(height: 4),
+
+      if (cargando)
+        const Center(
+          child: Padding(
+            padding: EdgeInsets.all(40),
+            child: CircularProgressIndicator(color: _C.green, strokeWidth: 2),
+          ),
+        )
+      else if (gastos.isEmpty)
+        Container(
+          padding: const EdgeInsets.all(40),
+          alignment: Alignment.center,
+          child: Column(children: [
+            const Icon(Icons.receipt_long_rounded, size: 40, color: _C.border),
+            const SizedBox(height: 12),
+            Text('Sin gastos registrados aún',
+                style: GoogleFonts.inter(fontSize: 14, color: _C.textFaint)),
+          ]),
+        )
+      else ...[
+        _GastosTable(gastos: gastos),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: _C.errorContainer,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(children: [
+            const Icon(Icons.arrow_downward_rounded, size: 16, color: _C.error),
+            const SizedBox(width: 8),
+            Text('Total Gastos del Turno',
+                style: GoogleFonts.inter(
+                    fontSize: 14, fontWeight: FontWeight.w600, color: _C.error)),
+            const Spacer(),
+            Text(_cur(total),
+                style: GoogleFonts.inter(
+                    fontSize: 16, fontWeight: FontWeight.w700, color: _C.error)),
+          ]),
+        ),
+      ],
+    ]);
+  }
+}
+
+
+// ── Tabla de gastos ────────────────────────────────────────────
+
+class _GastosTable extends StatelessWidget {
+  final List<Map<String, dynamic>> gastos;
+  const _GastosTable({required this.gastos});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(children: [
+          Expanded(flex: 2, child: _th('HORA')),
+          Expanded(flex: 3, child: _th('CATEGORÍA')),
+          Expanded(flex: 4, child: _th('DESCRIPCIÓN')),
+          Expanded(flex: 2, child: _th('MÉTODO')),
+          Expanded(flex: 2, child: _th('MONTO', right: true)),
+        ]),
+      ),
+      ...gastos.map((g) => _GastoRow(gasto: g)),
+    ]);
+  }
+
+  Widget _th(String t, {bool right = false}) => Text(t,
+      textAlign: right ? TextAlign.right : TextAlign.left,
+      style: GoogleFonts.inter(
+          fontSize: 11, fontWeight: FontWeight.w600,
+          color: _C.textFaint, letterSpacing: 0.5));
+}
+
+class _GastoRow extends StatelessWidget {
+  final Map<String, dynamic> gasto;
+  const _GastoRow({required this.gasto});
+
+  @override
+  Widget build(BuildContext context) {
+    String hora = '—';
+    try {
+      final dt  = DateTime.parse(gasto['created_at']?.toString() ?? '');
+      final loc = dt.toLocal();
+      hora = '${loc.hour.toString().padLeft(2, '0')}:${loc.minute.toString().padLeft(2, '0')}';
+    } catch (_) {}
+
+    final monto      = double.tryParse(gasto['monto']?.toString() ?? '0') ?? 0;
+    final categoria  = gasto['categoria']?.toString() ?? '';
+    final descripcion = gasto['descripcion']?.toString() ?? '';
+    final metodo     = gasto['metodo_pago']?.toString() ?? '';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: _C.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _C.divider),
+      ),
+      child: Row(children: [
+        Expanded(flex: 2, child: Text(hora,
+            style: GoogleFonts.inter(fontSize: 13, color: _C.textFaint))),
+        Expanded(flex: 3, child: _CategoriaBadge(categoria: categoria)),
+        Expanded(flex: 4, child: Text(
+          descripcion.isEmpty ? '—' : descripcion,
+          style: GoogleFonts.inter(fontSize: 13, color: _C.textSecond),
+          overflow: TextOverflow.ellipsis,
+        )),
+        Expanded(flex: 2, child: _MetodoBadge(metodo: metodo)),
+        Expanded(flex: 2, child: Text(
+          '-${_cur(monto)}',
+          textAlign: TextAlign.right,
+          style: GoogleFonts.inter(
+              fontSize: 13, fontWeight: FontWeight.w700, color: _C.error),
+        )),
+      ]),
+    );
+  }
+}
+
+class _CategoriaBadge extends StatelessWidget {
+  final String categoria;
+  const _CategoriaBadge({required this.categoria});
+
+  String _cap(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 110),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: _C.surfaceHigh,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        categoria.isEmpty ? '—' : _cap(categoria),
+        style: GoogleFonts.inter(
+            fontSize: 11, fontWeight: FontWeight.w600, color: _C.textSecond),
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+}
+
+class _MetodoBadge extends StatelessWidget {
+  final String metodo;
+  const _MetodoBadge({required this.metodo});
+
+  Color _bg() {
+    switch (metodo) {
+      case 'efectivo':      return const Color(0xFFD5E3FD);
+      case 'transferencia': return _C.greenContainer;
+      default:              return _C.surfaceHigh;
+    }
+  }
+
+  Color _fg() {
+    switch (metodo) {
+      case 'efectivo':      return const Color(0xFF0D1C2F);
+      case 'transferencia': return _C.greenOn;
+      default:              return _C.textSecond;
+    }
+  }
+
+  String _label() {
+    switch (metodo) {
+      case 'efectivo':      return 'Efectivo';
+      case 'transferencia': return 'Transf.';
+      case 'tarjeta':       return 'Tarjeta';
+      default:              return metodo;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 80),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: _bg(), borderRadius: BorderRadius.circular(12)),
+      child: Text(_label(),
+          style: GoogleFonts.inter(
+              fontSize: 11, fontWeight: FontWeight.w600, color: _fg()),
+          overflow: TextOverflow.ellipsis),
+    );
+  }
+}
+
+
+// ════════════════════════════════════════════════════════════════
+// Diálogo Registrar Gasto
+// ════════════════════════════════════════════════════════════════
+
+class _RegistrarGastoDialog extends StatefulWidget {
+  final CajaProvider caja;
+  final int          sesionId;
+  const _RegistrarGastoDialog({required this.caja, required this.sesionId});
+  @override
+  State<_RegistrarGastoDialog> createState() => _RegistrarGastoDialogState();
+}
+
+class _RegistrarGastoDialogState extends State<_RegistrarGastoDialog> {
+  final _formKey   = GlobalKey<FormState>();
+  final _montoCtrl = TextEditingController();
+  final _descCtrl  = TextEditingController();
+  bool _guardando  = false;
+
+  String _categoria  = 'Insumos';
+  String _metodoPago = 'efectivo';
+
+  static const _categorias = [
+    'Insumos', 'Transporte', 'Mantenimiento', 'Publicidad', 'Otros',
+  ];
+  static const _metodos = [
+    ('efectivo',      'Efectivo'),
+    ('transferencia', 'Transferencia'),
+    ('tarjeta',       'Tarjeta'),
+  ];
+
+  @override
+  void dispose() {
+    _montoCtrl.dispose();
+    _descCtrl.dispose();
+    super.dispose();
+  }
+
+  InputDecoration _deco(String hint, {String? prefix}) => InputDecoration(
+    hintText: hint,
+    prefixText: prefix,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: _C.border)),
+    enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: _C.border)),
+    focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: _C.green, width: 2)),
+    errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: _C.error)),
+    focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: _C.error, width: 2)),
+  );
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _guardando = true);
+
+    final monto = double.tryParse(
+        _montoCtrl.text.trim().replaceAll(',', '')) ?? 0;
+
+    final ok = await widget.caja.registrarGasto(
+      sesionId:    widget.sesionId,
+      categoria:   _categoria.toLowerCase(),
+      descripcion: _descCtrl.text.trim(),
+      monto:       monto,
+      metodoPago:  _metodoPago,
+    );
+
+    if (mounted) {
+      setState(() => _guardando = false);
+      if (ok) Navigator.pop(context);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: SizedBox(
+        width: 420,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+
+                // ── Encabezado ─────────────────────────
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: _C.greenContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.receipt_long_rounded,
+                        size: 18, color: _C.green),
+                  ),
+                  const SizedBox(width: 12),
+                  Text('Registrar Gasto',
+                      style: GoogleFonts.inter(
+                          fontSize: 17, fontWeight: FontWeight.w700,
+                          color: _C.textPrimary)),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded,
+                        size: 18, color: _C.textFaint),
+                    onPressed: _guardando ? null : () => Navigator.pop(context),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ]),
+                const SizedBox(height: 16),
+                const Divider(height: 1, color: _C.divider),
+                const SizedBox(height: 20),
+
+                // ── Categoría ──────────────────────────
+                Text('Categoría',
+                    style: GoogleFonts.inter(
+                        fontSize: 12, fontWeight: FontWeight.w600,
+                        color: _C.textSecond)),
+                const SizedBox(height: 6),
+                DropdownButtonFormField<String>(
+                  initialValue: _categoria,
+                  decoration: _deco(''),
+                  items: _categorias
+                      .map((c) => DropdownMenuItem(value: c, child: Text(c,
+                          style: GoogleFonts.inter(fontSize: 13))))
+                      .toList(),
+                  onChanged: (v) { if (v != null) _categoria = v; },
+                ),
+                const SizedBox(height: 14),
+
+                // ── Monto ──────────────────────────────
+                Text('Monto',
+                    style: GoogleFonts.inter(
+                        fontSize: 12, fontWeight: FontWeight.w600,
+                        color: _C.textSecond)),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: _montoCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: _deco('0', prefix: '\$ '),
+                  style: GoogleFonts.inter(fontSize: 14),
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'Ingresa el monto';
+                    final n = double.tryParse(v.trim().replaceAll(',', ''));
+                    if (n == null || n <= 0) return 'Monto inválido';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 14),
+
+                // ── Descripción ────────────────────────
+                Text('Descripción (opcional)',
+                    style: GoogleFonts.inter(
+                        fontSize: 12, fontWeight: FontWeight.w600,
+                        color: _C.textSecond)),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: _descCtrl,
+                  decoration: _deco('Ej: Pago de gasolina...'),
+                  style: GoogleFonts.inter(fontSize: 14),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 14),
+
+                // ── Método de pago ─────────────────────
+                Text('Método de pago',
+                    style: GoogleFonts.inter(
+                        fontSize: 12, fontWeight: FontWeight.w600,
+                        color: _C.textSecond)),
+                const SizedBox(height: 6),
+                DropdownButtonFormField<String>(
+                  initialValue: _metodoPago,
+                  decoration: _deco(''),
+                  items: _metodos
+                      .map((m) => DropdownMenuItem(
+                          value: m.$1,
+                          child: Text(m.$2,
+                              style: GoogleFonts.inter(fontSize: 13))))
+                      .toList(),
+                  onChanged: (v) { if (v != null) _metodoPago = v; },
+                ),
+                const SizedBox(height: 24),
+
+                // ── Botón ──────────────────────────────
+                SizedBox(
+                  width: double.infinity, height: 48,
+                  child: ElevatedButton(
+                    onPressed: _guardando ? null : _submit,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _C.green,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: _C.green.withValues(alpha: 0.5),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: _guardando
+                        ? const SizedBox(
+                            width: 20, height: 20,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2))
+                        : Text('Registrar Gasto',
+                            style: GoogleFonts.inter(
+                                fontWeight: FontWeight.w700, fontSize: 14)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+// ════════════════════════════════════════════════════════════════
+// Historial de Cierres (tabla)
+// ════════════════════════════════════════════════════════════════
 
 class _HistorialRow extends StatelessWidget {
   final SesionHistorial sesion;

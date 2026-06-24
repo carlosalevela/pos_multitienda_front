@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import '../models/contabilidad_models.dart';
 import '../services/contabilidad_service.dart';
+import '../utils/file_downloader.dart';
 
 class ContabilidadProvider extends ChangeNotifier {
   final ContabilidadService _service = ContabilidadService();
 
+  // ── Datos existentes ──────────────────────────────────
   ResumenDiario?         resumenDiario;
   ResumenMensual?        resumenMensual;
   Map<String, dynamic>?  resumenAnual;
@@ -15,15 +17,29 @@ class ContabilidadProvider extends ChangeNotifier {
   List<Map<String, dynamic>> abonosDia    = [];
   List<Map<String, dynamic>> separadosDia = [];
 
-  bool   _cargando   = false;
-  bool   _guardando  = false;
-  String _errorMsg   = '';
-  String _successMsg = '';
+  // ── Datos nuevos (P&L, Comparativo, PE, Flujo Caja) ──
+  EstadoResultados?        estadoResultados;
+  PuntoEquilibrio?         puntoEquilibrio;
+  List<TiendaComparativo>  comparativo          = [];
+  Map<String, dynamic>?    comparativoTotales;
+  List<VentaEmpleado>      vendedores           = [];
+  FlujoCajaResumen?        flujoCaja;
 
-  bool   get cargando   => _cargando;
-  bool   get guardando  => _guardando;
-  String get errorMsg   => _errorMsg;
-  String get successMsg => _successMsg;
+  bool   _cargando        = false;
+  bool   _guardando       = false;
+  bool   _cargandoPl      = false;
+  bool   _cargandoFlujo   = false;
+  bool   _exportando      = false;
+  String _errorMsg        = '';
+  String _successMsg      = '';
+
+  bool   get cargando      => _cargando;
+  bool   get guardando     => _guardando;
+  bool   get cargandoPl    => _cargandoPl;
+  bool   get cargandoFlujo => _cargandoFlujo;
+  bool   get exportando    => _exportando;
+  String get errorMsg      => _errorMsg;
+  String get successMsg    => _successMsg;
 
   void limpiarMensajes() {
     _errorMsg   = '';
@@ -180,7 +196,6 @@ class ContabilidadProvider extends ChangeNotifier {
   // ── Eliminar gasto ────────────────────────────────────
 
   Future<bool> eliminarGasto(int id, {int? tiendaId}) async {
-    // ✅ FIX: service retorna Map — leer ['success'], no tratar como bool
     final result = await _service.eliminarGasto(id);
 
     if (result['success'] == true) {
@@ -193,5 +208,102 @@ class ContabilidadProvider extends ChangeNotifier {
     _errorMsg = result['error'] ?? 'No se pudo eliminar el gasto';
     notifyListeners();
     return false;
+  }
+
+  // ── P&L: Estado de Resultados + PE + Comparativo + Empleados ─
+
+  Future<void> cargarPL({
+    required String fechaIni,
+    required String fechaFin,
+    int? tiendaId,
+  }) async {
+    _cargandoPl = true;
+    notifyListeners();
+
+    final results = await Future.wait([
+      _service.getEstadoResultados(fechaIni: fechaIni, fechaFin: fechaFin, tiendaId: tiendaId),
+      _service.getPuntoEquilibrio(fechaIni: fechaIni, fechaFin: fechaFin, tiendaId: tiendaId),
+      _service.getComparativoTiendas(fechaIni: fechaIni, fechaFin: fechaFin),
+      _service.getVentasPorEmpleado(fechaIni: fechaIni, fechaFin: fechaFin, tiendaId: tiendaId),
+    ]);
+
+    estadoResultados   = results[0] as EstadoResultados?;
+    puntoEquilibrio    = results[1] as PuntoEquilibrio?;
+
+    final compData     = results[2] as Map<String, dynamic>?;
+    comparativo        = compData != null
+        ? (compData['tiendas'] as List<dynamic>)
+            .map((e) => TiendaComparativo.fromJson(e as Map<String, dynamic>))
+            .toList()
+        : [];
+    comparativoTotales = compData?['totales'] as Map<String, dynamic>?;
+
+    final empData = results[3] as Map<String, dynamic>?;
+    vendedores    = empData != null
+        ? (empData['empleados'] as List<dynamic>)
+            .map((e) => VentaEmpleado.fromJson(e as Map<String, dynamic>))
+            .toList()
+        : [];
+
+    _cargandoPl = false;
+    notifyListeners();
+  }
+
+  // ── Flujo de Caja ─────────────────────────────────────
+
+  Future<void> cargarFlujoCaja({
+    required String fechaIni,
+    required String fechaFin,
+    int? tiendaId,
+  }) async {
+    _cargandoFlujo = true;
+    notifyListeners();
+
+    flujoCaja = await _service.getFlujoCaja(
+      fechaIni: fechaIni, fechaFin: fechaFin, tiendaId: tiendaId,
+    );
+
+    _cargandoFlujo = false;
+    notifyListeners();
+  }
+
+  // ── Exportar Excel ────────────────────────────────────
+
+  Future<String?> exportarExcel({
+    required String tipo,
+    required String fechaIni,
+    required String fechaFin,
+    int? tiendaId,
+  }) async {
+    _exportando = true;
+    _errorMsg   = '';
+    notifyListeners();
+
+    final bytes = await _service.exportarExcel(
+      tipo:     tipo,
+      fechaIni: fechaIni,
+      fechaFin: fechaFin,
+      tiendaId: tiendaId,
+    );
+
+    _exportando = false;
+
+    if (bytes == null) {
+      _errorMsg = 'No se pudo descargar el archivo';
+      notifyListeners();
+      return null;
+    }
+
+    try {
+      final nombre = '${tipo}_${fechaIni}_$fechaFin.xlsx';
+      final ruta   = await guardarArchivoExcel(bytes, nombre);
+      _successMsg  = 'Archivo guardado: $ruta';
+      notifyListeners();
+      return ruta;
+    } catch (e) {
+      _errorMsg = 'Error al guardar: $e';
+      notifyListeners();
+      return null;
+    }
   }
 }

@@ -138,6 +138,48 @@ class CajaService {
     }
   }
 
+  // ── Gastos de sesión ──────────────────────────────────
+
+  Future<Map<String, dynamic>> getGastosSesion(int sesionId) async {
+    try {
+      final r = await ApiClient.instance.get('/caja/$sesionId/gastos/');
+      return {'success': true, 'data': r.data};
+    } on DioException catch (e) {
+      debugPrint('❌ getGastosSesion error: ${e.response?.data}');
+      return {'success': false, 'error': _extractError(e, 'Error al cargar gastos')};
+    } catch (e) {
+      return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
+
+  Future<Map<String, dynamic>> registrarGasto({
+    required int    sesionId,
+    required String categoria,
+    required String descripcion,
+    required double monto,
+    required String metodoPago,
+  }) async {
+    try {
+      final r = await ApiClient.instance.post(
+        '/contabilidad/gastos/',
+        data: {
+          'sesion_caja': sesionId,
+          'categoria':   categoria,
+          'descripcion': descripcion,
+          'monto':       monto.toStringAsFixed(2),
+          'metodo_pago': metodoPago,
+          'visibilidad': 'todos',
+          'tipo_gasto':  'variable',
+        },
+      );
+      return {'success': true, 'data': r.data};
+    } on DioException catch (e) {
+      return {'success': false, 'error': _extractError(e, 'Error al registrar gasto')};
+    } catch (e) {
+      return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
+
   // ── Historial de sesiones ──────────────────────────────
 
   Future<List<Map<String, dynamic>>> getHistorialSesiones({

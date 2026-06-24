@@ -106,7 +106,7 @@ List<_NavItem> _buildNavItems(String rol) {
       case 'pos': return rol == 'cajero';
       case 'inventory': return ['admin', 'supervisor', 'superadmin', 'cajero'].contains(rol);
       case 'cash': return ['cajero', 'admin', 'supervisor', 'superadmin'].contains(rol);
-      case 'contabilidad': return ['admin', 'supervisor', 'superadmin', 'cajero'].contains(rol);
+      case 'contabilidad': return ['admin', 'supervisor', 'superadmin'].contains(rol);
       case 'reports': return rol == 'cajero';
       case 'clientes': return ['admin', 'supervisor', 'cajero', 'superadmin'].contains(rol);
       case 'suppliers': return ['admin', 'supervisor', 'superadmin'].contains(rol);

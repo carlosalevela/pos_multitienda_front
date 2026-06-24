@@ -129,6 +129,7 @@ class Gasto {
   final double monto;
   final String metodoPago;
   final String visibilidad;
+  final String tipoGasto;
   final String createdAt;
 
   Gasto({
@@ -137,6 +138,7 @@ class Gasto {
     required this.categoria,      required this.descripcion,
     required this.monto,          required this.metodoPago,
     this.visibilidad = 'todos',
+    this.tipoGasto   = 'fijo',
     required this.createdAt,
   });
 
@@ -150,6 +152,7 @@ class Gasto {
     monto:          double.parse((j['monto'] ?? '0').toString()),
     metodoPago:     j['metodo_pago']     ?? 'efectivo',
     visibilidad:    j['visibilidad']     ?? 'todos',
+    tipoGasto:      j['tipo_gasto']      ?? 'fijo',
     createdAt:      j['created_at']      ?? '',
   );
 }
@@ -283,4 +286,193 @@ class ResumenCierre {
     ventas: VentasCierre.fromJson(j['ventas'] ?? {}),
     gastos: GastosCierre.fromJson(j['gastos'] ?? {}),
   );
+}
+
+
+// ── EstadoResultados (P&L real con COGS) ───────────────
+
+class EstadoResultados {
+  final String desde, hasta;
+  // Ingresos
+  final double ventasBrutas, menosDescuentos, menosDevoluciones;
+  final double ingresosNetos, impuestosCobrados;
+  final int    numVentas, numDevoluciones;
+  // COGS + Margen
+  final double costoVentas, margenBruto, margenBrutoPct;
+  // Gastos
+  final double totalGastos;
+  final List<Map<String, dynamic>> gastosDetalle;
+  // Averías
+  final double perdidasBrutas, valorRecuperado, perdidaNeta;
+  // Resultado
+  final double utilidadOperativa, utilidadOperativaPct;
+
+  EstadoResultados({
+    required this.desde,              required this.hasta,
+    required this.ventasBrutas,       required this.menosDescuentos,
+    required this.menosDevoluciones,  required this.ingresosNetos,
+    required this.impuestosCobrados,  required this.numVentas,
+    required this.numDevoluciones,    required this.costoVentas,
+    required this.margenBruto,        required this.margenBrutoPct,
+    required this.totalGastos,        required this.gastosDetalle,
+    required this.perdidasBrutas,     required this.valorRecuperado,
+    required this.perdidaNeta,        required this.utilidadOperativa,
+    required this.utilidadOperativaPct,
+  });
+
+  factory EstadoResultados.fromJson(Map<String, dynamic> j) {
+    final per = j['periodo']          ?? {};
+    final ing = j['ingresos']         ?? {};
+    final gop = j['gastos_operativos']?? {};
+    final av  = j['averias']          ?? {};
+    return EstadoResultados(
+      desde:                 per['desde']             ?? '',
+      hasta:                 per['hasta']             ?? '',
+      ventasBrutas:          (ing['ventas_brutas']      ?? 0).toDouble(),
+      menosDescuentos:       (ing['menos_descuentos']   ?? 0).toDouble(),
+      menosDevoluciones:     (ing['menos_devoluciones'] ?? 0).toDouble(),
+      ingresosNetos:         (ing['ingresos_netos']     ?? 0).toDouble(),
+      impuestosCobrados:     (ing['impuestos_cobrados'] ?? 0).toDouble(),
+      numVentas:              ing['num_ventas']         ?? 0,
+      numDevoluciones:        ing['num_devoluciones']   ?? 0,
+      costoVentas:           (j['costo_ventas']         ?? 0).toDouble(),
+      margenBruto:           (j['margen_bruto']         ?? 0).toDouble(),
+      margenBrutoPct:        (j['margen_bruto_pct']     ?? 0).toDouble(),
+      totalGastos:           (gop['total']              ?? 0).toDouble(),
+      gastosDetalle: List<Map<String, dynamic>>.from(gop['detalle'] ?? []),
+      perdidasBrutas:        (av['perdidas_brutas']     ?? 0).toDouble(),
+      valorRecuperado:       (av['valor_recuperado']    ?? 0).toDouble(),
+      perdidaNeta:           (av['perdida_neta']        ?? 0).toDouble(),
+      utilidadOperativa:     (j['utilidad_operativa']     ?? 0).toDouble(),
+      utilidadOperativaPct:  (j['utilidad_operativa_pct'] ?? 0).toDouble(),
+    );
+  }
+}
+
+
+// ── PuntoEquilibrio ────────────────────────────────────
+
+class PuntoEquilibrio {
+  final double ingresosNetos, costoVentas;
+  final double gastosFijos, gastosVariables;
+  final double margenContribucion, margenContribucionPct;
+  final double? puntoEquilibrioIngresos;
+  final bool   alcanzado;
+  final double? excedenteDeficit;
+  final List<Map<String, dynamic>> detalleFijos, detalleVariables;
+
+  PuntoEquilibrio({
+    required this.ingresosNetos,    required this.costoVentas,
+    required this.gastosFijos,      required this.gastosVariables,
+    required this.margenContribucion, required this.margenContribucionPct,
+    required this.puntoEquilibrioIngresos,
+    required this.alcanzado,        required this.excedenteDeficit,
+    required this.detalleFijos,     required this.detalleVariables,
+  });
+
+  factory PuntoEquilibrio.fromJson(Map<String, dynamic> j) => PuntoEquilibrio(
+    ingresosNetos:           (j['ingresos_netos']            ?? 0).toDouble(),
+    costoVentas:             (j['costo_ventas']              ?? 0).toDouble(),
+    gastosFijos:             (j['gastos_fijos']              ?? 0).toDouble(),
+    gastosVariables:         (j['gastos_variables']          ?? 0).toDouble(),
+    margenContribucion:      (j['margen_contribucion']       ?? 0).toDouble(),
+    margenContribucionPct:   (j['margen_contribucion_pct']   ?? 0).toDouble(),
+    puntoEquilibrioIngresos: j['punto_equilibrio_ingresos'] != null
+        ? (j['punto_equilibrio_ingresos']).toDouble() : null,
+    alcanzado:               j['punto_equilibrio_alcanzado'] == true,
+    excedenteDeficit:        j['excedente_deficit'] != null
+        ? (j['excedente_deficit']).toDouble() : null,
+    detalleFijos:     List<Map<String, dynamic>>.from(j['detalle_gastos_fijos']     ?? []),
+    detalleVariables: List<Map<String, dynamic>>.from(j['detalle_gastos_variables'] ?? []),
+  );
+}
+
+
+// ── TiendaComparativo ──────────────────────────────────
+
+class TiendaComparativo {
+  final int    tiendaId;
+  final String tiendaNombre;
+  final double ventasBrutas, devoluciones, ingresosNetos;
+  final double costoVentas, margenBruto, margenBrutoPct;
+  final double gastos, perdidaAverias, utilidadOperativa;
+  final int    numVentas, numDevoluciones;
+
+  TiendaComparativo({
+    required this.tiendaId,          required this.tiendaNombre,
+    required this.ventasBrutas,      required this.devoluciones,
+    required this.ingresosNetos,     required this.costoVentas,
+    required this.margenBruto,       required this.margenBrutoPct,
+    required this.gastos,            required this.perdidaAverias,
+    required this.utilidadOperativa, required this.numVentas,
+    required this.numDevoluciones,
+  });
+
+  factory TiendaComparativo.fromJson(Map<String, dynamic> j) => TiendaComparativo(
+    tiendaId:          j['tienda_id']          ?? 0,
+    tiendaNombre:      j['tienda_nombre']       ?? '',
+    ventasBrutas:      (j['ventas_brutas']      ?? 0).toDouble(),
+    devoluciones:      (j['devoluciones']       ?? 0).toDouble(),
+    ingresosNetos:     (j['ingresos_netos']     ?? 0).toDouble(),
+    costoVentas:       (j['costo_ventas']       ?? 0).toDouble(),
+    margenBruto:       (j['margen_bruto']       ?? 0).toDouble(),
+    margenBrutoPct:    (j['margen_bruto_pct']   ?? 0).toDouble(),
+    gastos:            (j['gastos']             ?? 0).toDouble(),
+    perdidaAverias:    (j['perdida_averias']    ?? 0).toDouble(),
+    utilidadOperativa: (j['utilidad_operativa'] ?? 0).toDouble(),
+    numVentas:          j['num_ventas']         ?? 0,
+    numDevoluciones:    j['num_devoluciones']   ?? 0,
+  );
+}
+
+
+// ── VentaEmpleado ──────────────────────────────────────
+
+class VentaEmpleado {
+  final int    empleadoId;
+  final String nombre;
+  final int    numVentas;
+  final double totalVentas, totalDescuentos, promedioVenta;
+
+  VentaEmpleado({
+    required this.empleadoId,    required this.nombre,
+    required this.numVentas,     required this.totalVentas,
+    required this.totalDescuentos, required this.promedioVenta,
+  });
+
+  factory VentaEmpleado.fromJson(Map<String, dynamic> j) => VentaEmpleado(
+    empleadoId:      j['empleado_id']      ?? 0,
+    nombre:          j['nombre']           ?? 'Sin nombre',
+    numVentas:       j['num_ventas']       ?? 0,
+    totalVentas:     (j['total_ventas']     ?? 0).toDouble(),
+    totalDescuentos: (j['total_descuentos'] ?? 0).toDouble(),
+    promedioVenta:   (j['promedio_venta']   ?? 0).toDouble(),
+  );
+}
+
+
+// ── FlujoCajaResumen ───────────────────────────────────
+
+class FlujoCajaResumen {
+  final double totalEntradas, totalSalidas, flujoNeto, totalDiferencias;
+  final int    numSesiones;
+  final List<Map<String, dynamic>> sesiones;
+
+  FlujoCajaResumen({
+    required this.totalEntradas,   required this.totalSalidas,
+    required this.flujoNeto,       required this.totalDiferencias,
+    required this.numSesiones,     required this.sesiones,
+  });
+
+  factory FlujoCajaResumen.fromJson(Map<String, dynamic> j) {
+    final res = j['resumen'] ?? {};
+    return FlujoCajaResumen(
+      totalEntradas:    (res['total_entradas']    ?? 0).toDouble(),
+      totalSalidas:     (res['total_salidas']     ?? 0).toDouble(),
+      flujoNeto:        (res['flujo_neto']        ?? 0).toDouble(),
+      totalDiferencias: (res['total_diferencias'] ?? 0).toDouble(),
+      numSesiones:       res['num_sesiones']      ?? 0,
+      sesiones: List<Map<String, dynamic>>.from(j['sesiones'] ?? []),
+    );
+  }
 }

@@ -5,14 +5,12 @@ import 'package:intl/intl.dart';
 
 import '../../providers/contabilidad_provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../core/constants.dart';
 import '../../services/empleado_service.dart';
 
-import 'tabs/tab_resumen_dia.dart';
-import 'tabs/tab_mensual.dart';
+import 'tabs/tab_resumen.dart';
 import 'tabs/tab_top_productos.dart';
-import 'tabs/tab_gastos.dart';
-import 'tabs/tab_anual.dart';
+import 'tabs/tab_operaciones.dart';
+import 'tabs/tab_pl.dart';
 
 class ContabilidadScreen extends StatefulWidget {
   const ContabilidadScreen({super.key});
@@ -26,17 +24,16 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
   late TabController _tabCtrl;
   final _fmt = NumberFormat('#,##0', 'es_CO');
 
-  int _anioSel   = DateTime.now().year;
-  int _mesSel    = DateTime.now().month;
-  int _anioAnual = DateTime.now().year;
-
-  final _meses = ['Ene','Feb','Mar','Abr','May','Jun',
-                   'Jul','Ago','Sep','Oct','Nov','Dic'];
-
   List<Map<String, dynamic>> _tiendas   = [];
   int?                        _tiendaAdmin;
 
-  Key _gastosKey = UniqueKey();
+  // Design tokens
+  static const _emerald    = Color(0xFF10B981);
+  static const _emeraldBg  = Color(0xFFECFDF5);
+  static const _onSurface  = Color(0xFF111827);
+  static const _onSurfVar  = Color(0xFF6B7280);
+  static const _border     = Color(0xFFE5E7EB);
+  static const _bgContent  = Color(0xFFF3F4F6);
 
   // ── LIFECYCLE ──────────────────────────────────────
 
@@ -46,14 +43,13 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
     final auth  = context.read<AuthProvider>();
     final esCaj = auth.rol == 'cajero';
 
-    _tabCtrl = TabController(length: esCaj ? 3 : 5, vsync: this);
+    _tabCtrl = TabController(length: esCaj ? 3 : 4, vsync: this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final cont = context.read<ContabilidadProvider>();
       final tid  = auth.tiendaId == 0 ? null : auth.tiendaId;
 
-      // ✅ Fix: try-catch en getTiendas
       if (auth.rol == 'admin') {
         try {
           final tiendas = await EmpleadoService().getTiendas();
@@ -84,20 +80,13 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
 
   void _cargarTodo(
       ContabilidadProvider cont, AuthProvider auth, int? tiendaId) {
-    final esCaj = auth.rol == 'cajero';
     cont.cargarResumenDiario(tiendaId: tiendaId);
     cont.cargarTopProductos(tiendaId: tiendaId);
-    if (!esCaj) {
-      cont.cargarResumenMensual(
-          tiendaId: tiendaId, anio: _anioSel, mes: _mesSel);
-      cont.cargarResumenAnual(tiendaId: tiendaId, anio: _anioAnual);
-    }
   }
 
   void _recargarTodo() {
     final cont = context.read<ContabilidadProvider>();
     final auth = context.read<AuthProvider>();
-    setState(() => _gastosKey = UniqueKey());
     _cargarTodo(cont, auth, _tiendaId);
   }
 
@@ -109,177 +98,189 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
     final auth  = context.watch<AuthProvider>();
     final esCaj = auth.rol == 'cajero';
 
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
 
-          _buildHeader(auth),
-          const SizedBox(height: 16),
+        // ── Header + Tabs integrados (fondo blanco) ─────────
+        Container(
+          color: Colors.white,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
 
-          if (cont.successMsg.isNotEmpty)
-            _banner(cont.successMsg,
-                isError: false, onClose: cont.limpiarMensajes),
-          if (cont.errorMsg.isNotEmpty)
-            _banner(cont.errorMsg,
-                isError: true, onClose: cont.limpiarMensajes),
+              // Fila del título
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+                child: Row(children: [
 
-          // ── TabBar ─────────────────────────────────
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  // ✅ Fix: withValues en lugar de withOpacity
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                )
-              ],
-            ),
-            child: TabBar(
-              controller: _tabCtrl,
-              labelStyle: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w600, fontSize: 13),
-              unselectedLabelStyle:
-                  GoogleFonts.poppins(fontSize: 13),
-              labelColor: const Color(Constants.primaryColor),
-              unselectedLabelColor: Colors.grey.shade500,
-              indicator: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                // ✅ Fix: withValues en lugar de withOpacity
-                color: const Color(Constants.primaryColor)
-                    .withValues(alpha: 0.1),
+                  // Ícono
+                  Container(
+                    padding: const EdgeInsets.all(9),
+                    decoration: BoxDecoration(
+                      color: _emeraldBg,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.account_balance_rounded,
+                        color: _emerald, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+
+                  // Título + subtítulo
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Accounting Dashboard',
+                          style: GoogleFonts.poppins(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: _onSurface)),
+                      Text('Resumen financiero',
+                          style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: _onSurfVar)),
+                    ],
+                  ),
+                  const Spacer(),
+
+                  // Selector de tienda (solo admin)
+                  if (auth.rol == 'admin' && _tiendas.isNotEmpty)
+                    _storeSelector(),
+
+                ]),
               ),
-              indicatorSize: TabBarIndicatorSize.tab,
-              padding: const EdgeInsets.all(4),
-              tabs: _buildTabs(esCaj),
-            ),
-          ),
-          const SizedBox(height: 16),
 
-          Expanded(
-            child: TabBarView(
-              controller: _tabCtrl,
-              children: _buildViews(esCaj, cont, auth),
+              // Banners (success/error)
+              if (cont.successMsg.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: _banner(cont.successMsg,
+                      isError: false, onClose: cont.limpiarMensajes),
+                ),
+              if (cont.errorMsg.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: _banner(cont.errorMsg,
+                      isError: true, onClose: cont.limpiarMensajes),
+                ),
+
+              // ── TabBar estilo underline ─────────────────
+              TabBar(
+                controller: _tabCtrl,
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                labelStyle: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600, fontSize: 13),
+                unselectedLabelStyle: GoogleFonts.poppins(fontSize: 13),
+                labelColor: _emerald,
+                unselectedLabelColor: _onSurfVar,
+                indicator: const UnderlineTabIndicator(
+                  borderSide: BorderSide(width: 2.5, color: _emerald),
+                  insets: EdgeInsets.symmetric(horizontal: 8),
+                ),
+                indicatorSize: TabBarIndicatorSize.tab,
+                dividerColor: _border,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                tabs: _buildTabs(esCaj),
+              ),
+
+            ],
+          ),
+        ),
+
+        // ── Área de contenido ──────────────────────────────
+        Expanded(
+          child: Container(
+            color: _bgContent,
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: TabBarView(
+                controller: _tabCtrl,
+                children: _buildViews(esCaj, cont, auth),
+              ),
             ),
           ),
-        ],
-      ),
+        ),
+
+      ],
     );
   }
 
-  // ── HEADER ─────────────────────────────────────────
+  // ── STORE SELECTOR ─────────────────────────────────
 
-  Widget _buildHeader(AuthProvider auth) {
-    return Row(children: [
-      Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          // ✅ Fix: withValues en lugar de withOpacity
-          color: const Color(Constants.primaryColor)
-              .withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: const Icon(Icons.bar_chart_rounded,
-            color: Color(Constants.primaryColor)),
-      ),
-      const SizedBox(width: 12),
-      Text('Contabilidad',
-          style: GoogleFonts.poppins(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF1A1A2E))),
-      const Spacer(),
-
-      // Selector de tienda (solo admin)
-      if (auth.rol == 'admin' && _tiendas.isNotEmpty)
-        Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.grey.shade200),
-            boxShadow: [
-              BoxShadow(
-                // ✅ Fix: withValues en lugar de withOpacity
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              )
-            ],
+  Widget _storeSelector() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.store_rounded,
-                size: 15, color: Colors.grey.shade500),
-            const SizedBox(width: 4),
-            DropdownButtonHideUnderline(
-              child: DropdownButton<int?>(
-                value: _tiendaAdmin,
-                isDense: true,
-                icon: Icon(Icons.keyboard_arrow_down_rounded,
-                    size: 18, color: Colors.grey.shade500),
-                style: GoogleFonts.poppins(
-                    fontSize: 13, color: Colors.black87),
-                items: [
-                  DropdownMenuItem<int?>(
-                    value: null,
-                    child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.public_rounded,
-                              size: 14,
-                              color: Color(Constants.primaryColor)),
-                          const SizedBox(width: 6),
-                          Text('Todas las tiendas',
-                              style: GoogleFonts.poppins(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: const Color(
-                                      Constants.primaryColor))),
-                        ]),
-                  ),
-                  ..._tiendas.map((t) => DropdownMenuItem<int?>(
-                        value: t['id'] as int?,
-                        child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.storefront_rounded,
-                                  size: 14, color: Colors.grey),
-                              const SizedBox(width: 6),
-                              Text(t['nombre'] ?? '',
-                                  style: GoogleFonts.poppins(
-                                      fontSize: 13)),
-                            ]),
-                      )),
-                ],
-                onChanged: (val) {
-                  setState(() => _tiendaAdmin = val);
-                  _recargarTodo();
-                },
+        ],
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.store_rounded, size: 15, color: _onSurfVar),
+        const SizedBox(width: 6),
+        DropdownButtonHideUnderline(
+          child: DropdownButton<int?>(
+            value: _tiendaAdmin,
+            isDense: true,
+            dropdownColor: Colors.white,
+            icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                size: 18, color: _onSurfVar),
+            style: GoogleFonts.poppins(fontSize: 13, color: _onSurface),
+            items: [
+              DropdownMenuItem<int?>(
+                value: null,
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.public_rounded, size: 14, color: _emerald),
+                  const SizedBox(width: 6),
+                  Text('Todas las tiendas',
+                      style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: _emerald)),
+                ]),
               ),
-            ),
-          ]),
+              ..._tiendas.map((t) => DropdownMenuItem<int?>(
+                    value: t['id'] as int?,
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.storefront_rounded,
+                          size: 14, color: _onSurfVar),
+                      const SizedBox(width: 6),
+                      Text(t['nombre'] ?? '',
+                          style: GoogleFonts.poppins(
+                              fontSize: 13, color: _onSurface)),
+                    ]),
+                  )),
+            ],
+            onChanged: (val) {
+              setState(() => _tiendaAdmin = val);
+              _recargarTodo();
+            },
+          ),
         ),
-    ]);
+      ]),
+    );
   }
 
   // ── TABS — etiquetas ───────────────────────────────
-  // cajero : [0]Hoy  [1]Top  [2]Gastos
-  // otros  : [0]Hoy  [1]Mensual  [2]Top  [3]Gastos  [4]Anual
+  // cajero : [0]Resumen  [1]Productos  [2]Operaciones
+  // admin  : [0]Resumen  [1]Análisis   [2]Operaciones  [3]Productos
 
   List<Tab> _buildTabs(bool esCaj) {
-    const all = [
-      Tab(icon: Icon(Icons.today_rounded,          size: 18), text: 'Hoy'),
-      Tab(icon: Icon(Icons.calendar_month_rounded, size: 18), text: 'Mensual'),
-      Tab(icon: Icon(Icons.leaderboard_rounded,    size: 18), text: 'Top Productos'),
-      Tab(icon: Icon(Icons.receipt_long_rounded,   size: 18), text: 'Gastos'),
-      Tab(icon: Icon(Icons.bar_chart_rounded,      size: 18), text: 'Anual'),
-    ];
-    return esCaj ? [all[0], all[2], all[3]] : all;
+    const resumen   = Tab(text: 'Resumen');
+    const analisis  = Tab(text: 'Análisis P&L');
+    const operacion = Tab(text: 'Operaciones');
+    const productos = Tab(text: 'Top Productos');
+    return esCaj
+        ? [resumen, productos, operacion]
+        : [resumen, analisis, operacion, productos];
   }
 
   // ── TABS — contenido ───────────────────────────────
@@ -287,14 +288,11 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
   List<Widget> _buildViews(
       bool esCaj, ContabilidadProvider cont, AuthProvider auth) {
 
-    final tabHoy = TabResumenDia(
-      cont: cont, fmt: _fmt, tiendaId: _tiendaId,
+    final tabResumen = TabResumen(
+      cont: cont, fmt: _fmt, tiendaId: _tiendaId, esCajero: esCaj,
     );
-    final tabTop = TabTopProductos(
-      cont: cont, fmt: _fmt,
-    );
-    final tabGastos = TabGastos(
-      key:      _gastosKey,
+    final tabProductos = TabTopProductos(cont: cont, fmt: _fmt);
+    final tabOperaciones = TabOperaciones(
       cont:     cont,
       fmt:      _fmt,
       tiendaId: _tiendaId,
@@ -302,76 +300,51 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
       auth:     auth,
     );
 
-    if (esCaj) return [tabHoy, tabTop, tabGastos];
+    if (esCaj) return [tabResumen, tabProductos, tabOperaciones];
 
     return [
-      tabHoy,
-      TabMensual(
-        cont: cont, fmt: _fmt, tiendaId: _tiendaId,
-        anio: _anioSel, mes: _mesSel, meses: _meses,
-        onCambiarMes: (a, m) {
-          setState(() { _anioSel = a; _mesSel = m; });
-          cont.cargarResumenMensual(
-              tiendaId: _tiendaId, anio: a, mes: m);
-        },
-      ),
-      tabTop,
-      tabGastos,
-      TabAnual(
-        cont: cont, fmt: _fmt, tiendaId: _tiendaId,
-        anioSel: _anioAnual,
-        onCambiarAnio: (a) {
-          setState(() => _anioAnual = a);
-          cont.cargarResumenAnual(tiendaId: _tiendaId, anio: a);
-        },
-      ),
+      tabResumen,
+      TabPL(cont: cont, fmt: _fmt, tiendaId: _tiendaId),
+      tabOperaciones,
+      tabProductos,
     ];
   }
 
   // ── BANNER éxito / error ───────────────────────────
 
   Widget _banner(String msg,
-          {required bool isError, required VoidCallback onClose}) =>
-      Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          // ✅ Fix: withValues en lugar de withOpacity
-          color: isError
-              ? const Color(Constants.errorColor)
-                  .withValues(alpha: 0.1)
-              : Colors.green.shade50,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isError
-                ? const Color(Constants.errorColor)
-                    .withValues(alpha: 0.3)
-                : Colors.green.shade200,
-          ),
+      {required bool isError, required VoidCallback onClose}) {
+    const green     = Color(0xFF10B981);
+    const greenBg   = Color(0xFFECFDF5);
+    const redColor  = Color(0xFFEF4444);
+    const redBg     = Color(0xFFFEF2F2);
+    final color     = isError ? redColor : green;
+    final bg        = isError ? redBg    : greenBg;
+    final icon      = isError ? Icons.error_outline : Icons.check_circle_outline;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(children: [
+        Icon(icon, color: color, size: 18),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(msg,
+              style: GoogleFonts.poppins(color: color, fontSize: 13)),
         ),
-        child: Row(children: [
-          Icon(
-              isError
-                  ? Icons.error_outline
-                  : Icons.check_circle_outline,
-              color: isError
-                  ? const Color(Constants.errorColor)
-                  : Colors.green.shade700,
-              size: 18),
-          const SizedBox(width: 10),
-          Expanded(
-              child: Text(msg,
-                  style: GoogleFonts.poppins(
-                      color: isError
-                          ? const Color(Constants.errorColor)
-                          : Colors.green.shade700,
-                      fontSize: 13))),
-          IconButton(
-            icon: const Icon(Icons.close_rounded, size: 16),
-            onPressed: onClose,
-            color: Colors.grey,
-          ),
-        ]),
-      );
+        IconButton(
+          icon: Icon(Icons.close_rounded,
+              size: 16, color: color.withValues(alpha: 0.7)),
+          onPressed: onClose,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+        ),
+      ]),
+    );
+  }
 }

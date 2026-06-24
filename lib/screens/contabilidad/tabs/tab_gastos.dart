@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../providers/contabilidad_provider.dart';
 import '../../../providers/auth_provider.dart';
-import '../../../core/constants.dart';
 
 
 enum _Rango { hoy, semana, mes, custom }
@@ -60,7 +59,7 @@ class _TabGastosState extends State<TabGastos> {
   @override
   void initState() {
     super.initState();
-    _aplicarFiltro();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _aplicarFiltro());
   }
 
   Future<void> _aplicarFiltro() async {
@@ -150,12 +149,12 @@ class _TabGastosState extends State<TabGastos> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: const Color(Constants.primaryColor)
+                        color: const Color(0xFF10B981)
                             .withOpacity(0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Icon(Icons.date_range_rounded,
-                          color: Color(Constants.primaryColor), size: 18),
+                          color: Color(0xFF10B981), size: 18),
                     ),
                     const SizedBox(width: 10),
                     Text('Rango personalizado',
@@ -209,7 +208,7 @@ class _TabGastosState extends State<TabGastos> {
                         : '👆 Toca la fecha de fin',
                     style: GoogleFonts.poppins(
                         fontSize: 11,
-                        color: const Color(Constants.primaryColor)),
+                        color: const Color(0xFF10B981)),
                   ),
                   const SizedBox(height: 8),
 
@@ -276,7 +275,7 @@ class _TabGastosState extends State<TabGastos> {
                             : null,
                         style: ElevatedButton.styleFrom(
                           backgroundColor:
-                              const Color(Constants.primaryColor),
+                              const Color(0xFF10B981),
                           foregroundColor: Colors.white,
                           disabledBackgroundColor:
                               Colors.grey.shade200,
@@ -313,12 +312,12 @@ class _TabGastosState extends State<TabGastos> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: activo
-              ? const Color(Constants.primaryColor).withOpacity(0.08)
+              ? const Color(0xFF10B981).withOpacity(0.08)
               : Colors.grey.shade50,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: activo
-                ? const Color(Constants.primaryColor)
+                ? const Color(0xFF10B981)
                 : Colors.grey.shade200,
             width: activo ? 1.5 : 1,
           ),
@@ -330,14 +329,14 @@ class _TabGastosState extends State<TabGastos> {
                 style: GoogleFonts.poppins(
                     fontSize: 10,
                     color: activo
-                        ? const Color(Constants.primaryColor)
+                        ? const Color(0xFF10B981)
                         : Colors.grey.shade500)),
             Text(valor,
                 style: GoogleFonts.poppins(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: activo
-                        ? const Color(Constants.primaryColor)
+                        ? const Color(0xFF10B981)
                         : const Color(0xFF1A1A2E))),
           ],
         ),
@@ -380,7 +379,7 @@ class _TabGastosState extends State<TabGastos> {
                 style: GoogleFonts.poppins(
                     fontSize: 13, fontWeight: FontWeight.w600)),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(Constants.primaryColor),
+              backgroundColor: const Color(0xFF10B981),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(
                   horizontal: 16, vertical: 10),
@@ -434,7 +433,7 @@ class _TabGastosState extends State<TabGastos> {
                     horizontal: 14, vertical: 7),
                 decoration: BoxDecoration(
                   color: _rangoSel == _Rango.custom
-                      ? const Color(Constants.primaryColor)
+                      ? const Color(0xFF10B981)
                       : Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(20),
                 ),
@@ -513,7 +512,7 @@ class _TabGastosState extends State<TabGastos> {
             horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
           color: sel
-              ? const Color(Constants.primaryColor)
+              ? const Color(0xFF10B981)
               : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(20),
         ),
@@ -543,7 +542,7 @@ class _TabGastosState extends State<TabGastos> {
           label: Text('Registrar gasto',
               style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
           style: TextButton.styleFrom(
-              foregroundColor: const Color(Constants.primaryColor)),
+              foregroundColor: const Color(0xFF10B981)),
         ),
       ],
     )));
@@ -880,7 +879,7 @@ class _FormGastoState extends State<_FormGasto> {
                       horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
                     color: sel
-                        ? const Color(Constants.primaryColor)
+                        ? const Color(0xFF10B981)
                         : Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(20),
                   ),
@@ -950,7 +949,7 @@ class _FormGastoState extends State<_FormGasto> {
             child: ElevatedButton(
               onPressed: _guardando ? null : _guardar,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(Constants.primaryColor),
+                backgroundColor: const Color(0xFF10B981),
                 foregroundColor: Colors.white,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -985,7 +984,7 @@ class _FormGastoState extends State<_FormGasto> {
       hintStyle: GoogleFonts.poppins(
           fontSize: 13, color: Colors.grey.shade400),
       prefixIcon: Icon(icon,
-          size: 20, color: const Color(Constants.primaryColor)),
+          size: 20, color: const Color(0xFF10B981)),
       filled: true, fillColor: Colors.grey.shade50,
       border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -996,7 +995,7 @@ class _FormGastoState extends State<_FormGasto> {
       focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(
-              color: Color(Constants.primaryColor), width: 1.5)),
+              color: Color(0xFF10B981), width: 1.5)),
       contentPadding: const EdgeInsets.symmetric(
           horizontal: 16, vertical: 14),
     );

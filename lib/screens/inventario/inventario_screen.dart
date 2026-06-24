@@ -220,14 +220,20 @@ class _InventarioScreenState extends State<InventarioScreen>
     );
   }
 
-  void _abrirAverias() {
-    showDialog(
+  Future<void> _abrirAverias() async {
+    await showDialog(
       context: context,
       builder: (_) => AveriasDialog(
         tiendaId:     _tiendaActiva,
         nombreTienda: _nombreTiendaActual(),
       ),
     );
+    if (!mounted) return;
+    context.read<InventarioProvider>().cargarProductos(
+      tiendaId: _tiendaActiva,
+      activo:   _activoFiltro,
+    );
+    _cargarInsights();
   }
 
   Future<void> _exportarExcel() async {

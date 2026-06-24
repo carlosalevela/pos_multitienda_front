@@ -5,42 +5,51 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../core/constants.dart';
 
 // ─────────────────────────────────────────────────────────────
-// PALETA
+// PALETA — consistente con admin_dashboard / cajero_dashboard
 // ─────────────────────────────────────────────────────────────
 class _C {
-  // Panel izquierdo
-  static const overlayDark  = Color(0xCC0D2B1A); // overlay verde oscuro semitransparente
-  static const overlayLight = Color(0x880D2B1A); // overlay más claro
-  static const green        = Color(0xFF1A8A4A); // verde marca
+  // Fondo general y paneles
+  static const bodyBg      = Color(0xFFF5F7F8);
+  static const leftBg      = Color(0xFFF0FDF4);
+  static const leftBorder  = Color(0xFFBBF7D0);
+  static const rightBg     = Color(0xFFFFFFFF);
 
-  // Panel derecho (blanco)
-  static const bg           = Color(0xFFFFFFFF);
-  static const surface      = Color(0xFFF6F8F6);
-  static const borderColor  = Color(0xFFD8E4DC);
-  static const textPrimary  = Color(0xFF111B16);
-  static const textSecondary= Color(0xFF637068);
-  static const textHint     = Color(0xFFAAB8B0);
+  // Textos
+  static const textPrimary = Color(0xFF111827);
+  static const textSecond  = Color(0xFF6B7280);
+  static const textHint    = Color(0xFF9CA3AF);
 
-  // Acento verde SIS POS
-  static const accent       = Color(0xFF1B7A45);
-  static const accentHover  = Color(0xFF145E35);
-  static const accentLight  = Color(0xFFE8F5EE);
+  // Verde marca (= _C.green / greenDark del dashboard)
+  static const green       = Color(0xFF61DDAA);
+  static const greenDark   = Color(0xFF0B7A53);
+  static const greenLight  = Color(0xFFE8FFF4);
+  static const greenBorder = Color(0xFF61DDAA);
 
-  // Error
-  static const error        = Color(0xFFD32F2F);
+  // Índigo (reportes)
+  static const indigo      = Color(0xFF3730A3);
+  static const indigoLight = Color(0xFFEEF2FF);
+  static const indigoBorder= Color(0xFFA5B4FC);
 
-  // Comunes
-  static const white        = Colors.white;
-  static const white80      = Color(0xCCFFFFFF);
-  static const white50      = Color(0x80FFFFFF);
-  static const white20      = Color(0x33FFFFFF);
+  // Ámbar (cambios)
+  static const amber       = Color(0xFFB45309);
+  static const amberLight  = Color(0xFFFEF3C7);
+  static const amberBorder = Color(0xFFFCD34D);
+
+  // Morado (roles)
+  static const purple      = Color(0xFF7C3AED);
+  static const purpleLight = Color(0xFFF5F3FF);
+  static const purpleBorder= Color(0xFFC4B5FD);
+
+  // Inputs / error
+  static const surface     = Color(0xFFF5F7FA);
+  static const borderColor = Color(0xFFE2E8F0);
+  static const error       = Color(0xFFD32F2F);
 }
 
 // ─────────────────────────────────────────────────────────────
-// SCREEN — sin animaciones, StatefulWidget solo para form state
+// SCREEN
 // ─────────────────────────────────────────────────────────────
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -74,42 +83,60 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-    final w    = MediaQuery.of(context).size.width;
-    final isWide = w > 780;
+    final auth   = context.watch<AuthProvider>();
+    final isWide = MediaQuery.of(context).size.width > 780;
+
+    final formPanel = _FormPanel(
+      formKey:         _formKey,
+      userCtrl:        _userCtrl,
+      passCtrl:        _passCtrl,
+      passFocus:       _passFocus,
+      obscure:         _obscure,
+      auth:            auth,
+      onToggleObscure: () => setState(() => _obscure = !_obscure),
+      onLogin:         _login,
+    );
 
     return Scaffold(
-      backgroundColor: _C.bg,
-      body: isWide
-          ? Row(children: [
-              // Panel izquierdo — imagen + overlay
-              Expanded(flex: 55, child: _LeftPanel()),
-              // Panel derecho — formulario
-              Expanded(
-                flex: 45,
-                child: _FormPanel(
-                  formKey:         _formKey,
-                  userCtrl:        _userCtrl,
-                  passCtrl:        _passCtrl,
-                  passFocus:       _passFocus,
-                  obscure:         _obscure,
-                  auth:            auth,
-                  onToggleObscure: () => setState(() => _obscure = !_obscure),
-                  onLogin:         _login,
+      backgroundColor: _C.bodyBg,
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 1060),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.10),
+                  blurRadius: 48,
+                  offset: const Offset(0, 16),
                 ),
-              ),
-            ])
-          // Mobile: solo formulario
-          : _FormPanel(
-              formKey:         _formKey,
-              userCtrl:        _userCtrl,
-              passCtrl:        _passCtrl,
-              passFocus:       _passFocus,
-              obscure:         _obscure,
-              auth:            auth,
-              onToggleObscure: () => setState(() => _obscure = !_obscure),
-              onLogin:         _login,
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: isWide
+                  ? SizedBox(
+                      height: 660,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(flex: 46, child: const _LeftPanel()),
+                          Expanded(flex: 54, child: formPanel),
+                        ],
+                      ),
+                    )
+                  : formPanel,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -122,155 +149,185 @@ class _LeftPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // Fondo degradado verde oscuro (reemplazar por Image.asset si se tiene foto)
-        Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF071A0F), Color(0xFF0D2E1A), Color(0xFF143D24)],
-              begin: Alignment.topLeft,
-              end:   Alignment.bottomRight,
+    return Container(
+      decoration: const BoxDecoration(
+        color: _C.leftBg,
+        border: Border(right: BorderSide(color: _C.leftBorder, width: 1.5)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+
+          // Logo
+          Row(children: [
+            Container(
+              width: 32, height: 32,
+              decoration: BoxDecoration(
+                color: _C.greenLight,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: _C.greenBorder, width: 1.5),
+              ),
+              child: const Icon(Icons.storefront_rounded,
+                  size: 17, color: _C.greenDark),
+            ),
+            const SizedBox(width: 10),
+            Text('SIS · POS',
+                style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.6,
+                    color: _C.textSecond)),
+          ]),
+
+          const SizedBox(height: 28),
+
+          // Headline
+          RichText(
+            text: TextSpan(
+              style: GoogleFonts.inter(
+                  fontSize: 38,
+                  fontWeight: FontWeight.w900,
+                  height: 1.05,
+                  letterSpacing: -1.0),
+              children: const [
+                TextSpan(text: 'POS\n', style: TextStyle(color: _C.textPrimary)),
+                TextSpan(text: 'MULTI',
+                    style: TextStyle(color: _C.greenDark)),
+                TextSpan(text: 'TIENDA',
+                    style: TextStyle(
+                        color: _C.textHint,
+                        fontWeight: FontWeight.w300)),
+              ],
             ),
           ),
-        ),
 
-        // Patrón sutil — líneas diagonales muy tenues
-        CustomPaint(painter: _SubtlePatternPainter()),
+          const SizedBox(height: 8),
 
-        // Contenido
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 48),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Logo SIS POS
-              Row(children: [
-                Container(
-                  width: 28, height: 28,
-                  decoration: BoxDecoration(
-                    color: _C.accent,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Icon(Icons.point_of_sale_rounded,
-                      size: 16, color: Colors.white),
-                ),
-                const SizedBox(width: 10),
-                Text('SIS POS',
-                    style: GoogleFonts.inter(
-                        color: _C.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.5)),
-              ]),
+          Text(
+            'Plataforma unificada de ventas, inventario\ny reportes para tu negocio.',
+            style: GoogleFonts.inter(
+                fontSize: 12, color: _C.textSecond, height: 1.5),
+          ),
 
-              const Spacer(),
+          const SizedBox(height: 20),
 
-              // Título principal
-              Text('POS MULTIMEDIA',
-                  style: GoogleFonts.inter(
-                      color: _C.white,
-                      fontSize: 36,
-                      fontWeight: FontWeight.w800,
-                      height: 1.1,
-                      letterSpacing: -0.5)),
-
-              const SizedBox(height: 16),
-
-              Text(
-                'Soluciones avanzadas de punto de venta e\ninventario diseñadas para los sectores\nmás exigentes.',
-                style: GoogleFonts.inter(
-                    color: _C.white80,
-                    fontSize: 13,
-                    height: 1.7,
-                    fontWeight: FontWeight.w400),
+          // Grid de módulos 3×2
+          GridView.count(
+            crossAxisCount: 3,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+            childAspectRatio: 1.25,
+            children: const [
+              _ModuleCard(
+                icon: Icons.point_of_sale_rounded,
+                label: 'Punto\nde venta',
+                bg: _C.greenLight,
+                border: _C.greenBorder,
+                iconColor: _C.greenDark,
               ),
-
-              const SizedBox(height: 40),
-
-              // Chips de características
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: const [
-                  _Chip(label: 'Multi-tienda'),
-                  _Chip(label: 'Inventario en tiempo real'),
-                  _Chip(label: 'Reportes'),
-                ],
+              _ModuleCard(
+                icon: Icons.inventory_2_rounded,
+                label: 'Inventario\n& Stock',
+                bg: _C.greenLight,
+                border: _C.greenBorder,
+                iconColor: _C.greenDark,
               ),
-
-              const Spacer(),
-
-              // Footer
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('© ${DateTime.now().year} POS Multimedia Inc.',
-                      style: GoogleFonts.inter(
-                          color: _C.white50, fontSize: 11)),
-                  Row(children: [
-                    _FooterLink(label: 'Privacy'),
-                    const SizedBox(width: 16),
-                    _FooterLink(label: 'Terms'),
-                  ]),
-                ],
+              _ModuleCard(
+                icon: Icons.bar_chart_rounded,
+                label: 'Reportes\n& Cierre',
+                bg: _C.indigoLight,
+                border: _C.indigoBorder,
+                iconColor: _C.indigo,
+              ),
+              _ModuleCard(
+                icon: Icons.swap_horiz_rounded,
+                label: 'Cambios\n& Devol.',
+                bg: _C.amberLight,
+                border: _C.amberBorder,
+                iconColor: _C.amber,
+              ),
+              _ModuleCard(
+                icon: Icons.store_rounded,
+                label: 'Multi\ntienda',
+                bg: _C.greenLight,
+                border: _C.greenBorder,
+                iconColor: _C.greenDark,
+              ),
+              _ModuleCard(
+                icon: Icons.manage_accounts_rounded,
+                label: 'Roles\n& Acceso',
+                bg: _C.purpleLight,
+                border: _C.purpleBorder,
+                iconColor: _C.purple,
               ),
             ],
           ),
-        ),
-      ],
+
+          const SizedBox(height: 20),
+
+          // Footer
+          Divider(color: _C.leftBorder, thickness: 1),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('© ${DateTime.now().year} POS Multitienda Inc.',
+                  style: GoogleFonts.inter(
+                      fontSize: 10, color: _C.textHint)),
+              Text('Soporte técnico',
+                  style: GoogleFonts.inter(
+                      fontSize: 10,
+                      color: _C.greenDark,
+                      fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _Chip extends StatelessWidget {
+// Card de módulo
+class _ModuleCard extends StatelessWidget {
+  final IconData icon;
   final String label;
-  const _Chip({required this.label});
+  final Color bg, border, iconColor;
+  const _ModuleCard({
+    required this.icon,
+    required this.label,
+    required this.bg,
+    required this.border,
+    required this.iconColor,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: _C.white20,
-        border: Border.all(color: _C.white20),
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border, width: 1.5),
       ),
-      child: Text(label,
-          style: GoogleFonts.inter(
-              color: _C.white80, fontSize: 11,
-              fontWeight: FontWeight.w500)),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 26, color: iconColor),
+          const SizedBox(height: 6),
+          Text(label,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: iconColor,
+                  height: 1.35)),
+        ],
+      ),
     );
   }
-}
-
-class _FooterLink extends StatelessWidget {
-  final String label;
-  const _FooterLink({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(label,
-        style: GoogleFonts.inter(
-            color: _C.white50, fontSize: 11,
-            decoration: TextDecoration.underline,
-            decorationColor: _C.white50));
-  }
-}
-
-// Painter: cuadrícula puntada sutil
-class _SubtlePatternPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()
-      ..color = Colors.white.withOpacity(0.04)
-      ..style = PaintingStyle.fill;
-    for (double x = 24; x < size.width;  x += 32)
-      for (double y = 24; y < size.height; y += 32)
-        canvas.drawCircle(Offset(x, y), 1.0, p);
-  }
-  @override bool shouldRepaint(_) => false;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -298,7 +355,7 @@ class _FormPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: _C.bg,
+      color: _C.rightBg,
       child: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 56),
@@ -310,32 +367,63 @@ class _FormPanel extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
 
+                  // Badge "Sistema activo"
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: _C.greenLight,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: _C.greenBorder.withOpacity(0.5)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6, height: 6,
+                          decoration: const BoxDecoration(
+                            color: _C.green,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text('Sistema activo',
+                            style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: _C.greenDark)),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
                   // Título
-                  Text('BIENVENIDO',
+                  Text('Bienvenido',
                       style: GoogleFonts.inter(
-                          fontSize: 26,
+                          fontSize: 30,
                           fontWeight: FontWeight.w800,
                           color: _C.textPrimary,
-                          letterSpacing: 0.5)),
+                          letterSpacing: -0.5)),
 
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
 
-                  Text('Access your dashboard to manage sales and stock.',
+                  Text('Ingresa tus credenciales para continuar.',
                       style: GoogleFonts.inter(
                           fontSize: 13,
-                          color: _C.textSecondary,
+                          color: _C.textSecond,
                           height: 1.5)),
 
-                  const SizedBox(height: 36),
+                  const SizedBox(height: 32),
 
-                  // Campo USERNAME
-                  _Label(text: 'USERNAME'),
+                  // Usuario
+                  _Label(text: 'USUARIO'),
                   const SizedBox(height: 8),
                   _Field(
                     controller:      userCtrl,
-                    hint:            'Enter your username',
+                    hint:            'Tu usuario',
                     icon:            Icons.person_outline_rounded,
-                    keyboardType:    TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
                     autofocus:       true,
                     onSubmit:        (_) =>
@@ -346,21 +434,18 @@ class _FormPanel extends StatelessWidget {
                     },
                   ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 18),
 
-                  // Campo PASSWORD
+                  // Contraseña
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _Label(text: 'PASSWORD'),
-                      GestureDetector(
-                        onTap: () {/* TODO: forgot password */},
-                        child: Text('Forgot password?',
-                            style: GoogleFonts.inter(
-                                fontSize: 12,
-                                color: _C.accent,
-                                fontWeight: FontWeight.w600)),
-                      ),
+                      const _Label(text: 'CONTRASEÑA'),
+                      Text('¿Olvidaste tu clave?',
+                          style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: _C.greenDark,
+                              fontWeight: FontWeight.w600)),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -401,23 +486,25 @@ class _FormPanel extends StatelessWidget {
                   // Botón
                   _LoginButton(loading: auth.isLoading, onPressed: onLogin),
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 28),
 
-                  // Footer badge
+                  // Ayuda
                   Center(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.verified_user_outlined,
-                            size: 13, color: _C.textHint),
-                        const SizedBox(width: 6),
-                        Text('ENTERPRISE POS IDENTITY v4.0',
-                            style: GoogleFonts.inter(
-                                fontSize: 10,
-                                color: _C.textHint,
-                                letterSpacing: 0.8,
-                                fontWeight: FontWeight.w500)),
-                      ],
+                    child: Text.rich(
+                      TextSpan(
+                        style: GoogleFonts.inter(
+                            fontSize: 12, color: _C.textSecond),
+                        children: [
+                          const TextSpan(text: '¿Problemas para ingresar? '),
+                          TextSpan(
+                            text: 'Contacta al administrador',
+                            style: const TextStyle(
+                                color: _C.greenDark,
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                      textAlign: TextAlign.center,
                     ),
                   ),
                 ],
@@ -441,7 +528,7 @@ class _Label extends StatelessWidget {
       style: GoogleFonts.inter(
           fontSize: 11,
           fontWeight: FontWeight.w700,
-          color: _C.textSecondary,
+          color: _C.textSecond,
           letterSpacing: 0.8));
 }
 
@@ -449,7 +536,6 @@ class _Field extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
   final IconData icon;
-  final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
   final bool autofocus, obscureText;
   final FocusNode? focusNode;
@@ -461,7 +547,6 @@ class _Field extends StatelessWidget {
     required this.controller,
     required this.hint,
     required this.icon,
-    this.keyboardType,
     this.textInputAction,
     this.autofocus   = false,
     this.obscureText = false,
@@ -478,7 +563,6 @@ class _Field extends StatelessWidget {
       autofocus:        autofocus,
       obscureText:      obscureText,
       focusNode:        focusNode,
-      keyboardType:     keyboardType,
       textInputAction:  textInputAction,
       onFieldSubmitted: onSubmit,
       validator:        validator,
@@ -493,23 +577,23 @@ class _Field extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(
             horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: _C.borderColor),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: _C.borderColor),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: _C.accent, width: 1.5),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: _C.greenDark, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: _C.error),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: _C.error, width: 1.5),
         ),
         errorStyle: GoogleFonts.inter(color: _C.error, fontSize: 11),
@@ -553,34 +637,50 @@ class _LoginButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
-      height: 48,
-      child: ElevatedButton(
-        onPressed: loading ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: _C.accent,
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: _C.accent.withOpacity(0.6),
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8)),
+      height: 50,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF006c49), Color(0xFF00a870)],
+            begin: Alignment.centerLeft,
+            end:   Alignment.centerRight,
+          ),
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: [
+            BoxShadow(
+              color: _C.greenDark.withOpacity(0.35),
+              blurRadius: 14,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        child: loading
-            ? const SizedBox(
-                width: 20, height: 20,
-                child: CircularProgressIndicator(
-                    color: Colors.white, strokeWidth: 2.0))
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('Iniciar Sesión',
-                      style: GoogleFonts.inter(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.2)),
-                  const SizedBox(width: 8),
-                  const Icon(Icons.arrow_forward_rounded, size: 17),
-                ],
-              ),
+        child: ElevatedButton(
+          onPressed: loading ? null : onPressed,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            shadowColor:     Colors.transparent,
+            foregroundColor: Colors.white,
+            disabledBackgroundColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+          ),
+          child: loading
+              ? const SizedBox(
+                  width: 20, height: 20,
+                  child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2.0))
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Ingresar',
+                        style: GoogleFonts.inter(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700)),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.arrow_forward_rounded, size: 17),
+                  ],
+                ),
+        ),
       ),
     );
   }

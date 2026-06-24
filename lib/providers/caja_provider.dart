@@ -16,14 +16,22 @@ class CajaProvider extends ChangeNotifier {
   String _errorMsg   = '';
   String _successMsg = '';
 
-  SesionCaja?           get sesionActiva  => _sesionActiva;
-  ResumenCierre?        get resumenCierre => _resumenCierre;
-  List<SesionHistorial> get historial     => _historial;  // ← CAMBIAR tipo
-  bool   get cargando    => _cargando;
-  bool   get procesando  => _procesando;
-  String get errorMsg    => _errorMsg;
-  String get successMsg  => _successMsg;
-  bool   get cajaAbierta => _sesionActiva?.abierta ?? false;
+  // ── Gastos del turno ──────────────────────────────────
+  List<Map<String, dynamic>> _gastosSesion     = [];
+  double                     _gastosTotalSesion = 0;
+  bool                       _cargandoGastos   = false;
+
+  SesionCaja?           get sesionActiva      => _sesionActiva;
+  ResumenCierre?        get resumenCierre     => _resumenCierre;
+  List<SesionHistorial> get historial         => _historial;  // ← CAMBIAR tipo
+  bool   get cargando         => _cargando;
+  bool   get procesando       => _procesando;
+  String get errorMsg         => _errorMsg;
+  String get successMsg       => _successMsg;
+  bool   get cajaAbierta      => _sesionActiva?.abierta ?? false;
+  List<Map<String, dynamic>> get gastosSesion     => _gastosSesion;
+  double                     get gastosTotalSesion => _gastosTotalSesion;
+  bool                       get cargandoGastos   => _cargandoGastos;
 
 
   void limpiarMensajes() {
@@ -150,5 +158,57 @@ class CajaProvider extends ChangeNotifier {
   void limpiarHistorial() {
     _historial = [];
     notifyListeners();
+  }
+
+  // ── Gastos del turno activo ────────────────────────────
+
+  Future<void> cargarGastosSesion(int sesionId) async {
+    _cargandoGastos = true;
+    notifyListeners();
+
+    final result = await _service.getGastosSesion(sesionId);
+    if (result['success'] == true) {
+      final data = result['data'];
+      _gastosSesion     = List<Map<String, dynamic>>.from(data['gastos'] ?? []);
+      _gastosTotalSesion = double.tryParse(
+          data['resumen']?['total']?.toString() ?? '0') ?? 0;
+    } else {
+      _gastosSesion     = [];
+      _gastosTotalSesion = 0;
+    }
+
+    _cargandoGastos = false;
+    notifyListeners();
+  }
+
+  Future<bool> registrarGasto({
+    required int    sesionId,
+    required String categoria,
+    required String descripcion,
+    required double monto,
+    required String metodoPago,
+  }) async {
+    _procesando = true;
+    notifyListeners();
+
+    final result = await _service.registrarGasto(
+      sesionId:    sesionId,
+      categoria:   categoria,
+      descripcion: descripcion,
+      monto:       monto,
+      metodoPago:  metodoPago,
+    );
+
+    _procesando = false;
+
+    if (result['success'] == true) {
+      _successMsg = '✅ Gasto registrado';
+      await cargarGastosSesion(sesionId);
+    } else {
+      _errorMsg = result['error'] ?? 'Error al registrar gasto';
+      notifyListeners();
+    }
+
+    return result['success'] == true;
   }
 }
