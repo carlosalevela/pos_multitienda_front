@@ -6,6 +6,26 @@ import '../models/item_carrito.dart';
 import '../services/inventario_service.dart';
 import '../services/venta_service.dart';
 
+// ── Snapshot de un ticket parkado ─────────────────────────────
+class TicketParkado {
+  final List<ItemCarrito> carrito;
+  final String            metodoPago;
+  final double            montoRecibido;
+  final double            descuento;
+  final int               numero;
+
+  const TicketParkado({
+    required this.carrito,
+    required this.metodoPago,
+    required this.montoRecibido,
+    required this.descuento,
+    required this.numero,
+  });
+
+  double get total => carrito.fold(0, (s, i) => s + i.subtotal);
+  int    get items => carrito.fold(0, (s, i) => s + i.cantidad);
+}
+
 class PosProvider extends ChangeNotifier {
   final InventarioService _inventarioService = InventarioService();
   final VentaService      _ventaService      = VentaService();
@@ -18,7 +38,6 @@ class PosProvider extends ChangeNotifier {
 
   bool   _buscando      = false;
   bool   _procesando    = false;
-  // ✅ FIX: flag separado para cargar ventas — no conflicto con cobrar
   bool   _cargandoVentas = false;
   String _errorMsg      = '';
   String _successMsg    = '';
@@ -26,19 +45,26 @@ class PosProvider extends ChangeNotifier {
   double _montoRecibido = 0;
   double _descuento     = 0;
 
+  // ── Tickets parkados ──────────────────────────────────
+  final List<TicketParkado> _ticketsParkados = [];
+  int _contadorTickets = 1;
+
   // ── Getters ───────────────────────────────────────────
-  List<Producto>             get resultados     => _resultados;
-  List<ItemCarrito>          get carrito        => _carrito;
-  List<Map<String, dynamic>> get ventas         => _ventas;
-  Map<String, dynamic>?      get ventaDetalle   => _ventaDetalle;
-  bool                       get buscando       => _buscando;
-  bool                       get procesando     => _procesando;
-  bool                       get cargandoVentas => _cargandoVentas;
-  String                     get errorMsg       => _errorMsg;
-  String                     get successMsg     => _successMsg;
-  String                     get metodoPago     => _metodoPago;
-  double                     get montoRecibido  => _montoRecibido;
-  double                     get descuento      => _descuento;
+  List<Producto>             get resultados        => _resultados;
+  List<ItemCarrito>          get carrito           => _carrito;
+  List<Map<String, dynamic>> get ventas            => _ventas;
+  Map<String, dynamic>?      get ventaDetalle      => _ventaDetalle;
+  bool                       get buscando          => _buscando;
+  bool                       get procesando        => _procesando;
+  bool                       get cargandoVentas    => _cargandoVentas;
+  String                     get errorMsg          => _errorMsg;
+  String                     get successMsg        => _successMsg;
+  String                     get metodoPago        => _metodoPago;
+  double                     get montoRecibido     => _montoRecibido;
+  double                     get descuento         => _descuento;
+  List<TicketParkado>        get ticketsParkados   => List.unmodifiable(_ticketsParkados);
+  bool                       get hayTicketsParkados => _ticketsParkados.isNotEmpty;
+  int                        get numTicketsParkados => _ticketsParkados.length;
 
   double get total             => _carrito.fold(0, (sum, item) => sum + item.subtotal);
   double get totalConDescuento => (total - _descuento).clamp(0, double.infinity);
@@ -81,19 +107,30 @@ class PosProvider extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    await cargarProductos(q: query, tiendaId: tiendaId);
+  }
+
+  /// Carga productos sin restricción de query vacío.
+  /// Usado para browsing por categoría o carga inicial del POS.
+  Future<void> cargarProductos({
+    String? q,
+    int?    tiendaId,
+    int?    categoriaId,
+  }) async {
     _buscando = true;
     notifyListeners();
 
     final result = await _inventarioService.getProductos(
-      q:        query,
-      tiendaId: tiendaId,
+      q:           q,
+      tiendaId:    tiendaId,
+      categoriaId: categoriaId,
     );
 
     if (result['success'] == true) {
       _resultados = result['data'] as List<Producto>;
     } else {
       _resultados = [];
-      _errorMsg = result['error'] ?? 'Error al buscar productos';
+      _errorMsg   = result['error'] ?? 'Error al cargar productos';
     }
 
     _buscando = false;
@@ -113,12 +150,18 @@ class PosProvider extends ChangeNotifier {
         notifyListeners();
         return;
       }
+      final eraMayoreo = _carrito[index].aplicaMayoreo;
       _carrito[index].cantidad++;
+      if (!eraMayoreo && _carrito[index].aplicaMayoreo) {
+        _successMsg = '¡Precio mayoreo activado: \$${_carrito[index].precioUnitario.toStringAsFixed(0)}/ud!';
+      } else {
+        _successMsg = '';
+      }
     } else {
       _carrito.add(ItemCarrito(producto: producto));
+      _successMsg = '';
     }
-    _errorMsg   = '';
-    _successMsg = '';
+    _errorMsg = '';
     notifyListeners();
   }
 
@@ -131,7 +174,13 @@ class PosProvider extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    final eraMayoreo = item.aplicaMayoreo;
     item.cantidad++;
+    if (!eraMayoreo && item.aplicaMayoreo) {
+      _successMsg = '¡Precio mayoreo activado: \$${item.precioUnitario.toStringAsFixed(0)}/ud!';
+    } else if (eraMayoreo && !item.aplicaMayoreo) {
+      _successMsg = '';
+    }
     _errorMsg = '';
     notifyListeners();
   }
@@ -139,7 +188,11 @@ class PosProvider extends ChangeNotifier {
   // ✅ FIX: ajusta descuento si el total baja al decrementar
   void decrementar(int index) {
     if (_carrito[index].cantidad > 1) {
+      final eraMayoreo = _carrito[index].aplicaMayoreo;
       _carrito[index].cantidad--;
+      if (eraMayoreo && !_carrito[index].aplicaMayoreo) {
+        _successMsg = '';
+      }
     } else {
       _carrito.removeAt(index);
     }
@@ -162,6 +215,60 @@ class PosProvider extends ChangeNotifier {
     _errorMsg      = '';
     _successMsg    = '';
     _descuento     = 0;
+    notifyListeners();
+  }
+
+  // ── Tickets parkados ──────────────────────────────────
+
+  /// Guarda el carrito actual como ticket parkado y limpia para uno nuevo.
+  /// Solo parka si hay items en el carrito.
+  bool parquearTicket() {
+    if (_carrito.isEmpty) return false;
+    _ticketsParkados.add(TicketParkado(
+      carrito:       List.from(_carrito),
+      metodoPago:    _metodoPago,
+      montoRecibido: _montoRecibido,
+      descuento:     _descuento,
+      numero:        _contadorTickets++,
+    ));
+    _carrito       = [];
+    _resultados    = [];
+    _montoRecibido = 0;
+    _metodoPago    = 'efectivo';
+    _descuento     = 0;
+    _errorMsg      = '';
+    _successMsg    = '';
+    notifyListeners();
+    return true;
+  }
+
+  /// Restaura un ticket parkado al carrito activo.
+  /// Si el carrito activo tiene items, lo parka primero.
+  void restaurarTicket(int index) {
+    if (index < 0 || index >= _ticketsParkados.length) return;
+    if (_carrito.isNotEmpty) {
+      _ticketsParkados.add(TicketParkado(
+        carrito:       List.from(_carrito),
+        metodoPago:    _metodoPago,
+        montoRecibido: _montoRecibido,
+        descuento:     _descuento,
+        numero:        _contadorTickets++,
+      ));
+    }
+    final snap    = _ticketsParkados.removeAt(index);
+    _carrito       = List.from(snap.carrito);
+    _metodoPago    = snap.metodoPago;
+    _montoRecibido = snap.montoRecibido;
+    _descuento     = snap.descuento;
+    _errorMsg      = '';
+    _successMsg    = '';
+    notifyListeners();
+  }
+
+  /// Descarta un ticket parkado sin restaurarlo.
+  void descartarTicketParkado(int index) {
+    if (index < 0 || index >= _ticketsParkados.length) return;
+    _ticketsParkados.removeAt(index);
     notifyListeners();
   }
 

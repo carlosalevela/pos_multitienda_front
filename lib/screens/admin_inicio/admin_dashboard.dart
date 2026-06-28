@@ -24,6 +24,8 @@ import '../empresas/empresas_screen.dart';
 import '../devoluciones/devoluciones_screen.dart';
 import '../caja/caja_dashboard_admin.dart';
 import '../cajero_inicio/cajero_dashboard.dart';
+import '../separados/separados_screen.dart';
+import '../configuracion/configuracion_screen.dart';
 
 class _C {
   static const bg = Color(0xFFF5F7F8);
@@ -46,7 +48,6 @@ class _C {
   static const purpleLight = Color(0xFFF5F3FF);
   static const sidebar = Color(0xFFFFFFFF);
   static const sidebarHov = Color(0xFFF3F4F6);
-  static const sidebarAct = Color(0xFF61DDAA);
 }
 
 class _KPI {
@@ -92,12 +93,14 @@ List<_NavItem> _buildNavItems(String rol) {
     const _NavItem(label: 'Contabilidad', screen: 'contabilidad', icon: Icons.bar_chart_rounded),
     const _NavItem(label: 'Reportes', screen: 'reports', icon: Icons.assessment_rounded),
     const _NavItem(label: 'Clientes', screen: 'clientes', icon: Icons.people_alt_rounded),
+    const _NavItem(label: 'Separados', screen: 'separados', icon: Icons.bookmark_rounded),
     const _NavItem(label: 'Proveedores', screen: 'suppliers', icon: Icons.local_shipping_rounded),
     const _NavItem(label: 'Compras', screen: 'compras', icon: Icons.shopping_cart_rounded),
     const _NavItem(label: 'Devoluciones', screen: 'devoluciones', icon: Icons.assignment_return_rounded),
     const _NavItem(label: 'Empleados', screen: 'empleados', icon: Icons.people_rounded),
     const _NavItem(label: 'Tiendas', screen: 'stores', icon: Icons.store_rounded),
     const _NavItem(label: 'Empresas', screen: 'empresas', icon: Icons.business_rounded),
+    const _NavItem(label: 'Configuración', screen: 'configuracion', icon: Icons.settings_outlined),
   ];
 
   bool allowed(_NavItem item) {
@@ -109,12 +112,14 @@ List<_NavItem> _buildNavItems(String rol) {
       case 'contabilidad': return ['admin', 'supervisor', 'superadmin'].contains(rol);
       case 'reports': return rol == 'cajero';
       case 'clientes': return ['admin', 'supervisor', 'cajero', 'superadmin'].contains(rol);
+      case 'separados': return ['admin', 'supervisor', 'superadmin'].contains(rol);
       case 'suppliers': return ['admin', 'supervisor', 'superadmin'].contains(rol);
       case 'compras': return ['admin', 'supervisor', 'superadmin'].contains(rol);
       case 'devoluciones': return ['admin', 'supervisor', 'cajero', 'superadmin'].contains(rol);
       case 'empleados': return ['admin', 'superadmin'].contains(rol);
       case 'stores': return ['admin', 'superadmin'].contains(rol);
       case 'empresas': return ['admin', 'superadmin'].contains(rol);
+      case 'configuracion': return ['admin', 'supervisor', 'superadmin'].contains(rol);
       default: return false;
     }
   }
@@ -127,11 +132,13 @@ List<_NavItem> _buildNavItems(String rol) {
       'contabilidad',
       'cash',
       'clientes',
+      'separados',
       'devoluciones',
       'empleados',
       'stores',
       'empresas',
       'suppliers',
+      'configuracion',
     ].contains(i.screen)).toList();
   }
   return items.where(allowed).toList();
@@ -162,20 +169,24 @@ class _AdminDashboardState extends State<AdminDashboard> {
       case 'dashboard':
         if (rol == 'cajero') return CajeroDashboard(onNavigate: _navigate);
         return _DashboardBody(userName: userName.split(' ').first, onNavigate: _navigate);
-      case 'pos': return const PosScreen();
+      case 'pos': return PosScreen(onNavigate: _navigate);
       case 'inventory': return const InventarioScreen();
       case 'cash':
         if (rol == 'admin' || rol == 'superadmin') return const CajaDashboardAdmin();
         return const CajaScreen();
       case 'contabilidad': return const ContabilidadScreen();
       case 'reports': return const ReportesScreen();
-      case 'clientes': return ClientesScreen(esAdminOSupervisor: rol == 'admin' || rol == 'supervisor' || rol == 'superadmin');
+      case 'clientes':
+        if (rol == 'cajero') return const SeparadosScreen();
+        return ClientesScreen(esAdminOSupervisor: rol == 'admin' || rol == 'supervisor' || rol == 'superadmin');
+      case 'separados': return const SeparadosScreen();
       case 'suppliers': return const ProveedoresScreen();
       case 'compras': return const ComprasScreen();
       case 'devoluciones': return const DevolucionesScreen();
       case 'empleados': return const EmpleadosScreen();
       case 'stores': return const TiendasScreen();
       case 'empresas': return const EmpresasScreen();
+      case 'configuracion': return const ConfiguracionScreen();
       default: return _PlaceholderScreen(screen: screen, onBack: () => _navigate('dashboard'));
     }
   }

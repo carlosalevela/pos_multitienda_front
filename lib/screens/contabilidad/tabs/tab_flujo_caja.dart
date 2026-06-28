@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../providers/contabilidad_provider.dart';
+import 'export_guard.dart';
 
 enum _PeriodoFlujo { semana, mes, custom }
 
@@ -392,6 +393,9 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
         onPressed: cont.exportando
             ? null
             : () async {
+                final ok = await verificarReporteAntesDe(
+                  context, tiendaId: widget.tiendaId);
+                if (!ok || !mounted) return;
                 await cont.exportarExcel(
                   tipo:     'flujo-caja',
                   fechaIni: ini,

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../providers/contabilidad_provider.dart';
 import '../../../models/contabilidad_models.dart';
+import 'export_guard.dart';
 
 enum _Periodo { semana, mes, anio, custom }
 
@@ -196,6 +197,9 @@ class _TabPLState extends State<TabPL> {
         onPressed: cont.exportando
             ? null
             : () async {
+                final ok = await verificarReporteAntesDe(
+                  context, tiendaId: widget.tiendaId);
+                if (!ok || !mounted) return;
                 await cont.exportarExcel(
                   tipo:     'estado-resultados',
                   fechaIni: ini,

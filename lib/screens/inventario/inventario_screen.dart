@@ -1,6 +1,7 @@
 // lib/screens/inventario/inventario_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../utils/file_downloader.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -8,8 +9,10 @@ import '../../providers/inventario_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../core/constants.dart';
 import '../../models/producto.dart';
+import '../../models/separado.dart';
 import '../../services/empleado_service.dart';
 import '../../services/inventario_service.dart';
+import '../../services/cliente_service.dart';
 import 'widgets/producto_form_dialog.dart';
 import 'widgets/importar_excel_dialog.dart';
 import 'widgets/averias_dialog.dart';
@@ -38,6 +41,10 @@ class _InventarioScreenState extends State<InventarioScreen>
   List<Map<String, dynamic>> _topProductos = [];
   List<Map<String, dynamic>> _movimientos  = [];
   bool                       _cargandoInsights = false;
+
+  // Cajero panel data
+  List<Separado> _separadosActivos   = [];
+  bool           _cargandoCajeroPanel = false;
 
   late AnimationController _fadeCtrl;
   late Animation<double>   _fadeAnim;
@@ -102,7 +109,8 @@ class _InventarioScreenState extends State<InventarioScreen>
           activo:   _activoFiltro,
         );
       }
-      if (auth.rol != 'cajero') _cargarInsights();
+      _cargarInsights();
+      if (auth.rol == 'cajero') _cargarPanelCajero();
     });
   }
 
@@ -173,6 +181,20 @@ class _InventarioScreenState extends State<InventarioScreen>
     } catch (_) {
       if (mounted) setState(() => _cargandoInsights = false);
     }
+  }
+
+  Future<void> _cargarPanelCajero() async {
+    if (!mounted) return;
+    setState(() => _cargandoCajeroPanel = true);
+    final tid = context.read<AuthProvider>().tiendaId;
+    try {
+      final seps = await ClienteService().getSeparados(
+        tiendaId: tid > 0 ? tid : null,
+        estado: 'activo',
+      );
+      if (mounted) setState(() => _separadosActivos = seps);
+    } catch (_) {}
+    if (mounted) setState(() => _cargandoCajeroPanel = false);
   }
 
   Color _avatarColor(String nombre) {
@@ -390,7 +412,7 @@ class _InventarioScreenState extends State<InventarioScreen>
                 _selectorTienda(),
                 const SizedBox(height: 12),
               ],
-              _buildKPIGrid(inv.productos),
+              _buildKPIGrid(inv.productos, esCajero: esCajero),
               const SizedBox(height: 14),
               _buildToolbar(esCajero, inv),
               const SizedBox(height: 12),
@@ -414,12 +436,20 @@ class _InventarioScreenState extends State<InventarioScreen>
                               : _buildTabla(
                                   inv.productos, esCajero, esAdmin, inv),
                     ),
-                    // ── Panel insights ───────────────────
+                    // ── Panel insights (admin/supervisor) ─
                     if (puedeGestionar) ...[
                       const SizedBox(width: 16),
                       SizedBox(
                         width: 280,
                         child: _buildInsightsPanel(),
+                      ),
+                    ],
+                    // ── Panel turno (cajero) ──────────────
+                    if (esCajero) ...[
+                      const SizedBox(width: 16),
+                      SizedBox(
+                        width: 280,
+                        child: _buildCajeroPanel(inv.productos),
                       ),
                     ],
                   ],
@@ -563,14 +593,18 @@ class _InventarioScreenState extends State<InventarioScreen>
   // ══════════════════════════════════════════════════════
   // KPI GRID
   // ══════════════════════════════════════════════════════
-  Widget _buildKPIGrid(List<Producto> productos) {
+  Widget _buildKPIGrid(List<Producto> productos, {bool esCajero = false}) {
     final d          = _dashboard;
     final valorTotal = d != null
         ? _toDouble(d['total_valor_inventario'])
         : productos.fold<double>(0, (s, p) => s + p.precio * p.stockActual);
     final alertasBajo = d != null
         ? _toInt(d['alertas_stock_bajo'])
-        : productos.where((p) => p.stockActual > 0 && p.stockActual <= p.stockMinimo).length;
+        : productos.where((p) =>
+            p.stockActual > 0 &&
+            (p.stockMinimo > 0
+                ? p.stockActual <= p.stockMinimo
+                : p.stockActual <= 10)).length;
     final alertasCrit = d != null
         ? _toInt(d['alertas_criticas'])
         : productos.where((p) => p.stockActual <= 0).length;
@@ -582,17 +616,19 @@ class _InventarioScreenState extends State<InventarioScreen>
         : 0.0;
 
     return Row(children: [
-      Expanded(child: _kpiCard(
-        icon:      Icons.payments_rounded,
-        iconBg:    const Color(0xFFDAE2FD),
-        iconColor: const Color(0xFF3F465C),
-        label:     'VALOR DE INVENTARIO',
-        value:     '${Constants.moneda}${_formatNum(valorTotal)}',
-        sub:       '${productos.length} productos en stock',
-        accent:    _green,
-        barValue:  null,
-      )),
-      const SizedBox(width: 12),
+      if (!esCajero) ...[
+        Expanded(child: _kpiCard(
+          icon:      Icons.payments_rounded,
+          iconBg:    const Color(0xFFDAE2FD),
+          iconColor: const Color(0xFF3F465C),
+          label:     'VALOR DE INVENTARIO',
+          value:     '${Constants.moneda}${_formatNum(valorTotal)}',
+          sub:       '${productos.length} productos en stock',
+          accent:    _green,
+          barValue:  null,
+        )),
+        const SizedBox(width: 12),
+      ],
       Expanded(child: _kpiCard(
         icon:        Icons.warning_rounded,
         iconBg:      _dangerBg,
@@ -856,7 +892,10 @@ class _InventarioScreenState extends State<InventarioScreen>
       ] else
         Expanded(flex: 2, child: _th('Precio', right: true)),
       Expanded(flex: 1, child: _th('Stock', right: true)),
-      Expanded(flex: 2, child: _th('Estado')),
+      Expanded(flex: 2, child: Padding(
+        padding: const EdgeInsets.only(left: 12),
+        child: _th('Estado'),
+      )),
       if (!esCajero) const SizedBox(width: 44),
     ]),
   );
@@ -872,7 +911,9 @@ class _InventarioScreenState extends State<InventarioScreen>
       bool esAdmin, InventarioProvider inv) {
     final esInactivo = _activoFiltro == 'false';
     final agotado    = p.stockActual <= 0;
-    final bajo       = !agotado && p.stockActual <= p.stockMinimo;
+    final bajo       = !agotado && (p.stockMinimo > 0
+        ? p.stockActual <= p.stockMinimo
+        : p.stockActual <= 10);
     final isHovered  = _hoveredRow == idx;
 
     final (estadoText, estadoColor) = esInactivo
@@ -970,25 +1011,29 @@ class _InventarioScreenState extends State<InventarioScreen>
                     child: esInactivo
                       ? Text('—',
                           style: _t(size: 12, color: _muted2))
-                      : Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: mColor.withValues(alpha: 0.10),
-                            borderRadius: BorderRadius.circular(4),
+                      : FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: mColor.withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(mainAxisSize: MainAxisSize.min,
+                                children: [
+                              Icon(
+                                margen >= 0
+                                    ? Icons.trending_up_rounded
+                                    : Icons.trending_down_rounded,
+                                size: 11, color: mColor),
+                              const SizedBox(width: 3),
+                              Text('${margen.toStringAsFixed(1)}%',
+                                  style: _t(size: 11, weight: FontWeight.w700,
+                                      color: mColor)),
+                            ]),
                           ),
-                          child: Row(mainAxisSize: MainAxisSize.min,
-                              children: [
-                            Icon(
-                              margen >= 0
-                                  ? Icons.trending_up_rounded
-                                  : Icons.trending_down_rounded,
-                              size: 11, color: mColor),
-                            const SizedBox(width: 3),
-                            Text('${margen.toStringAsFixed(1)}%',
-                                style: _t(size: 11, weight: FontWeight.w700,
-                                    color: mColor)),
-                          ]),
                         ),
                   ),
                 ),
@@ -1011,7 +1056,7 @@ class _InventarioScreenState extends State<InventarioScreen>
               // ── Estado ───────────────────────────────
               Expanded(
                 flex: 2,
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                child: Row(children: [
                   const SizedBox(width: 12),
                   Container(
                     width: 7, height: 7,
@@ -1019,9 +1064,12 @@ class _InventarioScreenState extends State<InventarioScreen>
                         color: estadoColor, shape: BoxShape.circle),
                   ),
                   const SizedBox(width: 6),
-                  Text(estadoText,
-                      style: _t(size: 12, weight: FontWeight.w600,
-                          color: estadoColor)),
+                  Flexible(
+                    child: Text(estadoText,
+                        overflow: TextOverflow.ellipsis,
+                        style: _t(size: 12, weight: FontWeight.w600,
+                            color: estadoColor)),
+                  ),
                 ]),
               ),
               // ── Acciones ─────────────────────────────
@@ -1099,6 +1147,339 @@ class _InventarioScreenState extends State<InventarioScreen>
       ]),
     );
   }
+
+  // ══════════════════════════════════════════════════
+  // PANEL TURNO CAJERO
+  // ══════════════════════════════════════════════════
+  Widget _buildCajeroPanel(List<Producto> productos) {
+    final agotados = productos.where((p) => p.stockActual <= 0).toList();
+    // Si stockMinimo está configurado úsalo; si no, considera crítico ≤ 10 uds
+    final criticos = productos.where((p) =>
+        p.stockActual > 0 &&
+        (p.stockMinimo > 0
+            ? p.stockActual <= p.stockMinimo
+            : p.stockActual <= 10)).toList();
+    final fmtMoney  = NumberFormat.currency(
+        locale: 'es_CO', symbol: '\$', decimalDigits: 0);
+    final fmtDate   = DateFormat('d MMM', 'es');
+
+    return SingleChildScrollView(
+      child: Column(children: [
+
+        // ── Encabezado ──────────────────────────────
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF131B2E),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(children: [
+            Container(
+              width: 38, height: 38,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.dashboard_rounded,
+                  color: Colors.white, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Informe de turno',
+                    style: _t(size: 13, weight: FontWeight.w700,
+                        color: Colors.white)),
+                Text(DateFormat('EEEE d MMM · HH:mm', 'es')
+                        .format(DateTime.now()),
+                    style: _t(size: 10, color: Colors.white60)),
+              ],
+            )),
+            GestureDetector(
+              onTap: () {
+                _cargarPanelCajero();
+                _cargarInsights();
+              },
+              child: const Icon(Icons.refresh_rounded,
+                  color: Colors.white54, size: 16),
+            ),
+          ]),
+        ),
+
+        const SizedBox(height: 12),
+
+        // ── 1. Stock crítico ────────────────────────
+        _cajeroCard(
+          icon: Icons.warning_rounded,
+          iconColor: agotados.isNotEmpty ? _danger : _warning,
+          iconBg: agotados.isNotEmpty ? _dangerBg : const Color(0xFFFEF3C7),
+          title: 'Stock crítico',
+          subtitle: '${agotados.length} agotados · ${criticos.length} bajos',
+          loading: false,
+          empty: agotados.isEmpty && criticos.isEmpty,
+          emptyMsg: 'Todo el stock está bien',
+          emptyIcon: Icons.check_circle_outline_rounded,
+          child: Column(children: [
+            if (agotados.isNotEmpty) ...[
+              _seccionLabel('AGOTADOS', _danger),
+              ...agotados.take(5).map((p) => _stockRow(
+                p.nombre, p.categoria,
+                '0 uds', _danger, _dangerBg,
+              )),
+              if (agotados.length > 5)
+                _verMasTxt('${agotados.length - 5} más agotados', _danger),
+            ],
+            if (criticos.isNotEmpty) ...[
+              if (agotados.isNotEmpty) const SizedBox(height: 8),
+              _seccionLabel('STOCK BAJO', _warning),
+              ...criticos.take(4).map((p) => _stockRow(
+                p.nombre, p.categoria,
+                '${p.stockActual.toInt()} uds', _warning,
+                const Color(0xFFFEF3C7),
+              )),
+              if (criticos.length > 4)
+                _verMasTxt('${criticos.length - 4} más con stock bajo',
+                    _warning),
+            ],
+          ]),
+        ),
+
+        const SizedBox(height: 12),
+
+        // ── 2. Separados activos ────────────────────
+        _cajeroCard(
+          icon: Icons.bookmark_rounded,
+          iconColor: _green,
+          iconBg: _greenBg,
+          title: 'Separados activos',
+          subtitle: '${_separadosActivos.length} pedido${_separadosActivos.length != 1 ? 's' : ''} reservado${_separadosActivos.length != 1 ? 's' : ''}',
+          loading: _cargandoCajeroPanel,
+          empty: _separadosActivos.isEmpty,
+          emptyMsg: 'Sin separados activos',
+          emptyIcon: Icons.bookmark_border_rounded,
+          child: Column(
+            children: _separadosActivos.take(5).map((s) {
+              final vencido = s.fechaLimite != null &&
+                  DateTime.tryParse(s.fechaLimite!)
+                          ?.isBefore(DateTime.now()) ==
+                      true;
+              final porVencer = !vencido && s.fechaLimite != null &&
+                  DateTime.tryParse(s.fechaLimite!)
+                          ?.isBefore(DateTime.now().add(
+                              const Duration(days: 3))) ==
+                      true;
+              final alertColor = vencido
+                  ? _danger
+                  : porVencer
+                      ? _warning
+                      : _green;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(children: [
+                  Container(
+                    width: 32, height: 32,
+                    decoration: BoxDecoration(
+                      color: alertColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Center(
+                      child: Text(
+                        s.clienteNombre.isNotEmpty
+                            ? s.clienteNombre[0].toUpperCase() : '?',
+                        style: _t(size: 13, weight: FontWeight.w800,
+                            color: alertColor),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(s.clienteNombre,
+                          overflow: TextOverflow.ellipsis,
+                          style: _t(size: 12, weight: FontWeight.w600)),
+                      if (s.fechaLimite != null)
+                        Text(
+                          vencido ? 'Vencido' :
+                          'Límite: ${fmtDate.format(DateTime.parse(s.fechaLimite!))}',
+                          style: _t(size: 10, color: alertColor,
+                              weight: FontWeight.w600),
+                        ),
+                    ],
+                  )),
+                  Text(fmtMoney.format(s.saldoPendiente),
+                      style: _t(size: 12, weight: FontWeight.w700,
+                          color: alertColor)),
+                ]),
+              );
+            }).toList(),
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // ── 3. Movimientos recientes ────────────────
+        _cajeroCard(
+          icon: Icons.swap_horiz_rounded,
+          iconColor: const Color(0xFF3F465C),
+          iconBg: const Color(0xFFDAE2FD),
+          title: 'Movimientos hoy',
+          subtitle: '${_movimientos.length} registrado${_movimientos.length != 1 ? 's' : ''}',
+          loading: _cargandoInsights,
+          empty: _movimientos.isEmpty,
+          emptyMsg: 'Sin movimientos hoy',
+          emptyIcon: Icons.swap_horiz_rounded,
+          child: Column(
+            children: _movimientos.take(6).map((m) {
+              final tipo     = m['tipo'] as String? ?? '';
+              final nombre   = m['producto'] as String? ?? '—';
+              final cantidad = m['cantidad'];
+              final hora     = m['created_at'] != null
+                  ? DateFormat('HH:mm').format(
+                      DateTime.parse(m['created_at'] as String))
+                  : '';
+              final (color, icon, prefix) = switch (tipo) {
+                'entrada'  => (_green,   Icons.arrow_downward_rounded, '+'),
+                'salida'   => (_danger,  Icons.arrow_upward_rounded,   '-'),
+                'averia'   => (_warning, Icons.report_rounded,         ''),
+                _          => (_muted2,  Icons.swap_horiz_rounded,     ''),
+              };
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(children: [
+                  Container(
+                    width: 28, height: 28,
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    child: Icon(icon, size: 14, color: color),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(nombre,
+                      overflow: TextOverflow.ellipsis,
+                      style: _t(size: 12, weight: FontWeight.w600))),
+                  const SizedBox(width: 4),
+                  Text('$prefix$cantidad',
+                      style: _t(size: 12, weight: FontWeight.w700,
+                          color: color)),
+                  if (hora.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    Text(hora, style: _t(size: 10, color: _muted2)),
+                  ],
+                ]),
+              );
+            }).toList(),
+          ),
+        ),
+
+        const SizedBox(height: 16),
+      ]),
+    );
+  }
+
+  Widget _cajeroCard({
+    required IconData icon,
+    required Color    iconColor,
+    required Color    iconBg,
+    required String   title,
+    required String   subtitle,
+    required bool     loading,
+    required bool     empty,
+    required String   emptyMsg,
+    required IconData emptyIcon,
+    required Widget   child,
+  }) =>
+    Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 10, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            width: 34, height: 34,
+            decoration: BoxDecoration(
+                color: iconBg, borderRadius: BorderRadius.circular(9)),
+            child: Icon(icon, size: 16, color: iconColor),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: _t(size: 13, weight: FontWeight.w700)),
+              Text(subtitle, style: _t(size: 10, color: _muted2)),
+            ],
+          )),
+        ]),
+        const SizedBox(height: 14),
+        const Divider(height: 1, color: Color(0xFFF0F0F2)),
+        const SizedBox(height: 12),
+        if (loading)
+          const Center(child: SizedBox(width: 22, height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2,
+                  color: Color(0xFF006C49))))
+        else if (empty)
+          Row(children: [
+            Icon(emptyIcon, size: 15, color: _muted2),
+            const SizedBox(width: 6),
+            Text(emptyMsg, style: _t(size: 12, color: _muted2)),
+          ])
+        else
+          child,
+      ]),
+    );
+
+  Widget _seccionLabel(String label, Color color) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text(label,
+        style: _t(size: 9, weight: FontWeight.w800,
+            color: color, letterSpacing: 0.8)),
+  );
+
+  Widget _stockRow(String nombre, String cat, String stock,
+      Color color, Color bg) =>
+    Padding(
+      padding: const EdgeInsets.only(bottom: 7),
+      child: Row(children: [
+        Container(
+          width: 28, height: 28,
+          decoration: BoxDecoration(
+              color: bg, borderRadius: BorderRadius.circular(7)),
+          child: Icon(Icons.inventory_2_outlined, size: 13, color: color),
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(nombre, overflow: TextOverflow.ellipsis,
+                style: _t(size: 12, weight: FontWeight.w600)),
+            Text(cat.toUpperCase(),
+                style: _t(size: 9, color: _muted2, letterSpacing: 0.5)),
+          ],
+        )),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+          decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(6)),
+          child: Text(stock,
+              style: _t(size: 10, weight: FontWeight.w700, color: color)),
+        ),
+      ]),
+    );
+
+  Widget _verMasTxt(String label, Color color) => Padding(
+    padding: const EdgeInsets.only(top: 2, bottom: 4),
+    child: Text(label,
+        style: _t(size: 10, weight: FontWeight.w600, color: color)),
+  );
 
   Widget _topSellersCard() => Container(
     padding: const EdgeInsets.all(18),

@@ -14,11 +14,21 @@ class ItemCarrito {
     this.descuento  = 0,
   });
 
-  // Precio unitario efectivo:
-  // Si hay precio personalizado → lo usa
-  // Si no → precio original menos descuento fijo
-  double get precioUnitario =>
-      precioPersonalizado ?? (producto.precio - descuento);
+  // true cuando la cantidad actual alcanza el umbral mayoreo
+  bool get aplicaMayoreo {
+    if (!producto.manejaMayoreo) return false;
+    if (producto.precioMayoreo == null) return false;
+    final umbral = producto.umbralMayoreo;
+    if (umbral == null) return false;
+    return cantidad >= umbral;
+  }
+
+  // Precio unitario efectivo (precedencia: manual → mayoreo → normal - descuento)
+  double get precioUnitario {
+    if (precioPersonalizado != null) return precioPersonalizado!;
+    if (aplicaMayoreo) return producto.precioMayoreo!;
+    return producto.precio - descuento;
+  }
 
   // Subtotal siempre usa precioUnitario
   double get subtotal => precioUnitario * cantidad;
