@@ -66,6 +66,19 @@ class ClienteService {
     }
   }
 
+  /// GET /api/clientes/{pk}/resumen/ — retorna separados_activos, deuda_total, etc.
+  Future<Map<String, dynamic>> getClienteResumen(int pk) async {
+    try {
+      final r = await ApiClient.instance.get('/clientes/$pk/resumen/');
+      return r.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      debugPrint('❌ getClienteResumen: ${e.response?.data}');
+      return {'separados_activos': 0, 'deuda_total': 0.0};
+    } catch (_) {
+      return {'separados_activos': 0, 'deuda_total': 0.0};
+    }
+  }
+
   Future<Cliente?> getCliente(int id) async {
     try {
       final r = await ApiClient.instance.get('/clientes/$id/');

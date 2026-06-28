@@ -1,3 +1,6 @@
+// lib/screens/clientes/widgets/separado_form.dart
+
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -6,15 +9,27 @@ import 'package:pos_multitienda_app/models/item_carrito.dart';
 import 'package:pos_multitienda_app/providers/caja_provider.dart';
 import 'package:provider/provider.dart';
 import '../../../models/cliente.dart';
-import '../../../models/separado.dart';
 import '../../../providers/cliente_provider.dart';
 
-class SeparadoForm extends StatefulWidget {
-  final int?         tiendaId;
-  final NumberFormat fmt;
-  final VoidCallback? onCreado;
+// ── Paleta del sistema de diseño ─────────────────────────────
+const _kGreen     = Color(0xFF61DDAA);   // mint — igual que dashboard
+const _kGreenDark = Color(0xFF0B7A53);   // verde oscuro para texto/iconos
+const _kDark      = Color(0xFF0F172A);
+const _kCard      = Colors.white;
+const _kBorder    = Color(0xFFE2E8F0);
+const _kTextSub   = Color(0xFF94A3B8);
+const _kTextBody  = Color(0xFF475569);
+const _kTextHead  = Color(0xFF1E293B);
+const _kAmber     = Color(0xFFF59E0B);
+const _kRed       = Color(0xFFEF4444);
+const _kSurface   = Color(0xFFF8F9FC);
 
-  final Cliente? clienteInicial;
+class SeparadoForm extends StatefulWidget {
+  final int?              tiendaId;
+  final NumberFormat      fmt;
+  final VoidCallback?     onCreado;
+  final Cliente?          clienteInicial;
+  final DateTime?         fechaInicial;
   final List<ItemCarrito> itemsIniciales;
 
   const SeparadoForm({
@@ -23,27 +38,47 @@ class SeparadoForm extends StatefulWidget {
     required this.fmt,
     this.onCreado,
     this.clienteInicial,
+    this.fechaInicial,
     required this.itemsIniciales,
   });
 
+  /// Abre el panel como diálogo que desliza desde la derecha.
   static Future<void> mostrar(
     BuildContext context, {
-    required int?         tiendaId,
-    required NumberFormat fmt,
-    VoidCallback?         onCreado,
-    Cliente?    clienteInicial,
+    required int?              tiendaId,
+    required NumberFormat      fmt,
+    VoidCallback?              onCreado,
+    Cliente?                   clienteInicial,
+    DateTime?                  fechaInicial,
     required List<ItemCarrito> itemsInciales,
   }) {
-    return showModalBottomSheet(
-      context:            context,
-      isScrollControlled: true,
-      backgroundColor:    Colors.transparent,
-      builder: (_) => SeparadoForm(
-        tiendaId: tiendaId,
-        fmt:      fmt,
-        onCreado: onCreado,
-        clienteInicial: clienteInicial,
-        itemsIniciales: itemsInciales,
+    return showGeneralDialog(
+      context:          context,
+      barrierDismissible: true,
+      barrierLabel:     '',
+      barrierColor:     Colors.black54,
+      transitionDuration: const Duration(milliseconds: 280),
+      transitionBuilder: (_, anim, _, child) => SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(1.0, 0.0),
+          end:   Offset.zero,
+        ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+        child: child,
+      ),
+      pageBuilder: (ctx, _, _) => Align(
+        alignment: Alignment.centerRight,
+        child: SizedBox(
+          width:  min(580, MediaQuery.of(ctx).size.width * 0.68),
+          height: double.infinity,
+          child: SeparadoForm(
+            tiendaId:       tiendaId,
+            fmt:            fmt,
+            onCreado:       onCreado,
+            clienteInicial: clienteInicial,
+            fechaInicial:   fechaInicial,
+            itemsIniciales: itemsInciales,
+          ),
+        ),
       ),
     );
   }
@@ -52,37 +87,44 @@ class SeparadoForm extends StatefulWidget {
   State<SeparadoForm> createState() => _SeparadoFormState();
 }
 
-class _ItemProducto {
-  final productoIdCtrl = TextEditingController();
-  final nombreCtrl     = TextEditingController();
-  final cantidadCtrl   = TextEditingController();
-  final precioCtrl     = TextEditingController();
+// ── Ítem interno ──────────────────────────────────────────────
+class _ItemSep {
+  final int?   productoId;
+  String       nombre;
+  int          cantidad;
+  double       precio;
 
-  double get subtotal {
-    final c = double.tryParse(cantidadCtrl.text) ?? 0;
-    final p = double.tryParse(precioCtrl.text)   ?? 0;
-    return c * p;
+  // Controllers solo para ítems manuales
+  final nombreCtrl   = TextEditingController();
+  final precioCtrl   = TextEditingController();
+
+  _ItemSep({
+    this.productoId,
+    required this.nombre,
+    required this.cantidad,
+    required this.precio,
+  });
+
+  void initCtrls() {
+    nombreCtrl.text = nombre;
+    precioCtrl.text = precio.toStringAsFixed(0);
   }
 
+  double get subtotal => cantidad * precio;
+
   void dispose() {
-    productoIdCtrl.dispose();
     nombreCtrl.dispose();
-    cantidadCtrl.dispose();
     precioCtrl.dispose();
   }
 }
 
 class _SeparadoFormState extends State<SeparadoForm> {
-  final _formKey       = GlobalKey<FormState>();
-  final _fechaCtrl     = TextEditingController();
-  final _abonoCtrl     = TextEditingController(); // ✅ NUEVO
-  final List<_ItemProducto> _items = [];
+  final _formKey   = GlobalKey<FormState>();
+  final _abonoCtrl = TextEditingController();
 
-  Cliente? _clienteSeleccionado;
-  bool     _buscandoCliente = false;
-  String   _metodoPago      = 'efectivo'; // ✅ NUEVO
+  String _metodoPago = 'efectivo';
+  final List<_ItemSep> _items = [];
 
-  // ✅ NUEVO — métodos de pago disponibles
   static const _metodos = [
     ('efectivo',      'Efectivo',      Icons.payments_rounded),
     ('transferencia', 'Transferencia', Icons.swap_horiz_rounded),
@@ -90,821 +132,729 @@ class _SeparadoFormState extends State<SeparadoForm> {
   ];
 
   double get _total => _items.fold(0, (s, i) => s + i.subtotal);
-
-  // ✅ NUEVO — saldo que quedaría tras el abono inicial
-  double get _saldoTrasAbono {
-    final abono = double.tryParse(_abonoCtrl.text) ?? 0;
-    return (_total - abono).clamp(0, double.infinity);
-  }
+  double get _abono => double.tryParse(_abonoCtrl.text) ?? 0;
+  double get _saldo => (_total - _abono).clamp(0, double.infinity);
 
   @override
   void initState() {
     super.initState();
-    _clienteSeleccionado = widget.clienteInicial;
-    
     if (widget.itemsIniciales.isNotEmpty) {
-      for (final item in widget.itemsIniciales) {
-        final p = _ItemProducto();
-        p.productoIdCtrl.text = item.producto.id.toString();
-        p.nombreCtrl.text     = item.producto.nombre;
-        p.cantidadCtrl.text   = item.cantidad.toString();
-        p.precioCtrl.text     = item.precioUnitario.toString();
-        _items.add(p);
+      for (final ic in widget.itemsIniciales) {
+        final item = _ItemSep(
+          productoId: ic.producto.id,
+          nombre:     ic.producto.nombre,
+          cantidad:   ic.cantidad,
+          precio:     ic.precioUnitario,
+        );
+        item.initCtrls();
+        _items.add(item);
       }
     } else {
-      _items.add(_ItemProducto()); // fallback si viniera vacío
-    }  // ✅ arranca con el cliente del POS si viene
+      _agregarItemManual();
+    }
+  }
+
+  void _agregarItemManual() {
+    final item = _ItemSep(nombre: '', cantidad: 1, precio: 0);
+    item.initCtrls();
+    setState(() => _items.add(item));
   }
 
   @override
   void dispose() {
-    _fechaCtrl.dispose();
-    _abonoCtrl.dispose(); // ✅ NUEVO
-    for (final i in _items) i.dispose();
+    _abonoCtrl.dispose();
+    for (final i in _items) { i.dispose(); }
     super.dispose();
   }
 
-  Future<void> _buscarCliente(String q) async {
-    if (q.trim().isEmpty) return;
-    setState(() => _buscandoCliente = true);
-    await context.read<ClienteProvider>().cargarClientesSimple(q: q);
-    if (mounted) setState(() => _buscandoCliente = false);
-  }
-
-  Future<void> _elegirFecha() async {
-    final hoy = DateTime.now();
-    final picked = await showDatePicker(
-      context:     context,
-      initialDate: hoy.add(const Duration(days: 7)),
-      firstDate:   hoy,
-      lastDate:    hoy.add(const Duration(days: 365)),
-      builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.light(
-            primary:   Color(0xFF01696F),
-            onPrimary: Colors.white,
-            surface:   Colors.white,
-          ),
-        ),
-        child: child!,
-      ),
-    );
-    if (picked != null) {
-      setState(() {
-        _fechaCtrl.text = DateFormat('yyyy-MM-dd').format(picked);
-      });
-    }
-  }
-
+  // ── Guardar ───────────────────────────────────────────────
   Future<void> _guardar() async {
     if (!_formKey.currentState!.validate()) return;
-    final cajaAbierta = context.read<CajaProvider>().cajaAbierta;
-    if (!cajaAbierta){
-      _mostrarError('No hay caja abierta en esta tienda, abre la caja');
-      return;
-    }
-    
-    if (_clienteSeleccionado == null) {
-      _mostrarError('Selecciona un cliente');
-      return;
+    if (widget.clienteInicial == null) {
+      _snack('No hay cliente seleccionado', isError: true); return;
     }
     if (_items.isEmpty) {
-      _mostrarError('Agrega al menos un producto');
+      _snack('Agrega al menos un producto', isError: true); return;
+    }
+    final cajaAbierta = context.read<CajaProvider>().cajaAbierta;
+    if (!cajaAbierta) {
+      _snack('No hay caja abierta. Abre la caja primero.', isError: true);
       return;
+    }
+    if (_abono > _total) {
+      _snack('El abono no puede superar el total', isError: true); return;
     }
     FocusScope.of(context).unfocus();
 
-    final abono = double.tryParse(_abonoCtrl.text) ?? 0;
-
-    // ✅ NUEVO — validar que el abono no supere el total
-    if (abono > _total) {
-      _mostrarError('El abono inicial no puede superar el total');
-      return;
+    // Sincronizar ítems manuales
+    for (final item in _items) {
+      if (item.productoId == null) {
+        item.nombre = item.nombreCtrl.text.trim();
+        item.precio = double.tryParse(item.precioCtrl.text) ?? 0;
+      }
     }
 
-    final prov = context.read<ClienteProvider>();
     final data = {
       'tienda':   widget.tiendaId,
-      'cliente':  _clienteSeleccionado!.id,
-      if (_fechaCtrl.text.isNotEmpty) 'fecha_limite': _fechaCtrl.text,
+      'cliente':  widget.clienteInicial!.id,
+      if (widget.fechaInicial != null)
+        'fecha_limite': DateFormat('yyyy-MM-dd').format(widget.fechaInicial!),
       'detalles': _items.map((i) => {
-        'producto':        int.parse(i.productoIdCtrl.text.trim()),
-        'cantidad':        double.parse(i.cantidadCtrl.text.trim()),
-        'precio_unitario': double.parse(i.precioCtrl.text.trim()),
+        if (i.productoId != null) 'producto': i.productoId,
+        'nombre_libre':    i.nombre,
+        'cantidad':        i.cantidad,
+        'precio_unitario': i.precio,
       }).toList(),
-      // ✅ NUEVO — abono inicial si hay monto
-      if (abono > 0) 'abono_inicial': abono,
-      if (abono > 0) 'metodo_pago':   _metodoPago,
+      if (_abono > 0) 'abono_inicial': _abono,
+      if (_abono > 0) 'metodo_pago':   _metodoPago,
     };
 
-    final ok = await prov.crearSeparado(data);
+    final prov = context.read<ClienteProvider>();
+    final ok   = await prov.crearSeparado(data);
     if (!mounted) return;
 
     if (ok) {
       Navigator.pop(context);
       widget.onCreado?.call();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            abono > 0
-                ? 'Separado creado con abono de ${widget.fmt.format(abono)} ✅'
-                : 'Separado creado ✅',
-            style: GoogleFonts.poppins(fontSize: 13),
-          ),
-          backgroundColor: const Color(0xFF437A22),
-          behavior:        SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      _snack(_abono > 0
+          ? 'Separado creado con abono ${widget.fmt.format(_abono)}'
+          : 'Separado creado correctamente');
     } else {
-      _mostrarError(prov.error ?? 'Error al crear separado');
+      _snack(prov.error ?? 'Error al crear separado', isError: true);
     }
   }
 
-  void _mostrarError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg, style: GoogleFonts.poppins(fontSize: 13)),
-        backgroundColor: Colors.red.shade600,
-        behavior:        SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+  void _snack(String msg, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg,
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
+      backgroundColor: isError ? _kRed : _kGreenDark,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.all(16),
+    ));
   }
 
-  // ✅ NUEVO — sección completa de abono inicial
-  Widget _seccionAbonoInicial() {
-    final abono = double.tryParse(_abonoCtrl.text) ?? 0;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Título con ícono
-        Row(children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: const Color(0xFF437A22).withOpacity(0.10),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(Icons.payments_rounded,
-                size: 16, color: Color(0xFF437A22)),
-          ),
-          const SizedBox(width: 8),
-          Text('Abono inicial (opcional)',
-              style: GoogleFonts.poppins(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF28251D))),
-        ]),
-
-        const SizedBox(height: 10),
-
-        // Campo monto
-        TextFormField(
-          controller:   _abonoCtrl,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
-          ],
-          onChanged: (_) => setState(() {}),
-          style: GoogleFonts.poppins(
-              fontSize: 14, color: const Color(0xFF28251D)),
-          decoration: _inputDeco(
-            hint:  'Monto del abono...',
-            icono: Icons.attach_money_rounded,
-            sufijo: _abonoCtrl.text.isNotEmpty
-                ? GestureDetector(
-                    onTap: () => setState(() => _abonoCtrl.clear()),
-                    child: const Icon(Icons.close_rounded,
-                        size: 17, color: Color(0xFF7A7974)),
-                  )
-                : null,
-          ),
-          validator: (v) {
-            if (v == null || v.isEmpty) return null; // opcional
-            final monto = double.tryParse(v);
-            if (monto == null || monto < 0) return 'Monto inválido';
-            if (monto > _total) {
-              return 'No puede superar el total';
-            }
-            return null;
-          },
-        ),
-
-        // Selector método de pago — solo visible si hay monto
-        if (abono > 0) ...[
-          const SizedBox(height: 12),
-          Text('Método de pago',
-              style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF7A7974))),
-          const SizedBox(height: 8),
-          Row(
-            children: _metodos.map((m) {
-              final activo = _metodoPago == m.$1;
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () => setState(() => _metodoPago = m.$1),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    margin:  const EdgeInsets.only(right: 6),
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 10, horizontal: 6),
-                    decoration: BoxDecoration(
-                      color: activo
-                          ? const Color(0xFF01696F)
-                          : const Color(0xFFF2F5F7),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: activo
-                            ? const Color(0xFF01696F)
-                            : const Color(0xFFD4D1CA),
-                      ),
-                    ),
-                    child: Column(children: [
-                      Icon(m.$3,
-                          size: 18,
-                          color: activo
-                              ? Colors.white
-                              : const Color(0xFF7A7974)),
-                      const SizedBox(height: 4),
-                      Text(m.$2,
-                          style: GoogleFonts.poppins(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: activo
-                                  ? Colors.white
-                                  : const Color(0xFF7A7974))),
-                    ]),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-
-          // Resumen saldo que queda
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: const Color(0xFF437A22).withOpacity(0.07),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                  color: const Color(0xFF437A22).withOpacity(0.20)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Saldo pendiente tras abono',
-                    style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: const Color(0xFF437A22))),
-                Text(
-                  widget.fmt.format(_saldoTrasAbono),
-                  style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      color: _saldoTrasAbono == 0
-                          ? const Color(0xFF437A22)
-                          : const Color(0xFFD97706)),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  // ── Buscador de cliente — igual que antes ──────────────
-  Widget _buscadorCliente() {
-    final clientes = context.watch<ClienteProvider>().clientesSimple;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _label('Cliente', obligatorio: true),
-        const SizedBox(height: 6),
-        if (_clienteSeleccionado != null)
-          _clienteChip(_clienteSeleccionado!)
-        else
-          Autocomplete<Cliente>(
-            optionsBuilder: (v) async {
-              if (v.text.trim().isEmpty) return [];
-              await _buscarCliente(v.text);
-              return clientes;
-            },
-            displayStringForOption: (c) => c.nombreCompleto,
-            fieldViewBuilder: (_, ctrl, focus, onSubmit) =>
-                TextFormField(
-                  controller:  ctrl,
-                  focusNode:   focus,
-                  onFieldSubmitted: (_) => onSubmit(),
-                  style: GoogleFonts.poppins(
-                      fontSize: 14, color: const Color(0xFF28251D)),
-                  decoration: _inputDeco(
-                    hint:  'Buscar cliente...',
-                    icono: Icons.person_search_outlined,
-                    sufijo: _buscandoCliente
-                        ? const SizedBox(
-                            width: 16, height: 16,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Color(0xFF01696F)))
-                        : null,
-                  ),
-                ),
-            optionsViewBuilder: (_, onSelected, options) => Align(
-              alignment: Alignment.topLeft,
-              child: Material(
-                elevation:    4,
-                borderRadius: BorderRadius.circular(12),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 200),
-                  child: ListView.builder(
-                    shrinkWrap:  true,
-                    itemCount:   options.length,
-                    itemBuilder: (_, i) {
-                      final c = options.elementAt(i);
-                      return ListTile(
-                        leading: const Icon(
-                            Icons.person_outline_rounded,
-                            size: 18, color: Color(0xFF01696F)),
-                        title: Text(c.nombreCompleto,
-                            style: GoogleFonts.poppins(fontSize: 13)),
-                        subtitle: c.cedulaNit != null
-                            ? Text(c.cedulaNit!,
-                                style: GoogleFonts.poppins(
-                                    fontSize: 11,
-                                    color: const Color(0xFF7A7974)))
-                            : null,
-                        onTap: () {
-                          onSelected(c);
-                          setState(() => _clienteSeleccionado = c);
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
-            onSelected: (c) => setState(() => _clienteSeleccionado = c),
-          ),
-      ],
-    );
-  }
-
-  Widget _clienteChip(Cliente c) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: const Color(0xFFCEDCD8),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-              color: const Color(0xFF01696F).withOpacity(0.3)),
-        ),
-        child: Row(children: [
-          const Icon(Icons.person_rounded,
-              size: 18, color: Color(0xFF01696F)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(c.nombreCompleto,
-                    style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF01696F))),
-                if (c.cedulaNit != null)
-                  Text(c.cedulaNit!,
-                      style: GoogleFonts.poppins(
-                          fontSize: 11,
-                          color: const Color(0xFF01696F)
-                              .withOpacity(0.7))),
-              ],
-            ),
-          ),
-          GestureDetector(
-            onTap: () => setState(() => _clienteSeleccionado = null),
-            child: const Icon(Icons.close_rounded,
-                size: 18, color: Color(0xFF01696F)),
-          ),
-        ]),
-      );
-
-  Widget _itemProducto(int idx, _ItemProducto item) {
-    return StatefulBuilder(
-      builder: (_, setLocal) => Container(
-        margin:  const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color:        const Color(0xFFF9F8F5),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFEDEAE5)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF01696F).withOpacity(0.10),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text('Producto ${idx + 1}',
-                    style: GoogleFonts.poppins(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF01696F))),
-              ),
-              const Spacer(),
-              if (_items.length > 1)
-                GestureDetector(
-                  onTap: () => setState(() {
-                    item.dispose();
-                    _items.removeAt(idx);
-                  }),
-                  child: Icon(Icons.close_rounded,
-                      size: 17, color: Colors.red.shade400),
-                ),
-            ]),
-            const SizedBox(height: 10),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 90,
-                  child: _miniCampo(
-                    ctrl:  item.productoIdCtrl,
-                    hint:  'ID',
-                    tipo:  TextInputType.number,
-                    formatters: [
-                      FilteringTextInputFormatter.digitsOnly
-                    ],
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? 'Req.' : null,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _miniCampo(
-                    ctrl: item.nombreCtrl,
-                    hint: 'Nombre del producto',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: _miniCampo(
-                    ctrl: item.cantidadCtrl,
-                    hint: 'Cantidad',
-                    tipo: const TextInputType.numberWithOptions(
-                        decimal: true),
-                    onChanged: (_) => setLocal(() {}),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return 'Req.';
-                      if ((double.tryParse(v) ?? 0) <= 0) return '> 0';
-                      return null;
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _miniCampo(
-                    ctrl: item.precioCtrl,
-                    hint: 'Precio',
-                    tipo: const TextInputType.numberWithOptions(
-                        decimal: true),
-                    prefijo:   '\$',
-                    onChanged: (_) => setLocal(() {}),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return 'Req.';
-                      if ((double.tryParse(v) ?? 0) <= 0) return '> 0';
-                      return null;
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Container(
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color:        const Color(0xFFCEDCD8),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      widget.fmt.format(item.subtotal),
-                      style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF01696F)),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _label(String texto, {bool obligatorio = false}) => RichText(
-        text: TextSpan(
-          text: texto,
-          style: GoogleFonts.poppins(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF7A7974)),
-          children: [
-            if (obligatorio)
-              const TextSpan(
-                  text: ' *',
-                  style: TextStyle(color: Color(0xFFA12C7B))),
-          ],
-        ),
-      );
-
-  InputDecoration _inputDeco({
-    required String hint,
-    required IconData icono,
-    Widget? sufijo,
-  }) =>
-      InputDecoration(
-        hintText:  hint,
-        hintStyle: GoogleFonts.poppins(
-            fontSize: 13, color: const Color(0xFFBAB9B4)),
-        prefixIcon: Icon(icono, size: 18, color: const Color(0xFF01696F)),
-        suffixIcon: sufijo,
-        filled:    true,
-        fillColor: const Color(0xFFF9F8F5),
-        border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFFD4D1CA))),
-        enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFFD4D1CA))),
-        focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(
-                color: Color(0xFF01696F), width: 1.5)),
-        errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.red.shade400)),
-        contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16, vertical: 14),
-      );
-
-  Widget _miniCampo({
-    required TextEditingController ctrl,
-    required String hint,
-    TextInputType? tipo,
-    List<TextInputFormatter>? formatters,
-    String? prefijo,
-    String? Function(String?)? validator,
-    ValueChanged<String>? onChanged,
-  }) =>
-      TextFormField(
-        controller:      ctrl,
-        keyboardType:    tipo,
-        inputFormatters: formatters,
-        onChanged:       onChanged,
-        validator:       validator,
-        style: GoogleFonts.poppins(
-            fontSize: 13, color: const Color(0xFF28251D)),
-        decoration: InputDecoration(
-          hintText:    hint,
-          prefixText:  prefijo,
-          hintStyle: GoogleFonts.poppins(
-              fontSize: 12, color: const Color(0xFFBAB9B4)),
-          prefixStyle: GoogleFonts.poppins(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF01696F)),
-          filled:    true,
-          fillColor: Colors.white,
-          isDense:   true,
-          border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFD4D1CA))),
-          enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFD4D1CA))),
-          focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                  color: Color(0xFF01696F), width: 1.5)),
-          errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.red.shade400)),
-          contentPadding: const EdgeInsets.symmetric(
-              horizontal: 10, vertical: 10),
-        ),
-      );
-
+  // ═══════════════════════════════════════════════════════════
+  // BUILD
+  // ═══════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
-    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: _kSurface,
+          boxShadow: [
+            BoxShadow(color: Colors.black26, blurRadius: 32,
+                offset: Offset(-4, 0)),
+          ],
+        ),
+        child: Column(children: [
+          _buildHeader(),
 
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.94,
-      ),
-      decoration: const BoxDecoration(
-        color:        Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-            child: Column(children: [
-              Center(
-                child: Container(
-                  width:  40, height: 4,
-                  margin: const EdgeInsets.only(top: 12, bottom: 20),
-                  decoration: BoxDecoration(
-                    color:        Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              Row(children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF01696F).withOpacity(0.10),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.shopping_bag_outlined,
-                      color: Color(0xFF01696F), size: 20),
-                ),
-                const SizedBox(width: 12),
-                Text('Nuevo separado',
-                    style: GoogleFonts.poppins(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFF28251D))),
-              ]),
-            ]),
-          ),
-
-          Divider(height: 24, color: Colors.grey.shade100),
-
-          Flexible(
+          Expanded(
             child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(24, 0, 24, 24 + bottom),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
               child: Form(
                 key: _formKey,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buscadorCliente(),
+
+                    // ── Resumen cliente + fecha ──────────────
+                    _resumenClienteFecha(),
                     const SizedBox(height: 20),
 
-                    _label('Fecha límite (opcional)'),
-                    const SizedBox(height: 6),
-                    TextFormField(
-                      controller: _fechaCtrl,
-                      readOnly:   true,
-                      onTap:      _elegirFecha,
-                      style: GoogleFonts.poppins(
-                          fontSize: 14, color: const Color(0xFF28251D)),
-                      decoration: _inputDeco(
-                        hint:  'Seleccionar fecha...',
-                        icono: Icons.event_outlined,
-                        sufijo: _fechaCtrl.text.isNotEmpty
-                            ? GestureDetector(
-                                onTap: () =>
-                                    setState(() => _fechaCtrl.clear()),
-                                child: const Icon(Icons.close_rounded,
-                                    size: 17, color: Color(0xFF7A7974)),
-                              )
-                            : null,
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-
+                    // ── Productos ────────────────────────────
                     Row(children: [
-                      Text('Productos',
-                          style: GoogleFonts.poppins(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: const Color(0xFF28251D))),
+                      _sectionLabel('Productos', Icons.inventory_2_rounded,
+                          obligatorio: true),
                       const Spacer(),
-                      GestureDetector(
-                        onTap: () =>
-                            setState(() => _items.add(_ItemProducto())),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color:        const Color(0xFF01696F),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(children: [
-                            const Icon(Icons.add_rounded,
-                                size: 14, color: Colors.white),
-                            const SizedBox(width: 4),
-                            Text('Agregar',
-                                style: GoogleFonts.poppins(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white)),
-                          ]),
-                        ),
-                      ),
+                      _addBtn(),
                     ]),
-
                     const SizedBox(height: 10),
+                    ...List.generate(_items.length,
+                        (i) => _productCard(i, _items[i])),
+                    _totalBar(),
 
-                    ...List.generate(
-                      _items.length,
-                      (i) => _itemProducto(i, _items[i]),
-                    ),
+                    const SizedBox(height: 20),
 
-                    const SizedBox(height: 8),
-
-                    // Total
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color:        const Color(0xFF01696F),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Total del separado',
-                              style: GoogleFonts.poppins(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white.withOpacity(0.85))),
-                          Text(widget.fmt.format(_total),
-                              style: GoogleFonts.poppins(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white)),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 20), // ✅ NUEVO — separador
-
-                    // ✅ NUEVO — sección abono inicial
-                    _seccionAbonoInicial(),
+                    // ── Abono inicial ────────────────────────
+                    _sectionLabel('Abono inicial', Icons.payments_rounded),
+                    const SizedBox(height: 10),
+                    _abonoSection(),
 
                     const SizedBox(height: 28),
-
-                    Selector<ClienteProvider, bool>(
-                      selector: (_, p) => p.guardando,
-                      builder: (_, guardando, __) => SizedBox(
-                        width:  double.infinity,
-                        height: 50,
-                        child: ElevatedButton(
-                          onPressed: guardando ? null : _guardar,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF01696F),
-                            foregroundColor: Colors.white,
-                            disabledBackgroundColor: Colors.grey.shade200,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14)),
-                          ),
-                          child: guardando
-                              ? const SizedBox(
-                                  width: 22, height: 22,
-                                  child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2.5))
-                              : Text('Crear separado',
-                                  style: GoogleFonts.poppins(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 15)),
-                        ),
-                      ),
-                    ),
+                    _guardarBtn(),
                   ],
                 ),
               ),
             ),
           ),
-        ],
+        ]),
       ),
     );
   }
+
+  // ═══════════════════════════════════════════════════════════
+  // SECCIONES
+  // ═══════════════════════════════════════════════════════════
+
+  Widget _buildHeader() => Container(
+    padding: const EdgeInsets.fromLTRB(20, 52, 20, 16),
+    decoration: const BoxDecoration(
+      color: _kCard,
+      border: Border(bottom: BorderSide(color: _kBorder)),
+    ),
+    child: Row(children: [
+      Container(
+        width: 44, height: 44,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+              colors: [_kGreenDark, _kGreen],
+              begin: Alignment.topLeft, end: Alignment.bottomRight),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(color: _kGreen.withValues(alpha: 0.3),
+                blurRadius: 10, offset: const Offset(0, 4)),
+          ],
+        ),
+        child: const Icon(Icons.bookmark_add_rounded,
+            color: Colors.white, size: 22),
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Nuevo separado',
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 18, fontWeight: FontWeight.w800, color: _kDark)),
+          Text('Revisa los detalles y confirma',
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12, color: _kTextSub)),
+        ]),
+      ),
+      // Cerrar
+      GestureDetector(
+        onTap: () => Navigator.pop(context),
+        child: Container(
+          width: 36, height: 36,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.close_rounded, size: 18, color: _kTextBody),
+        ),
+      ),
+    ]),
+  );
+
+  // ── Resumen cliente + fecha (read-only) ─────────────────────
+  Widget _resumenClienteFecha() {
+    final c = widget.clienteInicial;
+    final f = widget.fechaInicial;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _kCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _kBorder),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+
+        // Cliente
+        Row(children: [
+          Container(
+            width: 42, height: 42,
+            decoration: BoxDecoration(
+              gradient: c != null
+                  ? const LinearGradient(
+                      colors: [_kGreenDark, _kGreen])
+                  : null,
+              color: c == null ? const Color(0xFFE2E8F0) : null,
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: c != null
+                ? Center(
+                    child: Text(c.nombre[0].toUpperCase(),
+                        style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 17)))
+                : const Icon(Icons.person_off_rounded,
+                    size: 20, color: _kTextSub),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: c != null
+              ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(c.nombreCompleto,
+                      style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w700, fontSize: 14,
+                          color: _kTextHead)),
+                  if (c.cedulaNit != null)
+                    Text(c.cedulaNit!,
+                        style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11, color: _kTextSub)),
+                ])
+              : Text('Sin cliente',
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13, color: _kTextSub))),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: _kGreen.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text('Cliente',
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 10, fontWeight: FontWeight.w700,
+                    color: _kGreenDark)),
+          ),
+        ]),
+
+        // Fecha (solo si existe)
+        if (f != null) ...[
+          const SizedBox(height: 10),
+          const Divider(color: _kBorder, height: 1),
+          const SizedBox(height: 10),
+          Row(children: [
+            Container(
+              width: 32, height: 32,
+              decoration: BoxDecoration(
+                color: _kAmber.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.event_rounded,
+                  size: 15, color: _kAmber),
+            ),
+            const SizedBox(width: 10),
+            Text('Fecha límite: ',
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12, color: _kTextSub)),
+            Text(DateFormat('d \'de\' MMMM, yyyy', 'es').format(f),
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12, fontWeight: FontWeight.w700,
+                    color: _kTextHead)),
+          ]),
+        ],
+      ]),
+    );
+  }
+
+  Widget _sectionLabel(String label, IconData icon,
+      {bool obligatorio = false}) =>
+    Row(children: [
+      Container(
+        width: 28, height: 28,
+        decoration: BoxDecoration(
+          color: _kGreen.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon, size: 14, color: _kGreenDark),
+      ),
+      const SizedBox(width: 8),
+      Text(label,
+          style: GoogleFonts.plusJakartaSans(
+              fontSize: 13, fontWeight: FontWeight.w700, color: _kTextHead)),
+      if (obligatorio) ...[
+        const SizedBox(width: 4),
+        Text('*', style: GoogleFonts.plusJakartaSans(
+            color: _kRed, fontWeight: FontWeight.w800)),
+      ],
+    ]);
+
+  Widget _addBtn() => GestureDetector(
+    onTap: _agregarItemManual,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: _kGreen.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _kGreen.withValues(alpha: 0.2)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.add_rounded, size: 15, color: _kGreenDark),
+        const SizedBox(width: 5),
+        Text('Agregar',
+            style: GoogleFonts.plusJakartaSans(
+                fontSize: 12, fontWeight: FontWeight.w700, color: _kGreenDark)),
+      ]),
+    ),
+  );
+
+  // ── Tarjeta de producto ─────────────────────────────────────
+  Widget _productCard(int idx, _ItemSep item) {
+    final fromPOS = item.productoId != null;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: _kCard,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _kBorder),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 6, offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+
+          // Nombre del producto
+          Row(children: [
+            Container(
+              width: 30, height: 30,
+              decoration: BoxDecoration(
+                color: _kGreen.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                fromPOS ? Icons.inventory_2_rounded : Icons.add_box_rounded,
+                size: 15, color: _kGreenDark),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: fromPOS
+                  ? Text(item.nombre,
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13, fontWeight: FontWeight.w700,
+                          color: _kTextHead),
+                      maxLines: 1, overflow: TextOverflow.ellipsis)
+                  : _miniField(
+                      ctrl:      item.nombreCtrl,
+                      hint:      'Nombre del producto',
+                      onChanged: (_) => setState(() {}),
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Requerido' : null,
+                    ),
+            ),
+            if (_items.length > 1) ...[
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => setState(() {
+                  item.dispose();
+                  _items.removeAt(idx);
+                }),
+                child: Container(
+                  width: 26, height: 26,
+                  decoration: BoxDecoration(
+                    color: _kRed.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                  child: const Icon(Icons.delete_outline_rounded,
+                      size: 14, color: _kRed),
+                ),
+              ),
+            ],
+          ]),
+
+          const SizedBox(height: 10),
+          const Divider(color: _kBorder, height: 1),
+          const SizedBox(height: 10),
+
+          // Cantidad · Precio · Subtotal
+          Row(children: [
+
+            // Cantidad
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Cantidad',
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 10, fontWeight: FontWeight.w600,
+                      color: _kTextSub)),
+              const SizedBox(height: 5),
+              _qtyControl(item),
+            ]),
+
+            const SizedBox(width: 14),
+
+            // Precio
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Precio unitario',
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 10, fontWeight: FontWeight.w600,
+                        color: _kTextSub)),
+                const SizedBox(height: 5),
+                _miniField(
+                  ctrl:    item.precioCtrl,
+                  hint:    '0',
+                  tipo:    const TextInputType.numberWithOptions(decimal: true),
+                  prefijo: '\$',
+                  onChanged: (_) => setState(() =>
+                      item.precio = double.tryParse(item.precioCtrl.text) ?? 0),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Req.';
+                    if ((double.tryParse(v) ?? 0) <= 0) return '> 0';
+                    return null;
+                  },
+                ),
+              ],
+            )),
+
+            const SizedBox(width: 14),
+
+            // Subtotal
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text('Subtotal',
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 10, fontWeight: FontWeight.w600,
+                      color: _kTextSub)),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _kGreen.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  widget.fmt.format(item.subtotal),
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13, fontWeight: FontWeight.w800,
+                      color: _kGreenDark),
+                ),
+              ),
+            ]),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  Widget _qtyControl(_ItemSep item) => Row(children: [
+    _qtyBtn(Icons.remove_rounded, () {
+      if (item.cantidad > 1) setState(() => item.cantidad--);
+    }),
+    Container(
+      width: 34, alignment: Alignment.center,
+      child: Text('${item.cantidad}',
+          style: GoogleFonts.plusJakartaSans(
+              fontSize: 15, fontWeight: FontWeight.w800, color: _kTextHead)),
+    ),
+    _qtyBtn(Icons.add_rounded, () => setState(() => item.cantidad++)),
+  ]);
+
+  Widget _qtyBtn(IconData icon, VoidCallback onTap) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: 28, height: 28,
+      decoration: BoxDecoration(
+        color: _kGreen.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Icon(icon, size: 14, color: _kGreenDark),
+    ),
+  );
+
+  Widget _totalBar() => Container(
+    margin: const EdgeInsets.only(top: 8),
+    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+    decoration: BoxDecoration(
+      gradient: const LinearGradient(
+          colors: [Color(0xFF0F172A), Color(0xFF1E2A45)],
+          begin: Alignment.topLeft, end: Alignment.bottomRight),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Total del separado',
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12, color: Colors.white60)),
+          Text('${_items.length} producto${_items.length != 1 ? 's' : ''}',
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 11, color: Colors.white38)),
+        ]),
+        Text(widget.fmt.format(_total),
+            style: GoogleFonts.plusJakartaSans(
+                fontSize: 22, fontWeight: FontWeight.w800,
+                color: Colors.white)),
+      ],
+    ),
+  );
+
+  // ── Sección de abono ────────────────────────────────────────
+  Widget _abonoSection() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _miniField(
+        ctrl:    _abonoCtrl,
+        hint:    'Monto del abono (opcional)',
+        tipo:    const TextInputType.numberWithOptions(decimal: true),
+        prefijo: '\$',
+        onChanged: (_) => setState(() {}),
+        validator: (v) {
+          if (v == null || v.isEmpty) return null;
+          final m = double.tryParse(v);
+          if (m == null || m < 0) return 'Monto inválido';
+          if (m > _total) return 'No puede superar el total';
+          return null;
+        },
+      ),
+
+      if (_abono > 0) ...[
+        const SizedBox(height: 14),
+        Text('Método de pago del abono',
+            style: GoogleFonts.plusJakartaSans(
+                fontSize: 12, fontWeight: FontWeight.w600, color: _kTextSub)),
+        const SizedBox(height: 8),
+        Row(children: _metodos.map((m) {
+          final activo = _metodoPago == m.$1;
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _metodoPago = m.$1),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                margin: const EdgeInsets.only(right: 6),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: activo ? _kGreen : _kCard,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: activo ? _kGreen : _kBorder),
+                ),
+                child: Column(children: [
+                  Icon(m.$3, size: 18,
+                      color: activo ? Colors.white : _kTextBody),
+                  const SizedBox(height: 4),
+                  Text(m.$2,
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 10, fontWeight: FontWeight.w700,
+                          color: activo ? Colors.white : _kTextBody)),
+                ]),
+              ),
+            ),
+          );
+        }).toList()),
+
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: _saldo == 0
+                ? _kGreen.withValues(alpha: 0.08)
+                : _kAmber.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _saldo == 0
+                  ? _kGreen.withValues(alpha: 0.25)
+                  : _kAmber.withValues(alpha: 0.25)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(children: [
+                Icon(
+                  _saldo == 0
+                      ? Icons.check_circle_rounded
+                      : Icons.pending_rounded,
+                  size: 16,
+                  color: _saldo == 0 ? _kGreenDark : _kAmber,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _saldo == 0 ? 'Pagado en su totalidad' : 'Saldo pendiente',
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12, fontWeight: FontWeight.w600,
+                      color: _saldo == 0 ? _kGreenDark : _kAmber),
+                ),
+              ]),
+              Text(
+                widget.fmt.format(_saldo),
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 15, fontWeight: FontWeight.w800,
+                    color: _saldo == 0 ? _kGreenDark : _kAmber),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ],
+  );
+
+  // ── Botón guardar ───────────────────────────────────────────
+  Widget _guardarBtn() => Selector<ClienteProvider, bool>(
+    selector: (_, p) => p.guardando,
+    builder: (_, guardando, _) => Container(
+      width: double.infinity, height: 54,
+      decoration: BoxDecoration(
+        gradient: guardando ? null : const LinearGradient(
+            colors: [_kGreenDark, _kGreen],
+            begin: Alignment.topLeft, end: Alignment.bottomRight),
+        color: guardando ? _kBorder : null,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: guardando ? [] : [
+          BoxShadow(color: _kGreen.withValues(alpha: 0.4),
+              blurRadius: 14, offset: const Offset(0, 5)),
+        ],
+      ),
+      child: ElevatedButton.icon(
+        icon: guardando
+            ? const SizedBox(width: 18, height: 18,
+                child: CircularProgressIndicator(
+                    color: Colors.white, strokeWidth: 2))
+            : const Icon(Icons.bookmark_add_rounded, size: 20),
+        label: Text(guardando ? 'Guardando…' : 'Confirmar separado',
+            style: GoogleFonts.plusJakartaSans(
+                fontSize: 16, fontWeight: FontWeight.w800)),
+        onPressed: guardando ? null : _guardar,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          shadowColor:     Colors.transparent,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16)),
+        ),
+      ),
+    ),
+  );
+
+  // ── Helper: campo de texto ──────────────────────────────────
+  Widget _miniField({
+    required TextEditingController    ctrl,
+    required String                   hint,
+    TextInputType?                    tipo,
+    List<TextInputFormatter>?         formatters,
+    String?                           prefijo,
+    void Function(String)?            onChanged,
+    String? Function(String?)?        validator,
+  }) =>
+    TextFormField(
+      controller:      ctrl,
+      keyboardType:    tipo,
+      inputFormatters: formatters,
+      onChanged:       onChanged,
+      validator:       validator,
+      style: GoogleFonts.plusJakartaSans(
+          fontSize: 13, color: _kTextHead, fontWeight: FontWeight.w600),
+      decoration: InputDecoration(
+        hintText:    hint,
+        prefixText:  prefijo,
+        hintStyle:   GoogleFonts.plusJakartaSans(
+            fontSize: 12, color: _kTextSub),
+        prefixStyle: GoogleFonts.plusJakartaSans(
+            fontSize: 13, fontWeight: FontWeight.w600, color: _kGreenDark),
+        filled:    true, fillColor: _kCard,
+        isDense:   true,
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: _kBorder)),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: _kBorder)),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: _kGreenDark, width: 1.5)),
+        errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: _kRed)),
+        contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12, vertical: 10),
+      ),
+    );
 }

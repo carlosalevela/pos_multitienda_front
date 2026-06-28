@@ -28,6 +28,7 @@ class InventarioService {
   Future<Map<String, dynamic>> getProductos({
     String? q,
     int?    tiendaId,
+    int?    categoriaId,
     String  activo = 'true',
   }) async {
     try {
@@ -35,7 +36,8 @@ class InventarioService {
         '/productos/',
         queryParameters: {
           if (q != null && q.isNotEmpty) 'q': q,
-          if (tiendaId != null) 'tienda_id': tiendaId.toString(),
+          if (tiendaId   != null) 'tienda_id': tiendaId.toString(),
+          if (categoriaId != null) 'categoria': categoriaId.toString(),
           'activo': activo,
         },
       );
@@ -182,9 +184,14 @@ class InventarioService {
   // ── Categorías ─────────────────────────────────────────
 
   /// Devuelve {'success': bool, 'data': List<Map<String,dynamic>>, 'error': String?}
-  Future<Map<String, dynamic>> getCategorias() async {
+  Future<Map<String, dynamic>> getCategorias({int? tiendaId}) async {
     try {
-      final r = await ApiClient.instance.get('/productos/categorias/');
+      final r = await ApiClient.instance.get(
+        '/productos/categorias/',
+        queryParameters: {
+          if (tiendaId != null) 'tienda_id': tiendaId.toString(),
+        },
+      );
       final List data = r.data is List ? r.data : r.data['results'] ?? [];
       return {'success': true, 'data': data.cast<Map<String, dynamic>>()};
     } on DioException catch (e) {

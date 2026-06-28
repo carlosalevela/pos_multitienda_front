@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../../models/sesion_caja.dart';
 import '../../../models/sesion_historial.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/caja_provider.dart';
 import 'detalle_cierre_sheet.dart';
 
@@ -841,8 +843,11 @@ class _RegistrarGastoDialogState extends State<_RegistrarGastoDialog> {
     final monto = double.tryParse(
         _montoCtrl.text.trim().replaceAll(',', '')) ?? 0;
 
+    final tiendaId = context.read<AuthProvider>().tiendaId;
+
     final ok = await widget.caja.registrarGasto(
       sesionId:    widget.sesionId,
+      tiendaId:    tiendaId,
       categoria:   _categoria.toLowerCase(),
       descripcion: _descCtrl.text.trim(),
       monto:       monto,

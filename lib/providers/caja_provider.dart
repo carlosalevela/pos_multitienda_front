@@ -9,6 +9,7 @@ class CajaProvider extends ChangeNotifier {
   final CajaService _service = CajaService();
 
   SesionCaja?           _sesionActiva;
+  SesionCaja?           _ultimaSesionCerrada;
   ResumenCierre?        _resumenCierre;
   List<SesionHistorial> _historial = [];         // ← CAMBIAR tipo
   bool   _cargando   = false;
@@ -21,8 +22,9 @@ class CajaProvider extends ChangeNotifier {
   double                     _gastosTotalSesion = 0;
   bool                       _cargandoGastos   = false;
 
-  SesionCaja?           get sesionActiva      => _sesionActiva;
-  ResumenCierre?        get resumenCierre     => _resumenCierre;
+  SesionCaja?           get sesionActiva          => _sesionActiva;
+  SesionCaja?           get ultimaSesionCerrada   => _ultimaSesionCerrada;
+  ResumenCierre?        get resumenCierre         => _resumenCierre;
   List<SesionHistorial> get historial         => _historial;  // ← CAMBIAR tipo
   bool   get cargando         => _cargando;
   bool   get procesando       => _procesando;
@@ -113,6 +115,7 @@ class CajaProvider extends ChangeNotifier {
     _procesando = false;
 
     if (result['success'] == true) {
+      _ultimaSesionCerrada = _sesionActiva; // guarda antes de limpiar
       _sesionActiva  = null;
       _resumenCierre = null;
       _successMsg    = '✅ Caja cerrada correctamente';
@@ -183,6 +186,7 @@ class CajaProvider extends ChangeNotifier {
 
   Future<bool> registrarGasto({
     required int    sesionId,
+    required int    tiendaId,
     required String categoria,
     required String descripcion,
     required double monto,
@@ -193,6 +197,7 @@ class CajaProvider extends ChangeNotifier {
 
     final result = await _service.registrarGasto(
       sesionId:    sesionId,
+      tiendaId:    tiendaId,
       categoria:   categoria,
       descripcion: descripcion,
       monto:       monto,

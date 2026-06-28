@@ -154,6 +154,7 @@ class CajaService {
 
   Future<Map<String, dynamic>> registrarGasto({
     required int    sesionId,
+    required int    tiendaId,
     required String categoria,
     required String descripcion,
     required double monto,
@@ -164,6 +165,7 @@ class CajaService {
         '/contabilidad/gastos/',
         data: {
           'sesion_caja': sesionId,
+          'tienda':      tiendaId,
           'categoria':   categoria,
           'descripcion': descripcion,
           'monto':       monto.toStringAsFixed(2),

@@ -868,6 +868,274 @@ class ReportePdfService {
     );
 
 
+  // ── Cierre de turno (cajero) ───────────────────────
+
+  static Future<void> generarCierreTurno({
+    required dynamic sesion,          // SesionCaja
+    required String fecha,
+    required String tiendaNombre,
+    required String empresaNombre,
+    required Map<String, double> metodosPago,
+    required List<Map<String, dynamic>> gastosSesion,
+    required double totalGastos,
+  }) async {
+    final pdf        = pw.Document();
+    final font       = await PdfGoogleFonts.poppinsRegular();
+    final fontBold   = await PdfGoogleFonts.poppinsBold();
+    final fontMedium = await PdfGoogleFonts.poppinsMedium();
+
+    final horaApertura = () {
+      final dt = sesion.fecha_apertura as DateTime;
+      return '${dt.hour.toString().padLeft(2, '0')}:'
+             '${dt.minute.toString().padLeft(2, '0')}';
+    }();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        header: (ctx) => pw.Container(
+          padding: const pw.EdgeInsets.only(bottom: 12),
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(
+              bottom: pw.BorderSide(color: PdfColors.grey300))),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text('Comprobante de Cierre de Turno',
+                    style: pw.TextStyle(font: fontBold, fontSize: 16,
+                        color: const PdfColor.fromInt(0xFF0B7A53))),
+                  pw.Text('$tiendaNombre  •  Cajero: ${sesion.empleadoNombre}',
+                    style: pw.TextStyle(font: font, fontSize: 10,
+                        color: PdfColors.grey600)),
+                ],
+              ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text('Fecha: $fecha',
+                    style: pw.TextStyle(font: fontBold, fontSize: 11)),
+                  pw.Text('Apertura: $horaApertura',
+                    style: pw.TextStyle(font: font, fontSize: 10,
+                        color: PdfColors.grey500)),
+                ],
+              ),
+            ],
+          ),
+        ),
+        footer: (ctx) => pw.Container(
+          padding: const pw.EdgeInsets.only(top: 8),
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(
+              top: pw.BorderSide(color: PdfColors.grey300))),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('Sistema POS — $empresaNombre',
+                style: pw.TextStyle(font: font, fontSize: 9,
+                    color: PdfColors.grey500)),
+              pw.Text('Página ${ctx.pageNumber} de ${ctx.pagesCount}',
+                style: pw.TextStyle(font: font, fontSize: 9,
+                    color: PdfColors.grey500)),
+            ],
+          ),
+        ),
+        build: (ctx) => [
+          // ── Balance de caja ────────────────────
+          pw.Container(
+            padding: const pw.EdgeInsets.all(14),
+            decoration: pw.BoxDecoration(
+              color: const PdfColor.fromInt(0xFFE8FFF4),
+              borderRadius: pw.BorderRadius.circular(8),
+              border: pw.Border.all(
+                  color: const PdfColor.fromInt(0xFF61DDAA)),
+            ),
+            child: pw.Row(
+              children: [
+                _turnoItem('Saldo apertura',
+                    '\$${_fmt(sesion.saldo_inicial as double)}',
+                    PdfColors.grey700, font, fontBold),
+                _separadorV(),
+                _turnoItem('Ventas del turno',
+                    '+\$${_fmt(sesion.ventasTotal as double)}',
+                    const PdfColor.fromInt(0xFF0B7A53), font, fontBold),
+                _separadorV(),
+                _turnoItem('Gastos del turno',
+                    '-\$${_fmt(sesion.gastosTotal as double)}',
+                    PdfColors.orange700, font, fontBold),
+                _separadorV(),
+                _turnoItem('Efectivo esperado',
+                    '\$${_fmt(sesion.montoEsperado as double)}',
+                    const PdfColor.fromInt(0xFF0B7A53), fontBold, fontBold,
+                    grande: true),
+              ],
+            ),
+          ),
+
+          pw.SizedBox(height: 16),
+
+          // ── Ventas por método ──────────────────
+          if (metodosPago.isNotEmpty) ...[
+            _sectionTitle('Ventas por método de pago',
+                PdfColors.blueGrey700, fontBold, font),
+            pw.SizedBox(height: 8),
+            pw.Row(
+              children: metodosPago.entries.map((e) => pw.Expanded(
+                child: pw.Container(
+                  margin: const pw.EdgeInsets.only(right: 8),
+                  padding: const pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey200),
+                    borderRadius: pw.BorderRadius.circular(8),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(e.key.toUpperCase(),
+                        style: pw.TextStyle(font: fontBold, fontSize: 10,
+                            color: PdfColors.grey700)),
+                      pw.SizedBox(height: 4),
+                      pw.Text('\$${_fmt(e.value)}',
+                        style: pw.TextStyle(font: fontBold, fontSize: 14,
+                            color: PdfColors.blue700)),
+                      pw.Text(
+                        '${(sesion.ventasTotal == 0 ? 0
+                            : (e.value / (sesion.ventasTotal as double) * 100))
+                            .toStringAsFixed(1)}%',
+                        style: pw.TextStyle(font: font, fontSize: 9,
+                            color: PdfColors.grey500)),
+                    ],
+                  ),
+                ),
+              )).toList(),
+            ),
+            pw.SizedBox(height: 16),
+          ],
+
+          // ── Gastos del turno ───────────────────
+          if (gastosSesion.isNotEmpty) ...[
+            _sectionTitle('Gastos del turno',
+                PdfColors.orange800, fontBold, font,
+                badge: '${gastosSesion.length} registro${gastosSesion.length != 1 ? "s" : ""}'),
+            pw.SizedBox(height: 8),
+            pw.Table(
+              border: pw.TableBorder.all(
+                  color: PdfColors.orange100, width: 0.5),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(2),
+                1: const pw.FlexColumnWidth(1.2),
+                2: const pw.FixedColumnWidth(70),
+                3: const pw.FixedColumnWidth(80),
+              },
+              children: [
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(
+                      color: PdfColors.orange800),
+                  children: ['Descripción', 'Categoría',
+                    'Método', 'Monto']
+                      .map((h) => _th(h, fontBold))
+                      .toList(),
+                ),
+                ...gastosSesion.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final g = entry.value;
+                  final monto = double.tryParse(
+                      g['monto']?.toString() ?? '0') ?? 0;
+                  return pw.TableRow(
+                    decoration: pw.BoxDecoration(
+                      color: i.isEven
+                          ? const PdfColor.fromInt(0xFFFFF8F0)
+                          : PdfColors.white),
+                    children: [
+                      _td(g['descripcion']?.toString() ?? '', fontMedium,
+                          color: PdfColors.orange900),
+                      _td(g['categoria']?.toString() ?? '', font,
+                          color: PdfColors.grey600),
+                      _td(g['metodo_pago']?.toString() ?? '', fontMedium),
+                      _td('-\$${_fmt(monto)}', fontBold,
+                          color: PdfColors.orange800),
+                    ],
+                  );
+                }),
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(
+                      color: PdfColors.orange100),
+                  children: [
+                    ...List.generate(2, (_) => _td('', font)),
+                    _td('TOTAL', fontBold, color: PdfColors.orange900),
+                    _td('-\$${_fmt(totalGastos)}', fontBold,
+                        color: PdfColors.orange900, size: 11),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 16),
+          ],
+
+          // ── Recuadro de cierre ─────────────────
+          pw.Container(
+            padding: const pw.EdgeInsets.all(14),
+            decoration: pw.BoxDecoration(
+              color: const PdfColor.fromInt(0xFFE8FFF4),
+              borderRadius: pw.BorderRadius.circular(8),
+              border: pw.Border.all(
+                  color: const PdfColor.fromInt(0xFF0B7A53)),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  'Sesión #${sesion.id}  •  N° transacciones: ${sesion.numTransacciones}',
+                  style: pw.TextStyle(font: font, fontSize: 10,
+                      color: PdfColors.grey700)),
+                pw.Row(children: [
+                  pw.Text('Efectivo esperado en caja: ',
+                    style: pw.TextStyle(font: fontBold, fontSize: 12,
+                        color: PdfColors.grey800)),
+                  pw.Text('\$${_fmt(sesion.montoEsperado as double)}',
+                    style: pw.TextStyle(font: fontBold, fontSize: 15,
+                        color: const PdfColor.fromInt(0xFF0B7A53))),
+                ]),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (_) async => pdf.save(),
+      name: 'Cierre_turno_$fecha.pdf',
+    );
+  }
+
+  static pw.Widget _turnoItem(
+    String label, String valor, PdfColor color,
+    pw.Font font, pw.Font fontBold, {bool grande = false}
+  ) =>
+    pw.Expanded(
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
+        children: [
+          pw.Text(valor,
+            textAlign: pw.TextAlign.center,
+            style: pw.TextStyle(
+                font: fontBold,
+                fontSize: grande ? 15 : 12,
+                color: color)),
+          pw.SizedBox(height: 2),
+          pw.Text(label,
+            textAlign: pw.TextAlign.center,
+            style: pw.TextStyle(
+                font: font, fontSize: 8,
+                color: PdfColors.grey600)),
+        ],
+      ),
+    );
+
   // ── Formato números ────────────────────────────────
 
   static String _fmt(double v) => v.abs()

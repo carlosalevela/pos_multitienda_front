@@ -157,14 +157,14 @@ class _GastoItem extends StatelessWidget {
               const SizedBox(height: 3),
               Row(children: [
                 if (gasto.categoria.isNotEmpty) ...[
-                  _Chip(gasto.categoria, _kGastoFg),
+                  Flexible(child: _Chip(gasto.categoria, _kGastoFg)),
                   const SizedBox(width: 4),
                 ],
-                _Chip(_metodoLabel(gasto.metodoPago),
-                    _metodoColor(gasto.metodoPago)),
+                Flexible(child: _Chip(_metodoLabel(gasto.metodoPago),
+                    _metodoColor(gasto.metodoPago))),
                 const SizedBox(width: 4),
-                _Chip(gasto.empleadoNombre,
-                    const Color(0xFF78909C)),
+                Flexible(child: _Chip(gasto.empleadoNombre,
+                    const Color(0xFF78909C))),
               ]),
             ],
           ),
@@ -193,6 +193,8 @@ class _GastoItem extends StatelessWidget {
         ),
         child: Text(
           label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: GoogleFonts.poppins(
             fontSize: 9,
             fontWeight: FontWeight.w600,
