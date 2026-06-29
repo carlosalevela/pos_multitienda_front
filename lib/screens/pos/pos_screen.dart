@@ -15,6 +15,7 @@ import '../../models/cliente.dart';
 import '../../services/inventario_service.dart';
 import '../../services/cliente_service.dart';
 import '../clientes/widgets/separado_form.dart';
+import '../../providers/notificaciones_provider.dart';
 
 // ── Design system (Material You / Enterprise POS) ─────────
 const _kGreen          = Color(0xFF61DDAA);   // mint — igual que dashboard _C.green
@@ -60,7 +61,7 @@ class _PosScreenState extends State<PosScreen> {
 
   // Alerts
   int _countStockBajo = 0;
-  int _countSeparados = 0;
+  NotificacionesProvider? _notifProv;
 
   // View mode
   _ViewMode _viewMode = _ViewMode.gridMedium;
@@ -75,6 +76,7 @@ class _PosScreenState extends State<PosScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _notifProv = context.read<NotificacionesProvider>()..iniciarPolling();
       _cargarAlertas();
       _cargarCategorias();
       _cargarTodos();
@@ -83,6 +85,7 @@ class _PosScreenState extends State<PosScreen> {
 
   @override
   void dispose() {
+    _notifProv?.detenerPolling();
     _searchCtrl.dispose();
     _montoCtrl.dispose();
     _descuentoCtrl.dispose();
@@ -101,10 +104,6 @@ class _PosScreenState extends State<PosScreen> {
       if (mounted && r['success'] == true) {
         setState(() => _countStockBajo = (r['data'] as List).length);
       }
-    } catch (_) {}
-    try {
-      final sep = await ClienteService().getSeparados(tiendaId: tidOpt, estado: 'activo');
-      if (mounted) setState(() => _countSeparados = sep.length);
     } catch (_) {}
   }
 
@@ -167,8 +166,9 @@ class _PosScreenState extends State<PosScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pos  = context.watch<PosProvider>();
-    final auth = context.watch<AuthProvider>();
+    final pos   = context.watch<PosProvider>();
+    final auth  = context.watch<AuthProvider>();
+    final notif = context.watch<NotificacionesProvider>();
 
     return Container(
       color: _kSurface,
@@ -181,7 +181,7 @@ class _PosScreenState extends State<PosScreen> {
             // ── Panel izquierdo: catálogo ──────────────────
             Expanded(
               child: Column(children: [
-                _buildSearchBar(pos, auth),
+                _buildSearchBar(pos, auth, notif),
                 _buildCategoryTabs(),
                 Expanded(child: _buildProductGrid(pos, auth)),
               ]),
@@ -241,99 +241,113 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Widget _notifDropdown() {
-    final hayAlertas = _countStockBajo > 0 || _countSeparados > 0;
+    final vencidos  = _notifProv?.vencidos  ?? [];
+    final porVencer = _notifProv?.porVencer ?? [];
+    final totalSep  = _notifProv?.totalAlertas ?? 0;
+    final total     = _countStockBajo + totalSep;
+    final hayAlertas = total > 0;
+
     return Container(
-      width: 280,
+      width: 310,
+      constraints: const BoxConstraints(maxHeight: 420),
       decoration: BoxDecoration(
         color: _kCard,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: _kBorder),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Encabezado
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-            child: Row(
-              children: [
-                const Icon(Icons.notifications_rounded, size: 15, color: _kGreenDark),
-                const SizedBox(width: 6),
-                const Text(
-                  'Notificaciones',
-                  style: TextStyle(
-                    color: _kText,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const Spacer(),
-                if (hayAlertas)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: _kErrorBg,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      '${_countStockBajo + _countSeparados}',
-                      style: const TextStyle(
-                        color: _kError,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: _kBorder),
-
-          if (!hayAlertas)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24, horizontal: 14),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Encabezado
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.check_circle_outline_rounded, size: 16, color: _kGreenDark),
-                  SizedBox(width: 6),
-                  Text(
-                    'Sin alertas pendientes',
-                    style: TextStyle(color: _kTextMuted, fontSize: 12),
-                  ),
+                  const Icon(Icons.notifications_rounded, size: 15, color: _kGreenDark),
+                  const SizedBox(width: 6),
+                  const Text('Notificaciones',
+                      style: TextStyle(color: _kText, fontSize: 13, fontWeight: FontWeight.w700)),
+                  const Spacer(),
+                  if (hayAlertas)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                          color: _kErrorBg, borderRadius: BorderRadius.circular(20)),
+                      child: Text('$total',
+                          style: const TextStyle(
+                              color: _kError, fontSize: 10, fontWeight: FontWeight.w700)),
+                    ),
                 ],
               ),
             ),
+            const Divider(height: 1, color: _kBorder),
 
-          // Stock bajo
-          if (_countStockBajo > 0)
-            _notifRow(
-              icon: Icons.inventory_2_outlined,
-              color: _kError,
-              title: 'Stock bajo',
-              subtitle: '$_countStockBajo producto${_countStockBajo > 1 ? 's' : ''} requieren reposición',
-              onTap: () {
-                _closeNotifMenu();
-                widget.onNavigate?.call('inventario');
-              },
-            ),
+            if (!hayAlertas)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24, horizontal: 14),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle_outline_rounded, size: 16, color: _kGreenDark),
+                    SizedBox(width: 6),
+                    Text('Sin alertas pendientes',
+                        style: TextStyle(color: _kTextMuted, fontSize: 12)),
+                  ],
+                ),
+              ),
 
-          // Separados pendientes
-          if (_countSeparados > 0)
-            _notifRow(
-              icon: Icons.bookmark_outlined,
-              color: _kAmber,
-              title: 'Separados pendientes',
-              subtitle: '$_countSeparados separado${_countSeparados > 1 ? 's' : ''} por cobrar',
-              onTap: () {
-                _closeNotifMenu();
-                widget.onNavigate?.call('clientes');
-              },
-            ),
+            // Stock bajo
+            if (_countStockBajo > 0)
+              _notifRow(
+                icon: Icons.inventory_2_outlined,
+                color: _kError,
+                title: 'Stock bajo',
+                subtitle: '$_countStockBajo producto${_countStockBajo > 1 ? 's' : ''} requieren reposición',
+                onTap: () { _closeNotifMenu(); widget.onNavigate?.call('inventario'); },
+              ),
 
-          const SizedBox(height: 4),
-        ],
+            // Separados vencidos
+            if (vencidos.isNotEmpty) ...[
+              if (_countStockBajo > 0) const Divider(height: 1, color: _kBorder),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 14, 2),
+                child: Text('VENCIDOS',
+                    style: const TextStyle(
+                        color: _kError, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
+              ),
+              ...vencidos.take(3).map((v) => _notifRow(
+                icon: Icons.bookmark_outlined,
+                color: _kError,
+                title: v['cliente']?.toString() ?? '—',
+                subtitle: 'Hace ${(v['dias_restantes'] as num).abs().toInt()} día(s) · \$${v['saldo_pendiente']}',
+                onTap: () { _closeNotifMenu(); widget.onNavigate?.call('clientes'); },
+              )),
+            ],
+
+            // Por vencer
+            if (porVencer.isNotEmpty) ...[
+              if (vencidos.isNotEmpty || _countStockBajo > 0)
+                const Divider(height: 1, color: _kBorder),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 14, 2),
+                child: Text('POR VENCER',
+                    style: const TextStyle(
+                        color: _kAmber, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
+              ),
+              ...porVencer.take(3).map((v) => _notifRow(
+                icon: Icons.bookmark_add_outlined,
+                color: _kAmber,
+                title: v['cliente']?.toString() ?? '—',
+                subtitle: 'En ${(v['dias_restantes'] as num).toInt()} día(s) · \$${v['saldo_pendiente']}',
+                onTap: () { _closeNotifMenu(); widget.onNavigate?.call('clientes'); },
+              )),
+            ],
+
+            const SizedBox(height: 4),
+          ],
+        ),
       ),
     );
   }
@@ -378,7 +392,7 @@ class _PosScreenState extends State<PosScreen> {
   // BARRA DE BÚSQUEDA
   // ══════════════════════════════════════════════════════════
 
-  Widget _buildSearchBar(PosProvider pos, AuthProvider auth) => Container(
+  Widget _buildSearchBar(PosProvider pos, AuthProvider auth, NotificacionesProvider notif) => Container(
     padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
     color: _kCard,
     child: Row(children: [
@@ -465,7 +479,7 @@ class _PosScreenState extends State<PosScreen> {
                   color: _notifOverlay != null ? _kGreenDark : _kTextMuted,
                 ),
               ),
-              if (_countStockBajo + _countSeparados > 0)
+              if (_countStockBajo + notif.totalAlertas > 0)
                 Positioned(
                   top: -4,
                   right: -4,
@@ -478,9 +492,9 @@ class _PosScreenState extends State<PosScreen> {
                     ),
                     child: Center(
                       child: Text(
-                        (_countStockBajo + _countSeparados) > 9
+                        (_countStockBajo + notif.totalAlertas) > 9
                             ? '9+'
-                            : '${_countStockBajo + _countSeparados}',
+                            : '${_countStockBajo + notif.totalAlertas}',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 9,

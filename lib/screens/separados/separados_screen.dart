@@ -6,11 +6,13 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/alerta_separado.dart';
+import '../../models/cliente.dart';
 import '../../models/separado.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/cliente_provider.dart';
 import '../clientes/widgets/abonar_sheet.dart';
 import '../clientes/widgets/separado_detalle_sheet.dart';
+import '../clientes/widgets/separado_form.dart';
 
 // ── Paleta (verde+blanco como los dashboards) ─────────────────
 const _kGreen      = Color(0xFF61DDAA);   // mint — igual que dashboard
@@ -143,6 +145,22 @@ class _SeparadosScreenState extends State<SeparadosScreen> {
                   fontSize: 11, color: _kTextMuted)),
         ]),
         const Spacer(),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.bookmark_add_rounded, size: 15),
+          label: Text('Nuevo',
+              style: GoogleFonts.inter(
+                  fontSize: 12, fontWeight: FontWeight.w600)),
+          onPressed: _abrirNuevoSeparado,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _kGreenDark,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+        const SizedBox(width: 8),
         TextButton.icon(
           icon: const Icon(Icons.refresh_rounded, size: 15),
           label: Text('Actualizar',
@@ -938,6 +956,158 @@ class _SeparadosScreenState extends State<SeparadosScreen> {
   // ════════════════════════════════════════════════════════════
   // ACCIONES
   // ════════════════════════════════════════════════════════════
+
+  void _abrirNuevoSeparado() {
+    final auth        = context.read<AuthProvider>();
+    final clienteProv = context.read<ClienteProvider>();
+    clienteProv.cargarClientesSimple(q: '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final localCtrl = TextEditingController();
+        bool buscando   = false;
+        return StatefulBuilder(
+          builder: (ctx, setS) => AlertDialog(
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16)),
+            title: Row(children: [
+              const Icon(Icons.person_search_rounded,
+                  color: _kGreenDark, size: 20),
+              const SizedBox(width: 8),
+              Text('Seleccionar cliente',
+                  style: GoogleFonts.inter(
+                      fontSize: 16, fontWeight: FontWeight.w700,
+                      color: _kText)),
+            ]),
+            content: SizedBox(
+              width: 380, height: 320,
+              child: Column(children: [
+                TextField(
+                  controller: localCtrl,
+                  autofocus:  true,
+                  decoration: InputDecoration(
+                    hintText:  'Buscar por nombre o cédula…',
+                    hintStyle: GoogleFonts.inter(
+                        color: _kTextMuted, fontSize: 13),
+                    prefixIcon: const Icon(Icons.search_rounded,
+                        size: 18, color: _kGreenDark),
+                    suffixIcon: buscando
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 16, height: 16,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: _kGreenDark),
+                            ))
+                        : null,
+                    filled: true, fillColor: _kSurface,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: _kBorder)),
+                    enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: _kBorder)),
+                    focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide:
+                            const BorderSide(color: _kGreen, width: 2)),
+                  ),
+                  onChanged: (v) async {
+                    if (v.length < 2) return;
+                    setS(() => buscando = true);
+                    await clienteProv.cargarClientesSimple(q: v);
+                    if (ctx.mounted) setS(() => buscando = false);
+                  },
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: Consumer<ClienteProvider>(
+                    builder: (_, cp, _) => cp.clientesSimple.isEmpty
+                        ? Center(
+                            child: Text(
+                              'Escribe al menos 2 caracteres para buscar',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.inter(
+                                  color: _kTextMuted, fontSize: 13),
+                            ))
+                        : ListView.builder(
+                            itemCount: cp.clientesSimple.length,
+                            itemBuilder: (_, i) {
+                              final Cliente c = cp.clientesSimple[i];
+                              return ListTile(
+                                dense: true,
+                                contentPadding:
+                                    const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 2),
+                                leading: Container(
+                                  width: 36, height: 36,
+                                  decoration: BoxDecoration(
+                                    color: _kGreen.withValues(alpha: 0.12),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      c.nombre.isNotEmpty
+                                          ? c.nombre[0].toUpperCase()
+                                          : '?',
+                                      style: GoogleFonts.inter(
+                                          color: _kGreenDark,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w800),
+                                    ),
+                                  ),
+                                ),
+                                title: Text(c.nombreCompleto,
+                                    style: GoogleFonts.inter(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: _kText)),
+                                subtitle: (c.cedulaNit != null &&
+                                        c.cedulaNit!.isNotEmpty)
+                                    ? Text(c.cedulaNit!,
+                                        style: GoogleFonts.inter(
+                                            fontSize: 11,
+                                            color: _kTextMuted))
+                                    : null,
+                                onTap: () {
+                                  Navigator.pop(ctx);
+                                  SeparadoForm.mostrar(
+                                    context,
+                                    tiendaId: auth.tiendaId > 0
+                                        ? auth.tiendaId
+                                        : null,
+                                    fmt:            _fmt,
+                                    clienteInicial: c,
+                                    itemsInciales:  const [],
+                                    onCreado: () {
+                                      _cargarTodo();
+                                      setState(() => _tab = _SepTab.activos);
+                                    },
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                ),
+              ]),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text('Cancelar',
+                    style: GoogleFonts.inter(color: _kTextMuted)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _verDetalle(Separado s) {
     SeparadoDetalleSheet.mostrar(context, separado: s, fmt: _fmt);
   }

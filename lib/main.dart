@@ -15,6 +15,7 @@ import 'providers/proveedores_provider.dart';
 import 'providers/devoluciones_provider.dart';
 import 'providers/empresa_provider.dart';
 import 'providers/config_provider.dart';
+import 'providers/notificaciones_provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() {
@@ -33,6 +34,7 @@ void main() {
         ChangeNotifierProvider(create: (_) => DevolucionesProvider()),
         ChangeNotifierProvider(create: (_) => EmpresaProvider()),
         ChangeNotifierProvider(create: (_) => ConfigProvider()),
+        ChangeNotifierProvider(create: (_) => NotificacionesProvider()),
       ],
       child: const MyApp(),
     ),

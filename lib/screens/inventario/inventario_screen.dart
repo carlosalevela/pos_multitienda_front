@@ -1332,11 +1332,11 @@ class _InventarioScreenState extends State<InventarioScreen>
           child: Column(
             children: _movimientos.take(6).map((m) {
               final tipo     = m['tipo'] as String? ?? '';
-              final nombre   = m['producto'] as String? ?? '—';
+              final nombre   = m['producto_nombre'] as String? ?? '—';
               final cantidad = m['cantidad'];
               final hora     = m['created_at'] != null
                   ? DateFormat('HH:mm').format(
-                      DateTime.parse(m['created_at'] as String))
+                      DateTime.tryParse(m['created_at']?.toString() ?? '') ?? DateTime.now())
                   : '';
               final (color, icon, prefix) = switch (tipo) {
                 'entrada'  => (_green,   Icons.arrow_downward_rounded, '+'),
@@ -1512,7 +1512,7 @@ class _InventarioScreenState extends State<InventarioScreen>
       else
         ...List.generate(_topProductos.length, (i) {
           final item    = _topProductos[i];
-          final nombre  = item['producto'] as String? ?? '—';
+          final nombre  = item['producto_nombre'] as String? ?? '—';
           final vendido = _toDouble(item['total_vendido']);
           final maxVend = _toDouble(_topProductos.first['total_vendido']);
           final pct     = maxVend > 0 ? vendido / maxVend : 0.0;

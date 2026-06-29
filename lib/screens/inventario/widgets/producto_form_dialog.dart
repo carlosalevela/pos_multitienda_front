@@ -31,8 +31,8 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
   final _descripcionCtrl   = TextEditingController();
   final _precioVentaCtrl   = TextEditingController();
   final _precioCompraCtrl  = TextEditingController();
-  final _precioMayoreoCtrl = TextEditingController();
-  final _stockCtrl         = TextEditingController();
+  final _precioMayoreoCtrl    = TextEditingController();
+  final _stockCtrl            = TextEditingController();
   final _minStockCtrl      = TextEditingController();
   final _maxStockCtrl      = TextEditingController();
   final _catCtrl           = TextEditingController();
@@ -585,8 +585,8 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
   Future<void> _guardar() async {
     setState(() => _guardando = true);
 
-    final mayoreoVal = double.tryParse(_precioMayoreoCtrl.text);
-    final categoria  = _catCtrl.text.trim();
+    final mayoreoVal   = double.tryParse(_precioMayoreoCtrl.text);
+    final categoria    = _catCtrl.text.trim();
 
     final data = <String, dynamic>{
       'nombre':          _nombreCtrl.text.trim(),
