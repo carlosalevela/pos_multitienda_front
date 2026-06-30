@@ -10,7 +10,6 @@ const _kText      = Color(0xFF191C1E);
 const _kTextMuted = Color(0xFF76777D);
 const _kBorder    = Color(0xFFE0E3E5);
 const _kOrange    = Color(0xFFF59E0B);
-const _kError     = Color(0xFFBA1A1A);
 
 class DevolucionCard extends StatelessWidget {
   final DevolucionModel  dev;
@@ -30,170 +29,135 @@ class DevolucionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final esCambio   = dev.tipo == 'cambio';
-    final cancelada  = dev.estado == 'cancelada';
-    final accentColor = cancelada
+    final esCambio  = dev.tipo == 'cambio';
+    final cancelada = dev.estado == 'cancelada';
+
+    final iconColor = cancelada
         ? _kTextMuted
+        : esCambio ? _kGreen : _kOrange;
+    final iconBg = cancelada
+        ? _kSurface
         : esCambio
-            ? _kGreen
-            : _kOrange;
+            ? _kGreen.withValues(alpha: 0.1)
+            : _kOrange.withValues(alpha: 0.1);
+    final iconData = cancelada
+        ? Icons.cancel_outlined
+        : esCambio
+            ? Icons.swap_horiz_rounded
+            : Icons.assignment_return_rounded;
+
+    final date = DateFormat('dd/MM/yyyy · HH:mm').format(dev.createdAt);
+    final monto = _buildMonto(esCambio, cancelada);
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: _kBorder),
-          boxShadow: cancelada
-              ? null
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+          boxShadow: cancelada ? null : [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Barra izquierda de color por tipo
-              Container(
-                width: 4,
-                decoration: BoxDecoration(
-                  color: accentColor,
-                  borderRadius: const BorderRadius.only(
-                    topLeft:    Radius.circular(14),
-                    bottomLeft: Radius.circular(14),
+        child: Row(children: [
+          // ── Ícono izquierdo ───────────────────────────
+          Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
+            child: Icon(iconData, size: 20, color: iconColor),
+          ),
+          const SizedBox(width: 12),
+
+          // ── Contenido central ─────────────────────────
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Línea 1: ID + factura
+                Row(children: [
+                  Text(
+                    'DEV-${dev.id}',
+                    style: GoogleFonts.inter(
+                        fontWeight: FontWeight.w700, fontSize: 14,
+                        color: cancelada ? _kTextMuted : _kText),
                   ),
+                  const SizedBox(width: 6),
+                  Text('· ${dev.ventaNumero}',
+                      style: GoogleFonts.inter(fontSize: 12, color: _kTextMuted)),
+                ]),
+                const SizedBox(height: 3),
+                // Línea 2: empleado · fecha
+                Text(
+                  '${dev.empleadoNombre}  ·  $date',
+                  style: GoogleFonts.inter(fontSize: 11, color: _kTextMuted),
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              // Contenido
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Fila 1: ID + factura | estado + monto
-                      Row(children: [
-                        Expanded(
-                          child: Row(children: [
-                            Text(
-                              'DEV-${dev.id}',
-                              style: GoogleFonts.inter(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
-                                color: cancelada ? _kTextMuted : _kText,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              '· ${dev.ventaNumero}',
-                              style: GoogleFonts.inter(
-                                  fontSize: 13, color: _kTextMuted),
-                            ),
-                          ]),
-                        ),
-                        _ChipEstado(estado: dev.estado),
-                        const SizedBox(width: 8),
-                        _buildMonto(cancelada, esCambio),
-                      ]),
-                      const SizedBox(height: 8),
-                      // Fila 2: tipo, método, empleado, # productos
-                      Wrap(
-                        spacing: 5,
-                        runSpacing: 4,
-                        children: [
-                          _Chip(
-                            label: esCambio ? 'Cambio' : 'Devolución',
-                            color: accentColor,
-                          ),
-                          _Chip(
-                            label: _metodoLabel(dev.metodoDevolucion),
-                            color: _kTextMuted,
-                          ),
-                          _Chip(
-                            label: dev.empleadoNombre,
-                            color: _kTextMuted,
-                          ),
-                          _Chip(
-                            label:
-                                '${dev.detalles.length} prod.',
-                            color: _kTextMuted,
-                          ),
-                        ],
+                // Línea 3: producto de reemplazo si es cambio
+                if (esCambio && (dev.productoReemplazoNombre?.isNotEmpty ?? false)) ...[
+                  const SizedBox(height: 4),
+                  Row(children: [
+                    const Icon(Icons.swap_horiz_rounded, size: 12, color: _kGreen),
+                    const SizedBox(width: 3),
+                    Expanded(
+                      child: Text(
+                        '${dev.productoReemplazoNombre}'
+                        '${dev.cantidadReemplazo != null ? ' ×${_fmtCant(dev.cantidadReemplazo!)}' : ''}',
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                            fontSize: 11, fontWeight: FontWeight.w600, color: _kGreen),
                       ),
-                      // Producto de reemplazo (solo cambio)
-                      if (esCambio &&
-                          (dev.productoReemplazoNombre?.isNotEmpty ??
-                              false)) ...[
-                        const SizedBox(height: 6),
-                        Row(children: [
-                          const Icon(Icons.swap_horiz_rounded,
-                              size: 13, color: _kGreen),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              '${dev.productoReemplazoNombre}'
-                              '${dev.cantidadReemplazo != null ? ' ×${_fmtCant(dev.cantidadReemplazo!)}' : ''}',
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: _kGreen,
-                              ),
-                            ),
-                          ),
-                        ]),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              // Botón cancelar (solo admin/supervisor)
-              if (puedeCancel && !cancelada)
-                Center(
-                  child: IconButton(
-                    icon: Icon(
-                      Icons.cancel_outlined,
-                      color: _kError.withValues(alpha: 0.65),
-                      size: 20,
                     ),
-                    tooltip: 'Cancelar devolución',
-                    onPressed: onCancelar,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    constraints: const BoxConstraints(),
-                  ),
-                ),
-              const SizedBox(width: 4),
+                  ]),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // ── Columna derecha: estado + monto + chevron ──
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              _ChipEstado(estado: dev.estado, tipo: dev.tipo),
+              const SizedBox(height: 6),
+              monto,
             ],
           ),
-        ),
+          const SizedBox(width: 4),
+          // Botón cancelar (admin/supervisor)
+          if (puedeCancel && !cancelada)
+            GestureDetector(
+              onTap: onCancelar,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: Icon(Icons.more_vert_rounded, size: 18, color: _kTextMuted),
+              ),
+            )
+          else
+            const Icon(Icons.chevron_right_rounded, size: 18, color: _kTextMuted),
+        ]),
       ),
     );
   }
 
-  Widget _buildMonto(bool cancelada, bool esCambio) {
+  Widget _buildMonto(bool esCambio, bool cancelada) {
     if (cancelada) {
       return Text(
         fmt.format(dev.totalDevuelto),
-        style: GoogleFonts.inter(
-            fontWeight: FontWeight.w700,
-            fontSize: 14,
-            color: _kTextMuted),
+        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: _kTextMuted),
       );
     }
     if (!esCambio) {
       return Text(
         '- ${fmt.format(dev.totalDevuelto)}',
-        style: GoogleFonts.inter(
-            fontWeight: FontWeight.w700,
-            fontSize: 14,
-            color: _kOrange),
+        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: _kOrange),
       );
     }
     final tipoDif = (dev.tipoDiferencia ?? 'exacto').toLowerCase();
@@ -201,95 +165,68 @@ class DevolucionCard extends StatelessWidget {
     if (tipoDif == 'cobrar') {
       return Text(
         '+ ${fmt.format(dif)}',
-        style: GoogleFonts.inter(
-            fontWeight: FontWeight.w700, fontSize: 14, color: _kGreen),
+        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: _kGreen),
       );
     }
     if (tipoDif == 'devolver') {
       return Text(
         '- ${fmt.format(dif)}',
-        style: GoogleFonts.inter(
-            fontWeight: FontWeight.w700, fontSize: 14, color: _kOrange),
+        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: _kOrange),
       );
     }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: _kSurface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _kBorder),
-      ),
-      child: Text('Exacto',
-          style: GoogleFonts.inter(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: _kTextMuted)),
+    return Text(
+      'Exacto',
+      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w500, color: _kTextMuted),
     );
-  }
-
-  String _metodoLabel(String m) {
-    switch (m) {
-      case 'transferencia': return 'Transf.';
-      case 'tarjeta':       return 'Tarjeta';
-      case 'nota_credito':  return 'NC';
-      default:              return 'Efectivo';
-    }
   }
 
   String _fmtCant(double v) =>
       v % 1 == 0 ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
 }
 
-// ── Chip genérico ─────────────────────────────────────────────
-
-class _Chip extends StatelessWidget {
-  final String label;
-  final Color  color;
-  const _Chip({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: Text(
-      label,
-      style: GoogleFonts.inter(
-          fontSize: 10, fontWeight: FontWeight.w600, color: color),
-    ),
-  );
-}
-
-// ── Chip estado ───────────────────────────────────────────────
+// ── Chip de estado ────────────────────────────────────────────
 
 class _ChipEstado extends StatelessWidget {
   final String estado;
-  const _ChipEstado({required this.estado});
+  final String tipo;
+  const _ChipEstado({required this.estado, required this.tipo});
 
   @override
   Widget build(BuildContext context) {
     final cancelada = estado == 'cancelada';
+    final esCambio  = tipo == 'cambio';
+
+    final Color bg;
+    final Color border;
+    final Color text;
+    final String label;
+
+    if (cancelada) {
+      bg     = _kSurface;
+      border = _kBorder;
+      text   = _kTextMuted;
+      label  = 'Cancelada';
+    } else if (esCambio) {
+      bg     = _kGreen.withValues(alpha: 0.08);
+      border = _kGreen.withValues(alpha: 0.25);
+      text   = _kGreen;
+      label  = 'Cambio';
+    } else {
+      bg     = _kMintLight;
+      border = _kGreen.withValues(alpha: 0.25);
+      text   = _kGreen;
+      label  = 'Procesada';
+    }
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
       decoration: BoxDecoration(
-        color: cancelada ? _kSurface : _kMintLight,
+        color: bg,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: cancelada
-              ? _kBorder
-              : _kGreen.withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: border),
       ),
-      child: Text(
-        cancelada ? 'Cancelada' : 'Procesada',
-        style: GoogleFonts.inter(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: cancelada ? _kTextMuted : _kGreen,
-        ),
-      ),
+      child: Text(label,
+          style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: text)),
     );
   }
 }
