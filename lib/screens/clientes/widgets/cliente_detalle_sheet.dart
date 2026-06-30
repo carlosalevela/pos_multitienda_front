@@ -6,7 +6,9 @@ import 'package:provider/provider.dart';
 
 import '../../../models/cliente.dart';
 import '../../../models/separado.dart';
+import '../../../models/tier_model.dart';
 import '../../../providers/cliente_provider.dart';
+import '../../../services/tier_service.dart';
 
 // ─────────────────────────────────────────────────────────────
 // Paleta — misma que clientes_screen.dart
@@ -88,13 +90,28 @@ class _ClienteDetalleSheetContentState
     extends State<_ClienteDetalleSheetContent>
     with SingleTickerProviderStateMixin {
   late final TabController _tabCtrl;
+  List<TierModel> _tiers         = [];
+  bool            _cargandoTiers = false;
 
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 3, vsync: this);
+    _tabCtrl = TabController(length: 4, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ClienteProvider>().cargarDetalleCliente(widget.cliente.id);
+      _cargarTiers();
+    });
+  }
+
+  Future<void> _cargarTiers() async {
+    setState(() => _cargandoTiers = true);
+    final res = await TierService().getTiers();
+    if (!mounted) return;
+    setState(() {
+      _cargandoTiers = false;
+      if (res['success'] == true) {
+        _tiers = List<TierModel>.from(res['data'] as List);
+      }
     });
   }
 
@@ -205,6 +222,7 @@ class _ClienteDetalleSheetContentState
             controller:      _tabCtrl,
             separadosCount:  prov.separadosActivos.length,
             historialCount:  prov.historialCliente.length,
+            tieneTier:       widget.cliente.tierInfo != null,
           ),
 
           const Divider(height: 1, color: Color(0xFFEBEFF3)),
@@ -269,6 +287,13 @@ class _ClienteDetalleSheetContentState
                               itemBuilder: (_, i) =>
                                   _HistorialCard(separado: prov.historialCliente[i]),
                             ),
+
+                      // Tab 4 — Fidelización
+                      _TabFidelizacion(
+                        cliente:        widget.cliente,
+                        tiers:          _tiers,
+                        cargandoTiers:  _cargandoTiers,
+                      ),
                     ],
                   ),
           ),
@@ -387,11 +412,13 @@ class _DetalleTabBar extends StatelessWidget {
   final TabController controller;
   final int           separadosCount;
   final int           historialCount;
+  final bool          tieneTier;
 
   const _DetalleTabBar({
     required this.controller,
     required this.separadosCount,
     required this.historialCount,
+    required this.tieneTier,
   });
 
   Widget _badge(int count, Color color) => Container(
@@ -435,6 +462,14 @@ class _DetalleTabBar extends StatelessWidget {
                 const SizedBox(width: 5),
                 _badge(historialCount, _Pal.inkLight),
               ],
+            ]),
+          ),
+          Tab(
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(tieneTier ? Icons.star_rounded : Icons.star_outline_rounded,
+                  size: 14),
+              const SizedBox(width: 4),
+              const Text('Fideliz.'),
             ]),
           ),
         ],
@@ -899,6 +934,362 @@ class _HistorialCard extends StatelessWidget {
                 style: GoogleFonts.plusJakartaSans(
                     fontSize: 10, color: _Pal.success)),
         ]),
+      ]),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// TAB FIDELIZACIÓN
+// ─────────────────────────────────────────────────────────────
+class _TabFidelizacion extends StatelessWidget {
+  final Cliente        cliente;
+  final List<TierModel> tiers;
+  final bool           cargandoTiers;
+
+  const _TabFidelizacion({
+    required this.cliente,
+    required this.tiers,
+    required this.cargandoTiers,
+  });
+
+  static final _fmtCop = NumberFormat.currency(
+      locale: 'es_CO', symbol: '\$', decimalDigits: 0);
+
+  Color _tierColor(String hex) =>
+      Color(int.parse(hex.replaceFirst('#', '0xFF')));
+
+  @override
+  Widget build(BuildContext context) {
+    if (cargandoTiers) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(40),
+          child: CircularProgressIndicator(color: _Pal.teal, strokeWidth: 2.5),
+        ),
+      );
+    }
+
+    final tierActual = cliente.tierInfo;
+    final acumulado  = cliente.totalAcumulado;
+
+    // Encuentra el modelo completo del tier actual y el siguiente
+    TierModel? modelActual;
+    TierModel? modelSiguiente;
+    if (tierActual != null && tiers.isNotEmpty) {
+      final sorted = [...tiers]..sort((a, b) =>
+          a.umbralMin.compareTo(b.umbralMin));
+      try {
+        modelActual = sorted.firstWhere((t) => t.id == tierActual.id);
+      } catch (_) {}
+      if (modelActual != null) {
+        final idx = sorted.indexOf(modelActual);
+        if (idx + 1 < sorted.length) modelSiguiente = sorted[idx + 1];
+      }
+    }
+
+    // Barra de progreso
+    double progreso = 0;
+    double falta    = 0;
+    if (modelActual != null) {
+      final min = modelActual.umbralMin;
+      final max = modelSiguiente?.umbralMin ?? modelActual.umbralMax;
+      if (max != null && max > min) {
+        progreso = ((acumulado - min) / (max - min)).clamp(0.0, 1.0);
+        falta    = (max - acumulado).clamp(0, double.infinity);
+      } else {
+        progreso = 1.0; // nivel máximo
+      }
+    } else if (tiers.isNotEmpty) {
+      // Aún sin tier — buscar el primer umbral
+      final sorted = [...tiers]..sort((a, b) =>
+          a.umbralMin.compareTo(b.umbralMin));
+      final primero = sorted.first;
+      if (primero.umbralMin > 0) {
+        progreso = (acumulado / primero.umbralMin).clamp(0.0, 1.0);
+        falta    = (primero.umbralMin - acumulado).clamp(0, double.infinity);
+      }
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+
+        // ── Banner tier actual ──────────────────────────
+        if (tierActual != null) ...[
+          _TierBanner(
+            tier:      tierActual,
+            tierColor: _tierColor(tierActual.colorHex),
+          ),
+          const SizedBox(height: 16),
+        ] else ...[
+          Container(
+            width:   double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color:        const Color(0xFFF8FAFB),
+              borderRadius: BorderRadius.circular(16),
+              border:       Border.all(color: const Color(0xFFEBEFF3)),
+            ),
+            child: Row(children: [
+              Container(
+                width:  44, height: 44,
+                decoration: BoxDecoration(
+                  color:        _Pal.inkLight.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.star_outline_rounded,
+                    size: 22, color: _Pal.inkLight),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Sin tier asignado',
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14, fontWeight: FontWeight.w700,
+                          color: _Pal.inkMid)),
+                  const SizedBox(height: 2),
+                  Text('Acumula compras para alcanzar el primer nivel',
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11, color: _Pal.inkLight)),
+                ]),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 16),
+        ],
+
+        // ── Total acumulado ─────────────────────────────
+        Container(
+          width:   double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color:        _Pal.teal.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(14),
+            border:       Border.all(color: _Pal.teal.withOpacity(0.15)),
+          ),
+          child: Row(children: [
+            Container(
+              width:  38, height: 38,
+              decoration: BoxDecoration(
+                color:        _Pal.teal.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.account_balance_wallet_outlined,
+                  size: 18, color: _Pal.teal),
+            ),
+            const SizedBox(width: 12),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Total acumulado',
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11, color: _Pal.teal,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text(_fmtCop.format(acumulado),
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 20, fontWeight: FontWeight.w800,
+                      color: _Pal.teal)),
+            ]),
+          ]),
+        ),
+
+        const SizedBox(height: 16),
+
+        // ── Progreso al siguiente tier ──────────────────
+        if (modelSiguiente != null || (tierActual == null && tiers.isNotEmpty)) ...[
+          Text(
+            modelSiguiente != null
+                ? 'Progreso hacia "${modelSiguiente.nombre}"'
+                : 'Progreso hacia "${([...tiers]..sort((a, b) => a.umbralMin.compareTo(b.umbralMin))).first.nombre}"',
+            style: GoogleFonts.plusJakartaSans(
+                fontSize: 12, fontWeight: FontWeight.w700,
+                color: _Pal.inkMid),
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value:           progreso,
+              minHeight:       10,
+              backgroundColor: const Color(0xFFEBEFF3),
+              valueColor:      const AlwaysStoppedAnimation(_Pal.teal),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Text('${(progreso * 100).toStringAsFixed(0)}% completado',
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11, color: _Pal.inkLight)),
+            if (falta > 0)
+              Text('Faltan ${_fmtCop.format(falta)}',
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11, fontWeight: FontWeight.w600,
+                      color: _Pal.inkMid)),
+          ]),
+          const SizedBox(height: 16),
+        ] else if (tierActual != null && modelSiguiente == null) ...[
+          Container(
+            width:   double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color:        const Color(0xFFFFF8E7),
+              borderRadius: BorderRadius.circular(12),
+              border:       Border.all(color: const Color(0xFFFFE082)),
+            ),
+            child: Row(children: [
+              const Icon(Icons.emoji_events_rounded,
+                  size: 18, color: Color(0xFFD4AF37)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('¡Nivel máximo alcanzado!',
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12, fontWeight: FontWeight.w700,
+                        color: const Color(0xFF8B6F1E))),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 16),
+        ],
+
+        // ── Lista de todos los tiers ────────────────────
+        if (tiers.isNotEmpty) ...[
+          Text('Niveles de fidelización',
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12, fontWeight: FontWeight.w700,
+                  color: _Pal.inkMid)),
+          const SizedBox(height: 8),
+          ...([...tiers]..sort((a, b) => a.umbralMin.compareTo(b.umbralMin)))
+              .map((t) {
+            final esCurrent = t.id == tierActual?.id;
+            final tColor    = _tierColor(t.colorHex);
+            return Container(
+              margin:  const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color:        esCurrent ? tColor.withOpacity(0.08) : Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border:       Border.all(
+                  color: esCurrent ? tColor.withOpacity(0.40) : const Color(0xFFEBEFF3),
+                  width: esCurrent ? 1.5 : 1,
+                ),
+              ),
+              child: Row(children: [
+                Container(
+                  width:  32, height: 32,
+                  decoration: BoxDecoration(
+                    color:        tColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Icon(Icons.star_rounded, size: 16, color: tColor),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      Text(t.nombre,
+                          style: GoogleFonts.plusJakartaSans(
+                              fontSize: 13, fontWeight: FontWeight.w700,
+                              color: esCurrent ? tColor : _Pal.ink)),
+                      if (esCurrent) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color:        tColor,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text('Actual',
+                              style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 9, fontWeight: FontWeight.w700,
+                                  color: Colors.white)),
+                        ),
+                      ],
+                    ]),
+                    Text(
+                      t.umbralMax != null
+                          ? 'Desde ${_fmtCop.format(t.umbralMin)} hasta ${_fmtCop.format(t.umbralMax!)}'
+                          : 'Desde ${_fmtCop.format(t.umbralMin)}',
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 10, color: _Pal.inkLight),
+                    ),
+                  ]),
+                ),
+                Text('${t.descuentoPct.toStringAsFixed(0)}% desc.',
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12, fontWeight: FontWeight.w700,
+                        color: esCurrent ? tColor : _Pal.inkMid)),
+              ]),
+            );
+          }),
+        ],
+      ]),
+    );
+  }
+}
+
+class _TierBanner extends StatelessWidget {
+  final TierInfo tierInfo;
+  final Color    tierColor;
+
+  const _TierBanner({
+    required TierInfo tier,
+    required this.tierColor,
+  }) : tierInfo = tier;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width:   double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [tierColor, tierColor.withOpacity(0.75)],
+          begin:  Alignment.topLeft,
+          end:    Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(children: [
+        Container(
+          width:  52, height: 52,
+          decoration: BoxDecoration(
+            color:        Colors.white.withOpacity(0.20),
+            borderRadius: BorderRadius.circular(15),
+          ),
+          child: const Icon(Icons.star_rounded, size: 28, color: Colors.white),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Nivel actual',
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11, color: Colors.white.withOpacity(0.80),
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 2),
+            Text(tierInfo.nombre,
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 20, fontWeight: FontWeight.w800,
+                    color: Colors.white)),
+          ]),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color:        Colors.white.withOpacity(0.20),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(children: [
+            Text('${tierInfo.descuentoPct.toStringAsFixed(0)}%',
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 18, fontWeight: FontWeight.w800,
+                    color: Colors.white)),
+            Text('descuento',
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 9, color: Colors.white.withOpacity(0.80),
+                    fontWeight: FontWeight.w600)),
+          ]),
+        ),
       ]),
     );
   }

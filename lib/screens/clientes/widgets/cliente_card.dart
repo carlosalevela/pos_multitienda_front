@@ -57,6 +57,29 @@ class ClienteCard extends StatelessWidget {
     );
   }
 
+  // ── Chip de tier ─────────────────────────────────────
+  Widget _tierBadge() {
+    final tier = cliente.tierInfo;
+    if (tier == null) return const SizedBox.shrink();
+    final color = Color(
+        int.parse(tier.colorHex.replaceFirst('#', '0xFF')));
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color:        color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+        border:       Border.all(color: color.withOpacity(0.35), width: 1),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.star_rounded, size: 10, color: color),
+        const SizedBox(width: 3),
+        Text(tier.nombre,
+            style: GoogleFonts.poppins(
+                fontSize: 10, fontWeight: FontWeight.w600, color: color)),
+      ]),
+    );
+  }
+
   // ── Chip de cédula/NIT ────────────────────────────────
   Widget _chipCedula() {
     if (cliente.cedulaNit == null || cliente.cedulaNit!.isEmpty) {
@@ -182,6 +205,11 @@ class ClienteCard extends StatelessWidget {
 
                     // Cédula
                     _chipCedula(),
+
+                    if (cliente.tierInfo != null) ...[
+                      const SizedBox(height: 5),
+                      _tierBadge(),
+                    ],
 
                     const SizedBox(height: 6),
 
