@@ -16,6 +16,7 @@ class ContabilidadProvider extends ChangeNotifier {
 
   List<Map<String, dynamic>> abonosDia    = [];
   List<Map<String, dynamic>> separadosDia = [];
+  List<TopCliente>           topClientes  = [];
 
   // ── Datos nuevos (P&L, Comparativo, PE, Flujo Caja) ──
   EstadoResultados?        estadoResultados;
@@ -70,11 +71,13 @@ class ContabilidadProvider extends ChangeNotifier {
       _service.getResumenDiario(tiendaId: tiendaId, fecha: fechaStr),
       _service.getAbonosDia(fechaStr, tiendaId),
       _service.getSeparadosDia(fechaStr, tiendaId),
+      _service.getTopClientes(tiendaId: tiendaId, fecha: fechaStr),
     ]);
 
     resumenDiario = results[0] as ResumenDiario?;
     abonosDia     = results[1] as List<Map<String, dynamic>>;
     separadosDia  = results[2] as List<Map<String, dynamic>>;
+    topClientes   = results[3] as List<TopCliente>;
 
     _cargando = false;
     notifyListeners();
@@ -225,6 +228,7 @@ class ContabilidadProvider extends ChangeNotifier {
       _service.getPuntoEquilibrio(fechaIni: fechaIni, fechaFin: fechaFin, tiendaId: tiendaId),
       _service.getComparativoTiendas(fechaIni: fechaIni, fechaFin: fechaFin),
       _service.getVentasPorEmpleado(fechaIni: fechaIni, fechaFin: fechaFin, tiendaId: tiendaId),
+      _service.getTopClientes(fechaIni: fechaIni, fechaFin: fechaFin, tiendaId: tiendaId),
     ]);
 
     estadoResultados   = results[0] as EstadoResultados?;
@@ -244,6 +248,7 @@ class ContabilidadProvider extends ChangeNotifier {
             .map((e) => VentaEmpleado.fromJson(e as Map<String, dynamic>))
             .toList()
         : [];
+    topClientes   = results[4] as List<TopCliente>;
 
     _cargandoPl = false;
     notifyListeners();

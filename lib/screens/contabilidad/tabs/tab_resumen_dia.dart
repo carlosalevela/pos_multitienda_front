@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
+import '../../../models/contabilidad_models.dart';
 import '../../../providers/contabilidad_provider.dart';
 
 class TabResumenDia extends StatefulWidget {
@@ -134,6 +135,8 @@ class _TabResumenDiaState extends State<TabResumenDia> {
                             _abonosSection(cont),
                             const SizedBox(height: 20),
                             _separadosSection(cont),
+                            const SizedBox(height: 20),
+                            _topClientesSection(cont),
                           ],
                         ),
                 ),
@@ -857,6 +860,127 @@ class _TabResumenDiaState extends State<TabResumenDia> {
         ],
       ]),
     );
+  }
+
+  // ── Top Clientes ──────────────────────────────────────────
+
+  Widget _topClientesSection(ContabilidadProvider cont) {
+    return _card(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3E8FF),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.star_rounded, size: 16, color: Color(0xFF7C3AED)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Top Clientes ${_esHoy ? "de hoy" : _labelFecha}',
+              style: GoogleFonts.poppins(
+                  fontSize: 15, fontWeight: FontWeight.bold, color: _onSurface),
+            ),
+          ),
+          if (cont.topClientes.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3E8FF),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text('${cont.topClientes.length}',
+                  style: GoogleFonts.poppins(
+                      fontSize: 11, fontWeight: FontWeight.bold,
+                      color: const Color(0xFF7C3AED))),
+            ),
+        ]),
+        const SizedBox(height: 14),
+        if (cont.topClientes.isEmpty)
+          _emptyState('Sin clientes registrados este día', Icons.person_search_rounded)
+        else
+          ...cont.topClientes.asMap().entries.map((e) =>
+              _topClienteRow(e.key, e.value)),
+      ]),
+    );
+  }
+
+  Widget _topClienteRow(int index, TopCliente c) {
+    final iniciales = c.nombre.split(' ')
+        .where((p) => p.isNotEmpty).take(2).map((p) => p[0].toUpperCase()).join();
+    final avatarColor = _avatarColor(c.clienteId);
+    final tierColor = c.tierColorHex != null
+        ? Color(int.parse(c.tierColorHex!.replaceFirst('#', '0xFF')))
+        : null;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(children: [
+        // Posición
+        SizedBox(
+          width: 20,
+          child: Text('${index + 1}',
+              style: GoogleFonts.poppins(
+                  fontSize: 11, fontWeight: FontWeight.bold,
+                  color: _onSurfVar)),
+        ),
+        const SizedBox(width: 6),
+        // Avatar
+        Container(
+          width: 34, height: 34,
+          decoration: BoxDecoration(
+            color: avatarColor.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Center(
+            child: Text(iniciales,
+                style: GoogleFonts.poppins(
+                    fontSize: 12, fontWeight: FontWeight.bold,
+                    color: avatarColor)),
+          ),
+        ),
+        const SizedBox(width: 10),
+        // Nombre + tier
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(c.nombre,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.poppins(
+                    fontSize: 13, fontWeight: FontWeight.w600,
+                    color: _onSurface)),
+            if (c.tierNombre != null && tierColor != null)
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.star_rounded, size: 10, color: tierColor),
+                const SizedBox(width: 3),
+                Text(c.tierNombre!,
+                    style: GoogleFonts.poppins(
+                        fontSize: 10, fontWeight: FontWeight.w600,
+                        color: tierColor)),
+              ]),
+          ]),
+        ),
+        // Stats
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text('\$${widget.fmt.format(c.totalPeriodo)}',
+              style: GoogleFonts.poppins(
+                  fontSize: 13, fontWeight: FontWeight.bold,
+                  color: _primary)),
+          Text('${c.numCompras} compra${c.numCompras != 1 ? 's' : ''}',
+              style: GoogleFonts.poppins(
+                  fontSize: 10, color: _onSurfVar)),
+        ]),
+      ]),
+    );
+  }
+
+  Color _avatarColor(int id) {
+    const palette = [
+      Color(0xFF01696F), Color(0xFF5B4CF5), Color(0xFFD97706),
+      Color(0xFF059669), Color(0xFFDB2777), Color(0xFF0284C7),
+    ];
+    return palette[id % palette.length];
   }
 
   // ── Micro widgets ──────────────────────────────────────────

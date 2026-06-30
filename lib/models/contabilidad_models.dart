@@ -1,5 +1,42 @@
 // lib/models/contabilidad_models.dart
 
+// ── TopCliente ─────────────────────────────────────────
+
+class TopCliente {
+  final int    clienteId;
+  final String nombre;
+  final double totalPeriodo;
+  final int    numCompras;
+  final double totalAcumulado;
+  final String? tierNombre;
+  final String? tierColorHex;
+  final double? tierDescuentoPct;
+
+  const TopCliente({
+    required this.clienteId,
+    required this.nombre,
+    required this.totalPeriodo,
+    required this.numCompras,
+    required this.totalAcumulado,
+    this.tierNombre,
+    this.tierColorHex,
+    this.tierDescuentoPct,
+  });
+
+  factory TopCliente.fromJson(Map<String, dynamic> j) => TopCliente(
+    clienteId:       j['cliente_id'] as int,
+    nombre:          j['nombre'] as String? ?? '',
+    totalPeriodo:    double.parse((j['total_periodo']   ?? 0).toString()),
+    numCompras:      j['num_compras'] as int? ?? 0,
+    totalAcumulado:  double.parse((j['total_acumulado'] ?? 0).toString()),
+    tierNombre:      j['tier']?['nombre']       as String?,
+    tierColorHex:    j['tier']?['color_hex']    as String?,
+    tierDescuentoPct: j['tier']?['descuento_pct'] != null
+        ? double.parse(j['tier']['descuento_pct'].toString())
+        : null,
+  );
+}
+
 // ── ResumenDiario ──────────────────────────────────────
 
 class ResumenDiario {

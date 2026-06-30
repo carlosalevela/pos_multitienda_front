@@ -65,6 +65,35 @@ class ContabilidadService {
     }
   }
 
+  Future<List<TopCliente>> getTopClientes({
+    int?    tiendaId,
+    String? fecha,
+    String? fechaIni,
+    String? fechaFin,
+    int     limite = 5,
+  }) async {
+    try {
+      final r = await ApiClient.instance.get(
+        '/contabilidad/reportes/top-clientes/',
+        queryParameters: {
+          if (tiendaId != null) 'tienda_id': tiendaId,
+          if (fecha    != null) 'fecha':      fecha,
+          if (fechaIni != null) 'fecha_ini':  fechaIni,
+          if (fechaFin != null) 'fecha_fin':  fechaFin,
+          'limite': limite,
+        },
+      );
+      final list = r.data is List ? r.data as List : [];
+      return list.map((e) => TopCliente.fromJson(e as Map<String, dynamic>)).toList();
+    } on DioException catch (e) {
+      debugPrint('❌ getTopClientes error: ${e.response?.data}');
+      return [];
+    } catch (e) {
+      debugPrint('❌ getTopClientes error: $e');
+      return [];
+    }
+  }
+
   Future<Map<String, dynamic>?> getResumenAnual({
     int? tiendaId,
     required int anio,

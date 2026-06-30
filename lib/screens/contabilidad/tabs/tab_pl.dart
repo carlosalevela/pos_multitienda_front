@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
-import '../../../providers/contabilidad_provider.dart';
 import '../../../models/contabilidad_models.dart';
+import '../../../providers/contabilidad_provider.dart';
 import 'export_guard.dart';
 
 enum _Periodo { semana, mes, anio, custom }
@@ -113,8 +113,12 @@ class _TabPLState extends State<TabPL> {
                                 _peCard(cont.puntoEquilibrio!),
                                 const SizedBox(height: 16),
                               ],
-                              if (cont.vendedores.isNotEmpty)
+                              if (cont.vendedores.isNotEmpty) ...[
                                 _vendedoresCard(cont.vendedores),
+                                const SizedBox(height: 16),
+                              ],
+                              if (cont.topClientes.isNotEmpty)
+                                _topClientesCard(cont.topClientes),
                             ]),
                           ),
                         ],
@@ -129,6 +133,10 @@ class _TabPLState extends State<TabPL> {
                       if (cont.vendedores.isNotEmpty) ...[
                         const SizedBox(height: 16),
                         _vendedoresCard(cont.vendedores),
+                      ],
+                      if (cont.topClientes.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        _topClientesCard(cont.topClientes),
                       ],
                     ]);
                   }),
@@ -718,6 +726,94 @@ class _TabPLState extends State<TabPL> {
                     fontWeight: FontWeight.bold,
                     color: _green),
               ),
+            ]),
+          );
+        }),
+      ]),
+    );
+  }
+
+  // ── Top Clientes ──────────────────────────────────────
+
+  Widget _topClientesCard(List<TopCliente> lista) {
+    return _card(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _seccionTitulo('Top Clientes', Icons.star_rounded,
+            const Color(0xFF7C3AED)),
+        const SizedBox(height: 12),
+        ...lista.take(5).toList().asMap().entries.map((e) {
+          final i = e.key;
+          final c = e.value;
+          final iniciales = c.nombre.split(' ')
+              .where((p) => p.isNotEmpty).take(2)
+              .map((p) => p[0].toUpperCase()).join();
+          const avatarPalette = [
+            Color(0xFF01696F), Color(0xFF5B4CF5), Color(0xFFD97706),
+            Color(0xFF059669), Color(0xFFDB2777), Color(0xFF0284C7),
+          ];
+          final avatarColor = avatarPalette[c.clienteId % avatarPalette.length];
+          final tierColor = c.tierColorHex != null
+              ? Color(int.parse(c.tierColorHex!.replaceFirst('#', '0xFF')))
+              : null;
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(children: [
+              Container(
+                width: 28, height: 28,
+                decoration: BoxDecoration(
+                  color: avatarColor.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text('${i + 1}',
+                      style: GoogleFonts.poppins(
+                          fontSize: 11, fontWeight: FontWeight.bold,
+                          color: avatarColor)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                width: 30, height: 30,
+                decoration: BoxDecoration(
+                  color: avatarColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Center(
+                  child: Text(iniciales,
+                      style: GoogleFonts.poppins(
+                          fontSize: 10, fontWeight: FontWeight.bold,
+                          color: avatarColor)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(c.nombre,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.poppins(
+                          fontSize: 12, fontWeight: FontWeight.w600,
+                          color: const Color(0xFF1A1A2E))),
+                  if (c.tierNombre != null && tierColor != null)
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.star_rounded, size: 9, color: tierColor),
+                      const SizedBox(width: 2),
+                      Text(c.tierNombre!,
+                          style: GoogleFonts.poppins(
+                              fontSize: 9, fontWeight: FontWeight.w600,
+                              color: tierColor)),
+                    ]),
+                ]),
+              ),
+              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Text('\$${widget.fmt.format(c.totalPeriodo)}',
+                    style: GoogleFonts.poppins(
+                        fontSize: 13, fontWeight: FontWeight.bold,
+                        color: const Color(0xFF006C49))),
+                Text('${c.numCompras} compra${c.numCompras != 1 ? "s" : ""}',
+                    style: GoogleFonts.poppins(
+                        fontSize: 9, color: Colors.grey.shade500)),
+              ]),
             ]),
           );
         }),
