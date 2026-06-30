@@ -47,7 +47,11 @@ class PosProvider extends ChangeNotifier {
 
   // ── Tickets parkados ──────────────────────────────────
   final List<TicketParkado> _ticketsParkados = [];
-  int _contadorTickets = 1;
+  int  _contadorTickets = 1;
+  int? _numeroActual;
+
+  // ── Última venta (para recibo) ────────────────────────
+  Map<String, dynamic>? _ultimaVenta;
 
   // ── Getters ───────────────────────────────────────────
   List<Producto>             get resultados        => _resultados;
@@ -65,6 +69,8 @@ class PosProvider extends ChangeNotifier {
   List<TicketParkado>        get ticketsParkados   => List.unmodifiable(_ticketsParkados);
   bool                       get hayTicketsParkados => _ticketsParkados.isNotEmpty;
   int                        get numTicketsParkados => _ticketsParkados.length;
+  int?                       get numeroActual       => _numeroActual;
+  Map<String, dynamic>?      get ultimaVenta        => _ultimaVenta;
 
   double get total             => _carrito.fold(0, (sum, item) => sum + item.subtotal);
   double get totalConDescuento => (total - _descuento).clamp(0, double.infinity);
@@ -209,12 +215,12 @@ class PosProvider extends ChangeNotifier {
 
   void limpiarCarrito() {
     _carrito       = [];
-    _resultados    = [];
     _montoRecibido = 0;
     _metodoPago    = 'efectivo';
     _errorMsg      = '';
     _successMsg    = '';
     _descuento     = 0;
+    _numeroActual  = null;
     notifyListeners();
   }
 
@@ -229,21 +235,21 @@ class PosProvider extends ChangeNotifier {
       metodoPago:    _metodoPago,
       montoRecibido: _montoRecibido,
       descuento:     _descuento,
-      numero:        _contadorTickets++,
+      numero:        _numeroActual ?? _contadorTickets++,
     ));
     _carrito       = [];
-    _resultados    = [];
     _montoRecibido = 0;
     _metodoPago    = 'efectivo';
     _descuento     = 0;
     _errorMsg      = '';
     _successMsg    = '';
+    _numeroActual  = null;
     notifyListeners();
     return true;
   }
 
   /// Restaura un ticket parkado al carrito activo.
-  /// Si el carrito activo tiene items, lo parka primero.
+  /// Si el carrito activo tiene items, lo parka primero (conservando su número).
   void restaurarTicket(int index) {
     if (index < 0 || index >= _ticketsParkados.length) return;
     if (_carrito.isNotEmpty) {
@@ -252,7 +258,7 @@ class PosProvider extends ChangeNotifier {
         metodoPago:    _metodoPago,
         montoRecibido: _montoRecibido,
         descuento:     _descuento,
-        numero:        _contadorTickets++,
+        numero:        _numeroActual ?? _contadorTickets++,
       ));
     }
     final snap    = _ticketsParkados.removeAt(index);
@@ -260,6 +266,7 @@ class PosProvider extends ChangeNotifier {
     _metodoPago    = snap.metodoPago;
     _montoRecibido = snap.montoRecibido;
     _descuento     = snap.descuento;
+    _numeroActual  = snap.numero;
     _errorMsg      = '';
     _successMsg    = '';
     notifyListeners();
@@ -315,8 +322,8 @@ class PosProvider extends ChangeNotifier {
     _procesando = false;
 
     if (result['success'] == true) {
-      // ✅ guardar msg ANTES de limpiar — limpiarCarrito() borra _successMsg
       final msg = '✅ Venta registrada — Vuelto: \$${vuelto.toStringAsFixed(0)}';
+      _ultimaVenta = result['data'] as Map<String, dynamic>?;
       limpiarCarrito();
       _successMsg = msg;
       notifyListeners();

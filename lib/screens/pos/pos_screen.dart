@@ -11,11 +11,13 @@ import '../../providers/pos_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/cliente_provider.dart';
 import '../../models/producto.dart';
+import '../../models/item_carrito.dart';
 import '../../models/cliente.dart';
 import '../../services/inventario_service.dart';
 import '../../services/cliente_service.dart';
 import '../clientes/widgets/separado_form.dart';
 import '../../providers/notificaciones_provider.dart';
+import '../../services/recibo_pdf_service.dart';
 
 // ── Design system (Material You / Enterprise POS) ─────────
 const _kGreen          = Color(0xFF61DDAA);   // mint — igual que dashboard _C.green
@@ -938,7 +940,7 @@ class _PosScreenState extends State<PosScreen> {
           scrollDirection: Axis.horizontal,
           child: Row(children: [
             _ticketTab(
-              label: 'Actual',
+              label: pos.numeroActual != null ? '#${pos.numeroActual}' : 'Nuevo',
               total: pos.total,
               items: pos.carrito.fold(0, (s, i) => s + i.cantidad),
               isActive: true,
@@ -1249,11 +1251,13 @@ class _PosScreenState extends State<PosScreen> {
 
       // Botones principales
       Row(children: [
+        // Separar pedido
         Expanded(
+          flex: 5,
           child: OutlinedButton.icon(
             onPressed: pos.carrito.isEmpty ? null : () => _abrirSeparado(pos, auth),
             icon: const Icon(Icons.bookmark_add_rounded, size: 15),
-            label: const Text('Separar Pedido'),
+            label: const Text('Separar'),
             style: OutlinedButton.styleFrom(
               foregroundColor: _kText,
               side: const BorderSide(color: _kBorder),
@@ -1264,27 +1268,53 @@ class _PosScreenState extends State<PosScreen> {
           ),
         ),
         const SizedBox(width: 8),
+        // Opciones de cobro apiladas
         Expanded(
-          child: ElevatedButton.icon(
-            onPressed: pos.procesando ? null : () {
-              _montoCtrl.clear();
-              _descuentoCtrl.clear();
-              pos.cobrar(auth.tiendaId);
-            },
-            icon: pos.procesando
-                ? const SizedBox(width: 14, height: 14,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : const Icon(Icons.shopping_cart_checkout_rounded, size: 15),
-            label: Text(pos.procesando ? 'Procesando…' : 'Completar Venta'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _kGreen,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              padding: const EdgeInsets.symmetric(vertical: 13),
-              textStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
+          flex: 6,
+          child: Column(children: [
+            // Cobrar sin imprimir
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: pos.procesando ? null : () {
+                  _montoCtrl.clear();
+                  _descuentoCtrl.clear();
+                  pos.cobrar(auth.tiendaId);
+                },
+                icon: pos.procesando
+                    ? const SizedBox(width: 14, height: 14,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Icon(Icons.check_rounded, size: 15),
+                label: Text(pos.procesando ? 'Procesando…' : 'Cobrar'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _kGreen,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(vertical: 11),
+                  textStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+              ),
             ),
-          ),
+            const SizedBox(height: 5),
+            // Cobrar e imprimir recibo
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: pos.procesando ? null : () => _cobrarEImprimir(pos, auth),
+                icon: const Icon(Icons.print_rounded, size: 15),
+                label: const Text('Cobrar e Imprimir'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _kGreenDark,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(vertical: 11),
+                  textStyle: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ]),
         ),
       ]),
 
@@ -1656,6 +1686,37 @@ class _PosScreenState extends State<PosScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _cobrarEImprimir(PosProvider pos, AuthProvider auth) async {
+    // Snapshot antes de cobrar — pos limpia el carrito en caso de éxito
+    final items         = List<ItemCarrito>.from(pos.carrito);
+    final descuento     = pos.descuento;
+    final total         = pos.totalConDescuento;
+    final montoRecibido = pos.montoRecibido;
+    final vuelto        = pos.vuelto;
+    final metodoPago    = pos.metodoPago;
+
+    _montoCtrl.clear();
+    _descuentoCtrl.clear();
+
+    final ok = await pos.cobrar(auth.tiendaId);
+    if (!ok || !mounted) return;
+
+    final factura = pos.ultimaVenta?['numero_factura']?.toString() ?? '-';
+
+    await ReciboPdfService.imprimirRecibo(
+      items:          items,
+      numeroFactura:  factura,
+      tiendaNombre:   auth.tiendaNombre,
+      empresaNombre:  auth.empresaNombre,
+      cajeroNombre:   auth.nombre,
+      metodoPago:     metodoPago,
+      descuento:      descuento,
+      total:          total,
+      montoRecibido:  montoRecibido,
+      vuelto:         vuelto,
     );
   }
 
