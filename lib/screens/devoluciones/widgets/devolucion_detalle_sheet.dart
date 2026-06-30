@@ -73,7 +73,7 @@ class DevolucionDetalleSheet extends StatelessWidget {
           children: [
             Text(
               'DEV-${dev.id}',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                 fontWeight: FontWeight.bold,
                 fontSize: 18,
                 color: const Color(0xFF1A1A2E),
@@ -81,7 +81,7 @@ class DevolucionDetalleSheet extends StatelessWidget {
             ),
             Text(
               '${dev.tipo == 'cambio' ? 'Cambio' : 'Devolución'} | Venta: ${dev.ventaNumero}',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                 fontSize: 13,
                 color: Colors.grey.shade500,
               ),
@@ -140,7 +140,7 @@ class DevolucionDetalleSheet extends StatelessWidget {
       children: [
         Text(
           'Producto entregado',
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
             fontWeight: FontWeight.bold,
             fontSize: 14,
             color: const Color(0xFF1A1A2E),
@@ -178,14 +178,14 @@ class DevolucionDetalleSheet extends StatelessWidget {
                   children: [
                     Text(
                       dev.productoReemplazoNombre ?? 'Sin producto',
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     Text(
                       'Cantidad: $cantRepStr',
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                         fontSize: 12,
                         color: Colors.green.shade700,
                       ),
@@ -193,7 +193,7 @@ class DevolucionDetalleSheet extends StatelessWidget {
                     if (dev.precioReemplazo != null)
                       Text(
                         'Precio: ${fmt.format(precioRep)}',
-                        style: GoogleFonts.poppins(
+                        style: GoogleFonts.inter(
                           fontSize: 12,
                           color: Colors.green.shade700,
                           fontWeight: FontWeight.w600,
@@ -202,7 +202,7 @@ class DevolucionDetalleSheet extends StatelessWidget {
                     if (dev.subtotalReemplazo != null)
                       Text(
                         'Subtotal: ${fmt.format(subtotalRep)}',
-                        style: GoogleFonts.poppins(
+                        style: GoogleFonts.inter(
                           fontSize: 12,
                           color: Colors.green.shade800,
                           fontWeight: FontWeight.bold,
@@ -224,7 +224,7 @@ class DevolucionDetalleSheet extends StatelessWidget {
       children: [
         Text(
           dev.tipo == 'cambio' ? 'Productos recibidos' : 'Productos devueltos',
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
             fontWeight: FontWeight.bold,
             fontSize: 14,
             color: const Color(0xFF1A1A2E),
@@ -242,14 +242,14 @@ class DevolucionDetalleSheet extends StatelessWidget {
       children: [
         Text(
           dev.tipo == 'cambio' ? 'Valor reconocido' : 'Total devuelto',
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
             fontWeight: FontWeight.bold,
             fontSize: 15,
           ),
         ),
         Text(
           fmt.format(dev.totalDevuelto),
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
             fontWeight: FontWeight.bold,
             fontSize: 17,
             color: Colors.orange.shade700,
@@ -310,7 +310,7 @@ class _InfoRow extends StatelessWidget {
         const SizedBox(width: 8),
         Text(
           '$label: ',
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
             fontSize: 12,
             color: Colors.grey.shade500,
           ),
@@ -319,7 +319,7 @@ class _InfoRow extends StatelessWidget {
           child: Text(
             value,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: const Color(0xFF1A1A2E),
@@ -366,7 +366,7 @@ class _ProductoRow extends StatelessWidget {
             children: [
               Text(
                 detalle.productoNombre,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -374,7 +374,7 @@ class _ProductoRow extends StatelessWidget {
               if (detalle.motivo.isNotEmpty)
                 Text(
                   detalle.motivo,
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                     fontSize: 11,
                     color: Colors.grey.shade500,
                   ),
@@ -387,14 +387,14 @@ class _ProductoRow extends StatelessWidget {
           children: [
             Text(
               'x$cantStr',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                 fontSize: 12,
                 color: Colors.grey.shade500,
               ),
             ),
             Text(
               fmt.format(detalle.subtotal),
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
                 color: Colors.orange.shade700,
@@ -426,7 +426,7 @@ class _ChipEstado extends StatelessWidget {
       ),
       child: Text(
         cancelada ? 'Cancelada' : 'Procesada',
-        style: GoogleFonts.poppins(
+        style: GoogleFonts.inter(
           fontSize: 12,
           fontWeight: FontWeight.w600,
           color: cancelada ? Colors.grey.shade600 : Colors.green.shade700,

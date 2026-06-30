@@ -2,14 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../models/devolucion_model.dart';
-import '../../../core/constants.dart';
+
+const _kGreen     = Color(0xFF006C49);
+const _kMintLight = Color(0xFFE8FFF4);
+const _kSurface   = Color(0xFFF7F9FB);
+const _kText      = Color(0xFF191C1E);
+const _kTextMuted = Color(0xFF76777D);
+const _kBorder    = Color(0xFFE0E3E5);
+const _kOrange    = Color(0xFFF59E0B);
+const _kError     = Color(0xFFBA1A1A);
 
 class DevolucionCard extends StatelessWidget {
-  final DevolucionModel dev;
-  final NumberFormat fmt;
-  final bool puedeCancel;
-  final VoidCallback onTap;
-  final VoidCallback? onCancelar;
+  final DevolucionModel  dev;
+  final NumberFormat     fmt;
+  final bool             puedeCancel;
+  final VoidCallback     onTap;
+  final VoidCallback?    onCancelar;
 
   const DevolucionCard({
     super.key,
@@ -22,309 +30,242 @@ class DevolucionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cancelada = dev.estado == 'cancelada';
+    final esCambio   = dev.tipo == 'cambio';
+    final cancelada  = dev.estado == 'cancelada';
+    final accentColor = cancelada
+        ? _kTextMuted
+        : esCambio
+            ? _kGreen
+            : _kOrange;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: cancelada ? Colors.grey.shade50 : Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: cancelada ? Border.all(color: Colors.grey.shade200) : null,
-        boxShadow: cancelada
-            ? null
-            : [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _kBorder),
+          boxShadow: cancelada
+              ? null
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+        ),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Barra izquierda de color por tipo
+              Container(
+                width: 4,
+                decoration: BoxDecoration(
+                  color: accentColor,
+                  borderRadius: const BorderRadius.only(
+                    topLeft:    Radius.circular(14),
+                    bottomLeft: Radius.circular(14),
+                  ),
                 ),
-              ],
-      ),
-      child: ListTile(
-        onTap: onTap,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: _leading(cancelada),
-        title: _title(cancelada),
-        subtitle: _subtitle(),
-        trailing: _trailing(cancelada),
-      ),
-    );
-  }
-
-  Widget _leading(bool cancelada) {
-    final esCambio = dev.tipo == 'cambio';
-
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        color: cancelada
-            ? Colors.grey.shade100
-            : esCambio
-                ? Colors.green.shade50
-                : Colors.orange.shade50,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Icon(
-        esCambio ? Icons.swap_horiz_rounded : Icons.assignment_return_rounded,
-        size: 22,
-        color: cancelada
-            ? Colors.grey.shade400
-            : esCambio
-                ? Colors.green.shade600
-                : Colors.orange.shade600,
-      ),
-    );
-  }
-
-  Widget _title(bool cancelada) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            'DEV-${dev.id} • ${dev.ventaNumero}',
-            overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.poppins(
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-              color: cancelada ? Colors.grey.shade400 : const Color(0xFF1A1A2E),
-            ),
+              ),
+              // Contenido
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Fila 1: ID + factura | estado + monto
+                      Row(children: [
+                        Expanded(
+                          child: Row(children: [
+                            Text(
+                              'DEV-${dev.id}',
+                              style: GoogleFonts.inter(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                                color: cancelada ? _kTextMuted : _kText,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '· ${dev.ventaNumero}',
+                              style: GoogleFonts.inter(
+                                  fontSize: 13, color: _kTextMuted),
+                            ),
+                          ]),
+                        ),
+                        _ChipEstado(estado: dev.estado),
+                        const SizedBox(width: 8),
+                        _buildMonto(cancelada, esCambio),
+                      ]),
+                      const SizedBox(height: 8),
+                      // Fila 2: tipo, método, empleado, # productos
+                      Wrap(
+                        spacing: 5,
+                        runSpacing: 4,
+                        children: [
+                          _Chip(
+                            label: esCambio ? 'Cambio' : 'Devolución',
+                            color: accentColor,
+                          ),
+                          _Chip(
+                            label: _metodoLabel(dev.metodoDevolucion),
+                            color: _kTextMuted,
+                          ),
+                          _Chip(
+                            label: dev.empleadoNombre,
+                            color: _kTextMuted,
+                          ),
+                          _Chip(
+                            label:
+                                '${dev.detalles.length} prod.',
+                            color: _kTextMuted,
+                          ),
+                        ],
+                      ),
+                      // Producto de reemplazo (solo cambio)
+                      if (esCambio &&
+                          (dev.productoReemplazoNombre?.isNotEmpty ??
+                              false)) ...[
+                        const SizedBox(height: 6),
+                        Row(children: [
+                          const Icon(Icons.swap_horiz_rounded,
+                              size: 13, color: _kGreen),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              '${dev.productoReemplazoNombre}'
+                              '${dev.cantidadReemplazo != null ? ' ×${_fmtCant(dev.cantidadReemplazo!)}' : ''}',
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: _kGreen,
+                              ),
+                            ),
+                          ),
+                        ]),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              // Botón cancelar (solo admin/supervisor)
+              if (puedeCancel && !cancelada)
+                Center(
+                  child: IconButton(
+                    icon: Icon(
+                      Icons.cancel_outlined,
+                      color: _kError.withValues(alpha: 0.65),
+                      size: 20,
+                    ),
+                    tooltip: 'Cancelar devolución',
+                    onPressed: onCancelar,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    constraints: const BoxConstraints(),
+                  ),
+                ),
+              const SizedBox(width: 4),
+            ],
           ),
         ),
-        const SizedBox(width: 6),
-        _ChipEstado(estado: dev.estado),
-        const SizedBox(width: 8),
-        _buildImpactoMonto(cancelada),
-      ],
+      ),
     );
   }
 
-  Widget _buildImpactoMonto(bool cancelada) {
+  Widget _buildMonto(bool cancelada, bool esCambio) {
     if (cancelada) {
       return Text(
         fmt.format(dev.totalDevuelto),
-        style: GoogleFonts.poppins(
-          fontWeight: FontWeight.bold,
-          fontSize: 14,
-          color: Colors.grey.shade400,
-        ),
+        style: GoogleFonts.inter(
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+            color: _kTextMuted),
       );
     }
-
-    if (dev.tipo == 'devolucion') {
+    if (!esCambio) {
       return Text(
         '- ${fmt.format(dev.totalDevuelto)}',
-        style: GoogleFonts.poppins(
-          fontWeight: FontWeight.bold,
-          fontSize: 14,
-          color: Colors.orange.shade700,
-        ),
+        style: GoogleFonts.inter(
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+            color: _kOrange),
       );
     }
-
     final tipoDif = (dev.tipoDiferencia ?? 'exacto').toLowerCase();
-    final diferencia = dev.diferencia ?? 0.0;
-
+    final dif     = dev.diferencia ?? 0.0;
     if (tipoDif == 'cobrar') {
       return Text(
-        '+ ${fmt.format(diferencia)}',
-        style: GoogleFonts.poppins(
-          fontWeight: FontWeight.bold,
-          fontSize: 14,
-          color: Colors.green.shade700,
-        ),
+        '+ ${fmt.format(dif)}',
+        style: GoogleFonts.inter(
+            fontWeight: FontWeight.w700, fontSize: 14, color: _kGreen),
       );
     }
-
     if (tipoDif == 'devolver') {
       return Text(
-        '- ${fmt.format(diferencia)}',
-        style: GoogleFonts.poppins(
-          fontWeight: FontWeight.bold,
-          fontSize: 14,
-          color: Colors.deepOrange.shade600,
-        ),
+        '- ${fmt.format(dif)}',
+        style: GoogleFonts.inter(
+            fontWeight: FontWeight.w700, fontSize: 14, color: _kOrange),
       );
     }
-
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.blueGrey.shade50,
+        color: _kSurface,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _kBorder),
       ),
-      child: Text(
-        'Exacto',
-        style: GoogleFonts.poppins(
-          fontWeight: FontWeight.w600,
-          fontSize: 10,
-          color: Colors.blueGrey.shade600,
-        ),
-      ),
-    );
-  }
-
-  Widget _subtitle() {
-    final esCambio = dev.tipo == 'cambio';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 4),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            _Chip(
-              label: esCambio ? 'Cambio' : 'Devolución',
-              color: esCambio ? Colors.green.shade600 : Colors.orange.shade600,
-            ),
-            _Chip(
-              label: _metodoLabel(dev.metodoDevolucion),
-              color: _metodoColor(dev.metodoDevolucion),
-            ),
-            _Chip(
-              label: dev.empleadoNombre,
-              color: Colors.grey.shade600,
-            ),
-            _Chip(
-              label: '${dev.detalles.length} producto${dev.detalles.length != 1 ? 's' : ''}',
-              color: Colors.blueGrey.shade400,
-            ),
-          ],
-        ),
-        if (esCambio && (dev.productoReemplazoNombre?.isNotEmpty ?? false)) ...[
-          const SizedBox(height: 6),
-          Text(
-            'Cambio por: ${dev.productoReemplazoNombre}'
-            '${dev.cantidadReemplazo != null ? ' x${_fmtCantidad(dev.cantidadReemplazo!)}' : ''}',
-            overflow: TextOverflow.ellipsis,
-            maxLines: 1,
-            style: GoogleFonts.poppins(
-              fontSize: 11,
+      child: Text('Exacto',
+          style: GoogleFonts.inter(
+              fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: Colors.green.shade700,
-            ),
-          ),
-        ],
-        if (esCambio) ...[
-          const SizedBox(height: 4),
-          Text(
-            _detalleImpacto(),
-            overflow: TextOverflow.ellipsis,
-            maxLines: 1,
-            style: GoogleFonts.poppins(
-              fontSize: 11,
-              color: _detalleImpactoColor(),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-        if (dev.observaciones.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Text(
-            dev.observaciones,
-            overflow: TextOverflow.ellipsis,
-            maxLines: 1,
-            style: GoogleFonts.poppins(
-              fontSize: 11,
-              color: Colors.grey.shade500,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  String _detalleImpacto() {
-    final tipoDif = (dev.tipoDiferencia ?? 'exacto').toLowerCase();
-    final diferencia = dev.diferencia ?? 0.0;
-
-    if (tipoDif == 'cobrar') {
-      return 'Cliente agregó ${fmt.format(diferencia)}';
-    }
-    if (tipoDif == 'devolver') {
-      return 'Se devolvieron ${fmt.format(diferencia)}';
-    }
-    return 'Cambio exacto sin diferencia';
-  }
-
-  Color _detalleImpactoColor() {
-    final tipoDif = (dev.tipoDiferencia ?? 'exacto').toLowerCase();
-    if (tipoDif == 'cobrar') return Colors.green.shade700;
-    if (tipoDif == 'devolver') return Colors.deepOrange.shade600;
-    return Colors.blueGrey.shade600;
-  }
-
-  Widget? _trailing(bool cancelada) {
-    if (!puedeCancel || cancelada) return null;
-    return IconButton(
-      icon: Icon(Icons.cancel_outlined, color: Colors.red.shade400, size: 20),
-      tooltip: 'Cancelar devolución',
-      onPressed: onCancelar,
+              color: _kTextMuted)),
     );
   }
 
   String _metodoLabel(String m) {
     switch (m) {
-      case 'transferencia':
-        return 'Transferencia';
-      case 'tarjeta':
-        return 'Tarjeta';
-      case 'nota_credito':
-        return 'Nota Crédito';
-      default:
-        return 'Efectivo';
+      case 'transferencia': return 'Transf.';
+      case 'tarjeta':       return 'Tarjeta';
+      case 'nota_credito':  return 'NC';
+      default:              return 'Efectivo';
     }
   }
 
-  Color _metodoColor(String m) {
-    switch (m) {
-      case 'transferencia':
-        return Colors.blue.shade600;
-      case 'tarjeta':
-        return Colors.purple.shade600;
-      case 'nota_credito':
-        return Colors.teal.shade600;
-      default:
-        return Colors.green.shade600;
-    }
-  }
-
-  String _fmtCantidad(double v) {
-    return v % 1 == 0 ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
-  }
+  String _fmtCant(double v) =>
+      v % 1 == 0 ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
 }
+
+// ── Chip genérico ─────────────────────────────────────────────
 
 class _Chip extends StatelessWidget {
   final String label;
-  final Color color;
-
+  final Color  color;
   const _Chip({required this.label, required this.color});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: GoogleFonts.poppins(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: color,
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(
+      label,
+      style: GoogleFonts.inter(
+          fontSize: 10, fontWeight: FontWeight.w600, color: color),
+    ),
+  );
 }
+
+// ── Chip estado ───────────────────────────────────────────────
 
 class _ChipEstado extends StatelessWidget {
   final String estado;
-
   const _ChipEstado({required this.estado});
 
   @override
@@ -333,18 +274,20 @@ class _ChipEstado extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: cancelada ? Colors.grey.shade100 : Colors.green.shade50,
+        color: cancelada ? _kSurface : _kMintLight,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: cancelada ? Colors.grey.shade300 : Colors.green.shade200,
+          color: cancelada
+              ? _kBorder
+              : _kGreen.withValues(alpha: 0.3),
         ),
       ),
       child: Text(
         cancelada ? 'Cancelada' : 'Procesada',
-        style: GoogleFonts.poppins(
+        style: GoogleFonts.inter(
           fontSize: 10,
           fontWeight: FontWeight.w600,
-          color: cancelada ? Colors.grey.shade500 : Colors.green.shade700,
+          color: cancelada ? _kTextMuted : _kGreen,
         ),
       ),
     );

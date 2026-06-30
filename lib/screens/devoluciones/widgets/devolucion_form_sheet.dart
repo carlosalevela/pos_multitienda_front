@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../../../core/constants.dart';
 import '../../../models/venta_model.dart';
 import '../../../models/producto.dart';
 import '../../../models/cliente.dart';
@@ -11,6 +10,13 @@ import '../../../providers/devoluciones_provider.dart';
 import '../../../services/venta_service.dart';
 import '../../../services/inventario_service.dart';
 import '../../../services/cliente_service.dart';
+
+const _kGreen     = Color(0xFF006C49);
+const _kMintLight = Color(0xFFE8FFF4);
+const _kSurface   = Color(0xFFF7F9FB);
+const _kText      = Color(0xFF191C1E);
+const _kTextMuted = Color(0xFF76777D);
+const _kBorder    = Color(0xFFE0E3E5);
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  DevolucionFormSheet
@@ -93,18 +99,12 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
     final auth     = context.read<AuthProvider>();
     final tiendaId = auth.tiendaId != 0 ? auth.tiendaId : null;
 
-    final raw = await _ventaService.listarVentas(
-      tiendaId: tiendaId,
-      fecha: DateFormat('yyyy-MM-dd').format(DateTime.now()),
-    );
-
-    final ventas = raw
-        .map((e) => VentaResumenModel.fromJson(e))
-        .where((v) => v.estado != 'anulada')
-        .toList();
-
     if (!mounted) return;
-    final sel = await _BuscadorVentasSheet.show(context, ventas: ventas);
+    final sel = await _BuscadorVentasSheet.show(
+      context,
+      tiendaId:     tiendaId,
+      ventaService: _ventaService,
+    );
     if (sel == null) return;
     await _cargarDisponible(sel);
   }
@@ -362,7 +362,7 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
 
   void _showSnack(String msg, {bool error = false}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg, style: GoogleFonts.poppins(fontSize: 13)),
+      content: Text(msg, style: GoogleFonts.inter(fontSize: 13)),
       backgroundColor: error ? Colors.red.shade600 : Colors.green.shade600,
       behavior: SnackBarBehavior.floating,
     ));
@@ -449,20 +449,20 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
     Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: const Color(Constants.primaryColor).withOpacity(0.1),
+        color: _kGreen.withValues(alpha:0.1),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Icon(Icons.assignment_return_rounded,
-          color: const Color(Constants.primaryColor), size: 18),
+          color: _kGreen, size: 18),
     ),
     const SizedBox(width: 10),
     Text(
       _tipoOperacion == 'cambio' ? 'Nuevo cambio' : 'Nueva devolución',
-      style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16),
+      style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16),
     ),
     const Spacer(),
     IconButton(
-      icon: Icon(Icons.close_rounded, size: 20, color: Colors.grey.shade400),
+      icon: Icon(Icons.close_rounded, size: 20, color: _kTextMuted),
       onPressed: () => Navigator.pop(context),
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(),
@@ -478,13 +478,13 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: _ventaSel != null
-              ? const Color(Constants.primaryColor).withOpacity(0.05)
-              : Colors.grey.shade50,
+              ? _kGreen.withValues(alpha:0.05)
+              : _kSurface,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: _ventaSel != null
-                ? const Color(Constants.primaryColor)
-                : Colors.grey.shade200,
+                ? _kGreen
+                : _kBorder,
             width: _ventaSel != null ? 1.5 : 1,
           ),
         ),
@@ -493,8 +493,8 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
             _ventaSel != null ? Icons.receipt_long_rounded : Icons.search_rounded,
             size: 18,
             color: _ventaSel != null
-                ? const Color(Constants.primaryColor)
-                : Colors.grey.shade400,
+                ? _kGreen
+                : _kTextMuted,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -504,30 +504,30 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
                       width: 14, height: 14,
                       child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: const Color(Constants.primaryColor)),
+                          color: _kGreen),
                     ),
                     const SizedBox(width: 8),
                     Text('Cargando venta...',
-                        style: GoogleFonts.poppins(
-                            fontSize: 13, color: Colors.grey.shade500)),
+                        style: GoogleFonts.inter(
+                            fontSize: 13, color: _kTextMuted)),
                   ])
                 : _ventaSel == null
                     ? Text('Buscar venta del día',
-                        style: GoogleFonts.poppins(
-                            fontSize: 13, color: Colors.grey.shade400))
+                        style: GoogleFonts.inter(
+                            fontSize: 13, color: _kTextMuted))
                     : Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(_ventaSel!.numeroFactura,
-                              style: GoogleFonts.poppins(
+                              style: GoogleFonts.inter(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
-                                  color: const Color(Constants.primaryColor))),
+                                  color: _kGreen)),
                           Text(
                             '${_ventaSel!.clienteNombre}  •  '
                             '${NumberFormat.currency(locale: 'es_CO', symbol: '\$').format(_ventaSel!.total)}',
-                            style: GoogleFonts.poppins(
-                                fontSize: 11, color: Colors.grey.shade500),
+                            style: GoogleFonts.inter(
+                                fontSize: 11, color: _kTextMuted),
                           ),
                         ],
                       ),
@@ -536,11 +536,11 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
             GestureDetector(
               onTap: _limpiarVenta,
               child: Icon(Icons.close_rounded,
-                  size: 16, color: Colors.grey.shade400),
+                  size: 16, color: _kTextMuted),
             )
           else
             Icon(Icons.chevron_right_rounded,
-                size: 18, color: Colors.grey.shade400),
+                size: 18, color: _kTextMuted),
         ]),
       ),
     ),
@@ -552,11 +552,11 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
       value: _metodoPago,
       isDense: true,
       decoration: _inputDeco(null),
-      style: GoogleFonts.poppins(fontSize: 14, color: const Color(0xFF1A1A2E)),
+      style: GoogleFonts.inter(fontSize: 14, color: const Color(0xFF1A1A2E)),
       items: _metodos
           .map((m) => DropdownMenuItem(
                 value: m.$1,
-                child: Text(m.$2, style: GoogleFonts.poppins(fontSize: 14)),
+                child: Text(m.$2, style: GoogleFonts.inter(fontSize: 14)),
               ))
           .toList(),
       onChanged: (v) => setState(() => _metodoPago = v!),
@@ -595,25 +595,25 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
         readOnly: _clienteSel != null,
         decoration: InputDecoration(
           hintText: 'Buscar cliente por nombre o cédula...',
-          hintStyle: GoogleFonts.poppins(fontSize: 13, color: Colors.grey.shade400),
+          hintStyle: GoogleFonts.inter(fontSize: 13, color: _kTextMuted),
           prefixIcon: _clienteSel != null
               ? Padding(
                   padding: const EdgeInsets.all(10),
                   child: CircleAvatar(
                     radius: 10,
                     backgroundColor:
-                        const Color(Constants.primaryColor).withOpacity(0.1),
+                        _kGreen.withValues(alpha:0.1),
                     child: Text(
                       _clienteSel!.nombre[0].toUpperCase(),
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
-                          color: const Color(Constants.primaryColor)),
+                          color: _kGreen),
                     ),
                   ),
                 )
               : Icon(Icons.person_search_rounded,
-                  size: 18, color: Colors.grey.shade400),
+                  size: 18, color: _kTextMuted),
           suffixIcon: _buscandoCliente
               ? Padding(
                   padding: const EdgeInsets.all(12),
@@ -621,19 +621,19 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
                     width: 16, height: 16,
                     child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: const Color(Constants.primaryColor)),
+                        color: _kGreen),
                   ),
                 )
               : _clienteSel != null
                   ? IconButton(
                       icon: Icon(Icons.close_rounded,
-                          size: 18, color: Colors.grey.shade400),
+                          size: 18, color: _kTextMuted),
                       onPressed: _limpiarCliente,
                     )
                   : _clienteCtrl.text.isNotEmpty
                       ? IconButton(
                           icon: Icon(Icons.close_rounded,
-                              size: 18, color: Colors.grey.shade400),
+                              size: 18, color: _kTextMuted),
                           onPressed: () {
                             _clienteCtrl.clear();
                             setState(() => _resultadosCliente = []);
@@ -642,29 +642,29 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
                       : null,
           filled: true,
           fillColor: _clienteSel != null
-              ? const Color(Constants.primaryColor).withOpacity(0.04)
-              : Colors.grey.shade50,
+              ? _kGreen.withValues(alpha:0.04)
+              : _kSurface,
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(
                   color: _clienteSel != null
-                      ? const Color(Constants.primaryColor)
-                      : Colors.grey.shade200)),
+                      ? _kGreen
+                      : _kBorder)),
           enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(
                   color: _clienteSel != null
-                      ? const Color(Constants.primaryColor)
-                      : Colors.grey.shade200,
+                      ? _kGreen
+                      : _kBorder,
                   width: _clienteSel != null ? 1.5 : 1)),
           focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: const BorderSide(
-                  color: Color(Constants.primaryColor), width: 1.5)),
+                  color: _kGreen, width: 1.5)),
         ),
-        style: GoogleFonts.poppins(fontSize: 14),
+        style: GoogleFonts.inter(fontSize: 14),
       ),
       if (_resultadosCliente.isNotEmpty) ...[
         const SizedBox(height: 6),
@@ -678,26 +678,26 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
               leading: CircleAvatar(
                 radius: 16,
                 backgroundColor:
-                    const Color(Constants.primaryColor).withOpacity(0.1),
+                    _kGreen.withValues(alpha:0.1),
                 child: Text(c.nombre[0].toUpperCase(),
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
-                        color: const Color(Constants.primaryColor))),
+                        color: _kGreen)),
               ),
               title: Text(c.nombreCompleto,
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                       fontSize: 13, fontWeight: FontWeight.w600)),
               subtitle: Text(
                 [
                   if (c.cedulaNit != null && c.cedulaNit!.isNotEmpty) c.cedulaNit!,
                   if (c.telefono.isNotEmpty) c.telefono,
                 ].join('  •  '),
-                style: GoogleFonts.poppins(
-                    fontSize: 11, color: Colors.grey.shade500),
+                style: GoogleFonts.inter(
+                    fontSize: 11, color: _kTextMuted),
               ),
               trailing: Icon(Icons.chevron_right_rounded,
-                  size: 18, color: Colors.grey.shade400),
+                  size: 18, color: _kTextMuted),
             );
           },
         ),
@@ -717,15 +717,15 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
             _tipoOperacion == 'cambio'
                 ? 'Productos que trae el cliente'
                 : 'Productos a devolver',
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
                 color: const Color(0xFF1A1A2E)),
           ),
           const Spacer(),
           Text('$selCount/${_items.length} seleccionados',
-              style: GoogleFonts.poppins(
-                  fontSize: 11, color: Colors.grey.shade500)),
+              style: GoogleFonts.inter(
+                  fontSize: 11, color: _kTextMuted)),
         ]),
         const SizedBox(height: 8),
         ..._items.map((item) => _ItemProductoCard(
@@ -761,7 +761,7 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
           const SizedBox(width: 8),
           Text(
             'Producto de reemplazo',
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
                 color: const Color(0xFF1A1A2E)),
@@ -776,10 +776,10 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
             onChanged: _buscarProductos,
             decoration: InputDecoration(
               hintText: 'Buscar producto por nombre o código...',
-              hintStyle: GoogleFonts.poppins(
-                  fontSize: 13, color: Colors.grey.shade400),
+              hintStyle: GoogleFonts.inter(
+                  fontSize: 13, color: _kTextMuted),
               prefixIcon: Icon(Icons.search_rounded,
-                  size: 18, color: Colors.grey.shade400),
+                  size: 18, color: _kTextMuted),
               suffixIcon: _buscandoProducto
                   ? Padding(
                       padding: const EdgeInsets.all(12),
@@ -787,13 +787,13 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
                         width: 16, height: 16,
                         child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: const Color(Constants.primaryColor)),
+                            color: _kGreen),
                       ),
                     )
                   : _busquedaCtrl.text.isNotEmpty
                       ? IconButton(
                           icon: Icon(Icons.close_rounded,
-                              size: 18, color: Colors.grey.shade400),
+                              size: 18, color: _kTextMuted),
                           onPressed: () {
                             _busquedaCtrl.clear();
                             setState(() => _resultadosProducto = []);
@@ -801,21 +801,21 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
                         )
                       : null,
               filled: true,
-              fillColor: Colors.grey.shade50,
+              fillColor: _kSurface,
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: Colors.grey.shade200)),
+                  borderSide: BorderSide(color: _kBorder)),
               enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: Colors.grey.shade200)),
+                  borderSide: BorderSide(color: _kBorder)),
               focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: const BorderSide(
-                      color: Color(Constants.primaryColor), width: 1.5)),
+                      color: _kGreen, width: 1.5)),
             ),
-            style: GoogleFonts.poppins(fontSize: 14),
+            style: GoogleFonts.inter(fontSize: 14),
           ),
 
           // Resultados de búsqueda
@@ -840,32 +840,32 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
                     child: Icon(Icons.inventory_2_outlined,
                         size: 18,
                         color: agotado
-                            ? Colors.grey.shade400
+                            ? _kTextMuted
                             : Colors.green.shade600),
                   ),
                   title: Text(p.nombre,
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: agotado
-                              ? Colors.grey.shade400
+                              ? _kTextMuted
                               : const Color(0xFF1A1A2E))),
                   subtitle: Text(
                     '\$${fmt.format(p.precio)}  •  Stock: ${fmt.format(p.stockActual)}',
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
                         fontSize: 11,
                         color: agotado
                             ? Colors.red.shade400
-                            : Colors.grey.shade500),
+                            : _kTextMuted),
                   ),
                   trailing: agotado
                       ? Text('Sin stock',
-                          style: GoogleFonts.poppins(
+                          style: GoogleFonts.inter(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                               color: Colors.red.shade400))
                       : Icon(Icons.add_circle_rounded,
-                          color: const Color(Constants.primaryColor), size: 22),
+                          color: _kGreen, size: 22),
                 );
               },
             ),
@@ -876,8 +876,8 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
             Center(
               child: Text(
                 'Busca el producto que entregarás al cliente',
-                style: GoogleFonts.poppins(
-                    fontSize: 12, color: Colors.grey.shade400),
+                style: GoogleFonts.inter(
+                    fontSize: 12, color: _kTextMuted),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -909,12 +909,12 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(_productoNuevo!.producto.nombre,
-                        style: GoogleFonts.poppins(
+                        style: GoogleFonts.inter(
                             fontSize: 13, fontWeight: FontWeight.w600)),
                     Text(
                       '\$${fmt.format(_productoNuevo!.producto.precio)}  •  '
                       'Subtotal: \$${fmt.format(_productoNuevo!.subtotal)}',
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontSize: 11, color: Colors.green.shade700),
                     ),
                   ],
@@ -929,7 +929,7 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
                     _productoNuevo!.cantidad % 1 == 0
                         ? _productoNuevo!.cantidad.toStringAsFixed(0)
                         : _productoNuevo!.cantidad.toStringAsFixed(1),
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
                         fontSize: 14, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -943,7 +943,7 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
                   _montoRecibidoCtrl.clear();
                 }),
                 child: Icon(Icons.close_rounded,
-                    size: 18, color: Colors.grey.shade400),
+                    size: 18, color: _kTextMuted),
               ),
             ]),
           ),
@@ -983,12 +983,12 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('⚠ Diferencia a cobrar',
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
                       color: Colors.orange.shade700)),
               Text(fmt.format(_saldoPendiente),
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
                       color: Colors.orange.shade700)),
@@ -1005,7 +1005,7 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
                   .where((m) => m.$1 != 'nota_credito')
                   .map((m) => DropdownMenuItem<String>(
                         value: m.$1,
-                        child: Text(m.$2, style: GoogleFonts.poppins(fontSize: 14)),
+                        child: Text(m.$2, style: GoogleFonts.inter(fontSize: 14)),
                       ))
                   .toList(),
               onChanged: (v) => setState(() => _metodoPagoDiferencia = v!),
@@ -1020,7 +1020,7 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
                   const TextInputType.numberWithOptions(decimal: true),
               onChanged: (_) => setState(() {}),
               decoration: _inputDeco('Ej: 20000'),
-              style: GoogleFonts.poppins(fontSize: 14),
+              style: GoogleFonts.inter(fontSize: 14),
               validator: (_) {
                 if (_tipoOperacion != 'cambio' || _saldoPendiente <= 0) return null;
                 final v = double.tryParse(_montoRecibidoCtrl.text.trim());
@@ -1043,7 +1043,7 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
                 ),
                 child: Text(
                   'Cambio: ${fmt.format(montoRaw - _saldoPendiente)}',
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: Colors.green.shade800),
@@ -1059,12 +1059,12 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('↩ Devolver al cliente',
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
                       color: Colors.blueGrey.shade700)),
               Text(fmt.format(_saldoADevolver),
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
                       color: Colors.blueGrey.shade700)),
@@ -1078,12 +1078,12 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('✅ Valor exacto, sin diferencia',
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
                       color: Colors.green.shade700)),
               Text(fmt.format(0),
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
                       color: Colors.green.shade700)),
@@ -1100,7 +1100,7 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
       controller: _obsCtrl,
       maxLines: 2,
       decoration: _inputDeco('Motivo general de la devolución...'),
-      style: GoogleFonts.poppins(fontSize: 14),
+      style: GoogleFonts.inter(fontSize: 14),
     ),
   );
 
@@ -1109,9 +1109,9 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
     child: ElevatedButton(
       onPressed: _guardando ? null : _guardar,
       style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(Constants.primaryColor),
+        backgroundColor: _kGreen,
         foregroundColor: Colors.white,
-        disabledBackgroundColor: Colors.grey.shade200,
+        disabledBackgroundColor: _kBorder,
         padding: const EdgeInsets.symmetric(vertical: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         elevation: 0,
@@ -1123,7 +1123,7 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
             )
           : Text(
               _tipoOperacion == 'cambio' ? 'Registrar cambio' : 'Registrar devolución',
-              style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 15),
+              style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 15),
             ),
     ),
   );
@@ -1138,10 +1138,10 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.grey.shade200),
+          border: Border.all(color: _kBorder),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha:0.04),
                 blurRadius: 8,
                 offset: const Offset(0, 2))
           ],
@@ -1160,19 +1160,19 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
 
   InputDecoration _inputDeco(String? hint) => InputDecoration(
     hintText: hint,
-    hintStyle: GoogleFonts.poppins(fontSize: 13, color: Colors.grey.shade400),
+    hintStyle: GoogleFonts.inter(fontSize: 13, color: _kTextMuted),
     filled: true,
-    fillColor: Colors.grey.shade50,
+    fillColor: _kSurface,
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: Colors.grey.shade200)),
+        borderSide: BorderSide(color: _kBorder)),
     enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: Colors.grey.shade200)),
+        borderSide: BorderSide(color: _kBorder)),
     focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(Constants.primaryColor), width: 1.5)),
+        borderSide: const BorderSide(color: _kGreen, width: 1.5)),
   );
 }
 
@@ -1251,9 +1251,9 @@ class _SaldoRow extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label,
-            style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600)),
+            style: GoogleFonts.inter(fontSize: 12, color: Colors.grey.shade600)),
         Text(fmt.format(valor),
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 fontSize: 13, fontWeight: FontWeight.w600)),
       ],
     ),
@@ -1270,7 +1270,7 @@ class _FormLabel extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Text(label,
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: Colors.grey.shade600)),
@@ -1290,11 +1290,11 @@ class _Chip extends StatelessWidget {
     margin: const EdgeInsets.only(top: 4),
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
     decoration: BoxDecoration(
-      color: color.withOpacity(0.1),
+      color: color.withValues(alpha:0.1),
       borderRadius: BorderRadius.circular(20),
     ),
     child: Text(label,
-        style: GoogleFonts.poppins(
+        style: GoogleFonts.inter(
             fontSize: 10, fontWeight: FontWeight.w600, color: color)),
   );
 }
@@ -1320,12 +1320,12 @@ class _ItemProductoCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.grey.shade50,
+          color: _kSurface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: item.seleccionado
-                ? const Color(Constants.primaryColor).withOpacity(0.3)
-                : Colors.grey.shade200,
+                ? _kGreen.withValues(alpha:0.3)
+                : _kBorder,
           ),
         ),
         child: Column(
@@ -1334,7 +1334,7 @@ class _ItemProductoCard extends StatelessWidget {
             Row(children: [
               Expanded(
                 child: Text(item.producto.productoNombre,
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
                         fontSize: 13, fontWeight: FontWeight.w600)),
               ),
               Transform.scale(
@@ -1342,7 +1342,7 @@ class _ItemProductoCard extends StatelessWidget {
                 child: Checkbox(
                   value: item.seleccionado,
                   onChanged: (_) => onToggle(),
-                  activeColor: const Color(Constants.primaryColor),
+                  activeColor: _kGreen,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(4)),
                 ),
@@ -1371,7 +1371,7 @@ class _ItemProductoCard extends StatelessWidget {
                       'Cantidad',
                       helper: 'Máx: ${fmt.format(item.producto.disponible)}',
                     ),
-                    style: GoogleFonts.poppins(fontSize: 13),
+                    style: GoogleFonts.inter(fontSize: 13),
                     validator: (_) {
                       if (!item.seleccionado) return null;
                       final v = double.tryParse(
@@ -1389,7 +1389,7 @@ class _ItemProductoCard extends StatelessWidget {
                   child: TextFormField(
                     controller: item.motivoCtrl,
                     decoration: _deco('Motivo (opcional)'),
-                    style: GoogleFonts.poppins(fontSize: 13),
+                    style: GoogleFonts.inter(fontSize: 13),
                   ),
                 ),
               ]),
@@ -1403,8 +1403,8 @@ class _ItemProductoCard extends StatelessWidget {
   InputDecoration _deco(String label, {String? helper}) => InputDecoration(
     labelText: label,
     helperText: helper,
-    labelStyle: GoogleFonts.poppins(fontSize: 11),
-    helperStyle: GoogleFonts.poppins(fontSize: 10),
+    labelStyle: GoogleFonts.inter(fontSize: 11),
+    helperStyle: GoogleFonts.inter(fontSize: 10),
     isDense: true,
     filled: true,
     fillColor: Colors.white,
@@ -1412,34 +1412,43 @@ class _ItemProductoCard extends StatelessWidget {
         const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
     border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(color: Colors.grey.shade200)),
+        borderSide: BorderSide(color: _kBorder)),
     enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(color: Colors.grey.shade200)),
+        borderSide: BorderSide(color: _kBorder)),
     focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(
-            color: Color(Constants.primaryColor), width: 1.5)),
+            color: _kGreen, width: 1.5)),
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Buscador de ventas
+//  Buscador de ventas (con selector de fecha)
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _BuscadorVentasSheet extends StatefulWidget {
-  final List<VentaResumenModel> ventas;
-  const _BuscadorVentasSheet({required this.ventas});
+  final int?         tiendaId;
+  final VentaService ventaService;
+
+  const _BuscadorVentasSheet({
+    required this.tiendaId,
+    required this.ventaService,
+  });
 
   static Future<VentaResumenModel?> show(
     BuildContext context, {
-    required List<VentaResumenModel> ventas,
+    required int?         tiendaId,
+    required VentaService ventaService,
   }) =>
       showModalBottomSheet<VentaResumenModel>(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
-        builder: (_) => _BuscadorVentasSheet(ventas: ventas),
+        builder: (_) => _BuscadorVentasSheet(
+          tiendaId:     tiendaId,
+          ventaService: ventaService,
+        ),
       );
 
   @override
@@ -1447,14 +1456,17 @@ class _BuscadorVentasSheet extends StatefulWidget {
 }
 
 class _BuscadorVentasSheetState extends State<_BuscadorVentasSheet> {
-  final _ctrl = TextEditingController();
-  late List<VentaResumenModel> _filtradas;
+  final _ctrl                     = TextEditingController();
+  DateTime                _fechaSel  = DateTime.now();
+  List<VentaResumenModel> _ventas    = [];
+  List<VentaResumenModel> _filtradas = [];
+  bool                    _cargando  = true;
 
   @override
   void initState() {
     super.initState();
-    _filtradas = widget.ventas;
     _ctrl.addListener(_filtrar);
+    _cargarVentas();
   }
 
   @override
@@ -1463,140 +1475,239 @@ class _BuscadorVentasSheetState extends State<_BuscadorVentasSheet> {
     super.dispose();
   }
 
+  Future<void> _cargarVentas() async {
+    setState(() => _cargando = true);
+    final fecha = DateFormat('yyyy-MM-dd').format(_fechaSel);
+    final raw   = await widget.ventaService.listarVentas(
+      tiendaId: widget.tiendaId,
+      fecha:    fecha,
+    );
+    if (!mounted) return;
+    final ventas = raw
+        .map((e) => VentaResumenModel.fromJson(e))
+        .where((v) => v.estado != 'anulada')
+        .toList();
+    setState(() {
+      _ventas   = ventas;
+      _cargando = false;
+    });
+    _filtrar();
+  }
+
   void _filtrar() {
     final q = _ctrl.text.toLowerCase();
     setState(() {
-      _filtradas = widget.ventas
-          .where((v) =>
-              v.numeroFactura.toLowerCase().contains(q) ||
-              v.clienteNombre.toLowerCase().contains(q))
-          .toList();
+      _filtradas = q.isEmpty
+          ? _ventas
+          : _ventas
+              .where((v) =>
+                  v.numeroFactura.toLowerCase().contains(q) ||
+                  v.clienteNombre.toLowerCase().contains(q))
+              .toList();
     });
+  }
+
+  Future<void> _seleccionarFecha() async {
+    final picked = await showDatePicker(
+      context:     context,
+      initialDate: _fechaSel,
+      firstDate:   DateTime.now().subtract(const Duration(days: 365)),
+      lastDate:    DateTime.now(),
+      locale:      const Locale('es', 'CO'),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _fechaSel = picked;
+      _ctrl.clear();
+    });
+    _cargarVentas();
+  }
+
+  String _labelFecha() {
+    final hoy  = DateTime.now();
+    final ayer = hoy.subtract(const Duration(days: 1));
+    if (_fechaSel.year == hoy.year &&
+        _fechaSel.month == hoy.month &&
+        _fechaSel.day == hoy.day) return 'Hoy';
+    if (_fechaSel.year == ayer.year &&
+        _fechaSel.month == ayer.month &&
+        _fechaSel.day == ayer.day) return 'Ayer';
+    return DateFormat('dd/MM/yyyy').format(_fechaSel);
   }
 
   @override
   Widget build(BuildContext context) {
     final fmt = NumberFormat.currency(locale: 'es_CO', symbol: '\$');
     return Container(
-      height: MediaQuery.of(context).size.height * 0.75,
+      height: MediaQuery.of(context).size.height * 0.80,
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(children: [
+        // Handle
         Center(
           child: Container(
             width: 40, height: 4,
             margin: const EdgeInsets.symmetric(vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.grey.shade300,
+              color: _kBorder,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
         ),
+        // Header + date chip
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
           child: Row(children: [
-            Text('Ventas de hoy',
-                style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.bold, fontSize: 16)),
+            Text('Buscar venta',
+                style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    color: _kText)),
             const Spacer(),
-            Text('${widget.ventas.length} ventas',
-                style: GoogleFonts.poppins(
-                    fontSize: 12, color: Colors.grey.shade500)),
+            GestureDetector(
+              onTap: _seleccionarFecha,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _kMintLight,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                      color: _kGreen.withValues(alpha: 0.3)),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.calendar_today_rounded,
+                      size: 13, color: _kGreen),
+                  const SizedBox(width: 5),
+                  Text(_labelFecha(),
+                      style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: _kGreen)),
+                  const SizedBox(width: 3),
+                  const Icon(Icons.expand_more_rounded,
+                      size: 14, color: _kGreen),
+                ]),
+              ),
+            ),
           ]),
         ),
+        // Search field
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
           child: TextField(
             controller: _ctrl,
-            autofocus: true,
+            autofocus:  true,
             decoration: InputDecoration(
               hintText: 'Buscar por factura o cliente...',
-              hintStyle: GoogleFonts.poppins(
-                  fontSize: 13, color: Colors.grey.shade400),
-              prefixIcon: Icon(Icons.search_rounded, color: Colors.grey.shade400),
+              hintStyle: GoogleFonts.inter(
+                  fontSize: 13, color: _kTextMuted),
+              prefixIcon: const Icon(Icons.search_rounded,
+                  color: _kTextMuted, size: 18),
               suffixIcon: _ctrl.text.isNotEmpty
                   ? IconButton(
-                      icon: Icon(Icons.close_rounded,
-                          size: 18, color: Colors.grey.shade400),
+                      icon: const Icon(Icons.close_rounded,
+                          size: 18, color: _kTextMuted),
                       onPressed: _ctrl.clear,
                     )
                   : null,
-              filled: true,
-              fillColor: Colors.grey.shade50,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              filled:    true,
+              fillColor: _kSurface,
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 10),
               border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade200)),
+                  borderSide: const BorderSide(color: _kBorder)),
               enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade200)),
+                  borderSide: const BorderSide(color: _kBorder)),
               focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                      color: Color(Constants.primaryColor), width: 1.5)),
+                  borderSide:
+                      const BorderSide(color: _kGreen, width: 1.5)),
             ),
-            style: GoogleFonts.poppins(fontSize: 14),
+            style: GoogleFonts.inter(fontSize: 14, color: _kText),
           ),
         ),
-        const Divider(height: 1),
+        const Divider(height: 1, color: _kBorder),
+        // List
         Expanded(
-          child: widget.ventas.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.receipt_long_rounded,
-                          size: 48, color: Colors.grey.shade300),
-                      const SizedBox(height: 12),
-                      Text('No hay ventas hoy',
-                          style: GoogleFonts.poppins(
-                              color: Colors.grey.shade400, fontSize: 14)),
-                    ],
-                  ),
-                )
-              : _filtradas.isEmpty
-                  ? Center(
-                      child: Text('Sin resultados',
-                          style: GoogleFonts.poppins(
-                              color: Colors.grey.shade400)))
-                  : ListView.separated(
-                      itemCount: _filtradas.length,
-                      separatorBuilder: (_, __) =>
-                          Divider(height: 1, color: Colors.grey.shade100),
-                      itemBuilder: (_, i) {
-                        final v = _filtradas[i];
-                        return ListTile(
-                          onTap: () => Navigator.pop(context, v),
-                          leading: Container(
-                            width: 40, height: 40,
-                            decoration: BoxDecoration(
-                              color: const Color(Constants.primaryColor)
-                                  .withOpacity(0.08),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(Icons.receipt_long_rounded,
-                                size: 20,
-                                color: Color(Constants.primaryColor)),
-                          ),
-                          title: Text(v.numeroFactura,
-                              style: GoogleFonts.poppins(
-                                  fontWeight: FontWeight.w600, fontSize: 14)),
-                          subtitle: Text(v.clienteNombre,
-                              style: GoogleFonts.poppins(
-                                  fontSize: 12, color: Colors.grey.shade500)),
-                          trailing: Text(fmt.format(v.total),
-                              style: GoogleFonts.poppins(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                  color: const Color(Constants.primaryColor))),
-                        );
-                      },
-                    ),
+          child: _cargando
+              ? const Center(
+                  child: CircularProgressIndicator(color: _kGreen))
+              : _ventas.isEmpty
+                  ? _buildEmpty()
+                  : _filtradas.isEmpty
+                      ? Center(
+                          child: Text('Sin resultados',
+                              style: GoogleFonts.inter(
+                                  color: _kTextMuted)))
+                      : ListView.separated(
+                          itemCount: _filtradas.length,
+                          separatorBuilder: (_, __) =>
+                              const Divider(height: 1, color: _kBorder),
+                          itemBuilder: (_, i) {
+                            final v = _filtradas[i];
+                            return ListTile(
+                              onTap: () => Navigator.pop(context, v),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 6),
+                              leading: Container(
+                                width: 40, height: 40,
+                                decoration: BoxDecoration(
+                                  color: _kMintLight,
+                                  borderRadius:
+                                      BorderRadius.circular(10),
+                                ),
+                                child: const Icon(
+                                    Icons.receipt_long_rounded,
+                                    size: 20,
+                                    color: _kGreen),
+                              ),
+                              title: Text(v.numeroFactura,
+                                  style: GoogleFonts.inter(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                      color: _kText)),
+                              subtitle: Text(v.clienteNombre,
+                                  style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      color: _kTextMuted)),
+                              trailing: Text(fmt.format(v.total),
+                                  style: GoogleFonts.inter(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: _kGreen)),
+                            );
+                          },
+                        ),
         ),
       ]),
     );
   }
+
+  Widget _buildEmpty() => Center(
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.receipt_long_rounded,
+            size: 48, color: _kBorder),
+        const SizedBox(height: 12),
+        Text(
+          'Sin ventas ${_labelFecha().toLowerCase() == 'hoy' ? 'hoy' : 'el ${_labelFecha().toLowerCase()}'}',
+          style: GoogleFonts.inter(color: _kTextMuted, fontSize: 14),
+        ),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          onPressed: _seleccionarFecha,
+          icon: const Icon(Icons.calendar_today_rounded, size: 15),
+          label: Text('Cambiar fecha',
+              style: GoogleFonts.inter(fontSize: 13)),
+          style: TextButton.styleFrom(foregroundColor: _kGreen),
+        ),
+      ],
+    ),
+  );
 }

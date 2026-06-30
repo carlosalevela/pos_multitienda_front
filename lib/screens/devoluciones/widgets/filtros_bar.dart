@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import '../../../core/constants.dart';
+
+const _kGreen     = Color(0xFF006C49);
+const _kSurface   = Color(0xFFF7F9FB);
+const _kTextMuted = Color(0xFF76777D);
+const _kBorder    = Color(0xFFE0E3E5);
 
 enum RangoFecha { hoy, semana, mes, custom }
 
@@ -83,16 +87,16 @@ class _FiltrosBarState extends State<FiltrosBar> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: const Color(Constants.primaryColor)
-                          .withOpacity(0.1),
+                      color: _kGreen
+                          .withValues(alpha:0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(Icons.date_range_rounded,
-                        color: Color(Constants.primaryColor), size: 18),
+                        color: _kGreen, size: 18),
                   ),
                   const SizedBox(width: 10),
                   Text('Rango personalizado',
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontWeight: FontWeight.bold, fontSize: 15)),
                   const Spacer(),
                   IconButton(
@@ -130,9 +134,9 @@ class _FiltrosBarState extends State<FiltrosBar> {
                   seleccionandoInicio
                       ? '👆 Toca la fecha de inicio'
                       : '👆 Toca la fecha de fin',
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                       fontSize: 11,
-                      color: const Color(Constants.primaryColor)),
+                      color: _kGreen),
                 ),
                 const SizedBox(height: 8),
 
@@ -170,7 +174,7 @@ class _FiltrosBarState extends State<FiltrosBar> {
                     TextButton(
                       onPressed: () => Navigator.pop(ctx),
                       child: Text('Cancelar',
-                          style: GoogleFonts.poppins(
+                          style: GoogleFonts.inter(
                               color: Colors.grey.shade600)),
                     ),
                     const SizedBox(width: 8),
@@ -185,14 +189,14 @@ class _FiltrosBarState extends State<FiltrosBar> {
                         _aplicar();
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(Constants.primaryColor),
+                        backgroundColor: _kGreen,
                         foregroundColor: Colors.white,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10)),
                       ),
                       child: Text('Aplicar',
-                          style: GoogleFonts.poppins(
+                          style: GoogleFonts.inter(
                               fontWeight: FontWeight.w600)),
                     ),
                   ],
@@ -274,32 +278,32 @@ class _FiltrosBarState extends State<FiltrosBar> {
           contentPadding: const EdgeInsets.symmetric(
               horizontal: 14, vertical: 8),
           filled:    true,
-          fillColor: Colors.grey.shade50,
+          fillColor: _kSurface,
           border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.grey.shade200)),
+              borderSide: BorderSide(color: _kBorder)),
           enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.grey.shade200)),
+              borderSide: BorderSide(color: _kBorder)),
         ),
         hint: Text('Todos los estados',
-            style: GoogleFonts.poppins(
-                fontSize: 12, color: Colors.grey.shade500)),
+            style: GoogleFonts.inter(
+                fontSize: 12, color: _kTextMuted)),
         items: [
           DropdownMenuItem<String?>(
             value: null,
             child: Text('Todos los estados',
-                style: GoogleFonts.poppins(fontSize: 12)),
+                style: GoogleFonts.inter(fontSize: 12)),
           ),
           DropdownMenuItem<String?>(
             value: 'procesada',
             child: Text('Procesadas',
-                style: GoogleFonts.poppins(fontSize: 12)),
+                style: GoogleFonts.inter(fontSize: 12)),
           ),
           DropdownMenuItem<String?>(
             value: 'cancelada',
             child: Text('Canceladas',
-                style: GoogleFonts.poppins(fontSize: 12)),
+                style: GoogleFonts.inter(fontSize: 12)),
           ),
         ],
         onChanged: (v) {
@@ -353,8 +357,8 @@ class _ChipRango extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
           color: seleccionado
-              ? const Color(Constants.primaryColor)
-              : Colors.grey.shade100,
+              ? _kGreen
+              : _kSurface,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -367,7 +371,7 @@ class _ChipRango extends StatelessWidget {
             const SizedBox(width: 5),
           ],
           Text(label,
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: seleccionado
@@ -402,13 +406,13 @@ class _FechaBox extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: activo
-              ? const Color(Constants.primaryColor).withOpacity(0.08)
-              : Colors.grey.shade50,
+              ? _kGreen.withValues(alpha: 0.08)
+              : _kSurface,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: activo
-                ? const Color(Constants.primaryColor)
-                : Colors.grey.shade200,
+                ? _kGreen
+                : _kBorder,
             width: activo ? 1.5 : 1,
           ),
         ),
@@ -416,17 +420,17 @@ class _FechaBox extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(label,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 10,
                     color: activo
-                        ? const Color(Constants.primaryColor)
-                        : Colors.grey.shade500)),
+                        ? _kGreen
+                        : _kTextMuted)),
             Text(valor,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: activo
-                        ? const Color(Constants.primaryColor)
+                        ? _kGreen
                         : const Color(0xFF1A1A2E))),
           ],
         ),

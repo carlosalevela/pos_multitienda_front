@@ -3,7 +3,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/constants.dart';
 import '../../models/devolucion_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/devoluciones_provider.dart';
@@ -11,6 +10,17 @@ import 'widgets/devolucion_card.dart';
 import 'widgets/devolucion_detalle_sheet.dart';
 import 'widgets/devolucion_form_sheet.dart';
 import 'widgets/filtros_bar.dart';
+
+const _kGreen     = Color(0xFF006C49);
+const _kMintLight = Color(0xFFE8FFF4);
+const _kSurface   = Color(0xFFF7F9FB);
+const _kText      = Color(0xFF191C1E);
+const _kTextMuted = Color(0xFF76777D);
+const _kBorder    = Color(0xFFE0E3E5);
+const _kOrange    = Color(0xFFF59E0B);
+const _kOrangeBg  = Color(0xFFFEF3C7);
+const _kError     = Color(0xFFBA1A1A);
+const _kErrorBg   = Color(0xFFFFDAD6);
 
 class DevolucionesScreen extends StatefulWidget {
   const DevolucionesScreen({super.key});
@@ -47,81 +57,71 @@ class _DevolucionesScreenState extends State<DevolucionesScreen> {
     String? estado,
   }) async {
     setState(() {
-      _fechaActual = fecha;
+      _fechaActual    = fecha;
       _fechaIniActual = fechaIni;
       _fechaFinActual = fechaFin;
-      _estadoActual = estado;
+      _estadoActual   = estado;
     });
-
     final auth = context.read<AuthProvider>();
     await context.read<DevolucionesProvider>().cargarDevoluciones(
       tiendaId: auth.tiendaId != 0 ? auth.tiendaId : null,
-      fecha: fecha,
+      fecha:    fecha,
       fechaIni: fechaIni,
       fechaFin: fechaFin,
-      estado: estado,
+      estado:   estado,
     );
   }
 
   Future<void> _recargar() => _cargar(
-        fecha: _fechaActual,
-        fechaIni: _fechaIniActual,
-        fechaFin: _fechaFinActual,
-        estado: _estadoActual,
-      );
+    fecha:    _fechaActual,
+    fechaIni: _fechaIniActual,
+    fechaFin: _fechaFinActual,
+    estado:   _estadoActual,
+  );
 
   void _confirmarCancelar(DevolucionModel dev) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          '¿Cancelar devolución?',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-        ),
+        title: Text('¿Cancelar devolución?',
+            style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
         content: Text(
           'Se revertirá el stock de ${dev.detalles.length} '
           'producto${dev.detalles.length != 1 ? 's' : ''}. '
           'Esta acción no se puede deshacer.',
-          style: GoogleFonts.poppins(fontSize: 13),
+          style: GoogleFonts.inter(fontSize: 13, color: _kTextMuted),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Volver',
-              style: GoogleFonts.poppins(color: Colors.grey),
-            ),
+            child: Text('Volver',
+                style: GoogleFonts.inter(color: _kTextMuted)),
           ),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
               final prov = context.read<DevolucionesProvider>();
-              final ok = await prov.cancelarDevolucion(dev.id);
+              final ok   = await prov.cancelarDevolucion(dev.id);
               if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    ok ? 'Devolución cancelada ✅' : prov.error ?? 'Error al cancelar',
-                    style: GoogleFonts.poppins(fontSize: 13),
-                  ),
-                  backgroundColor: ok ? Colors.green.shade600 : Colors.red.shade600,
-                  behavior: SnackBarBehavior.floating,
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(
+                  ok ? 'Devolución cancelada' : prov.error ?? 'Error al cancelar',
+                  style: GoogleFonts.inter(fontSize: 13),
                 ),
-              );
+                backgroundColor: ok ? _kGreen : _kError,
+                behavior: SnackBarBehavior.floating,
+              ));
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade500,
+              backgroundColor: _kError,
               foregroundColor: Colors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+                  borderRadius: BorderRadius.circular(10)),
             ),
-            child: Text(
-              'Cancelar devolución',
-              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-            ),
+            child: Text('Cancelar devolución',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -132,125 +132,66 @@ class _DevolucionesScreenState extends State<DevolucionesScreen> {
   Widget build(BuildContext context) {
     return Consumer<DevolucionesProvider>(
       builder: (_, prov, __) {
-        final devoluciones = prov.devoluciones;
-        final procesadas = devoluciones.where((d) => d.estado == 'procesada').toList();
+        final devs = prov.devoluciones;
+        final proc = devs.where((d) => d.estado == 'procesada').toList();
 
-        final totalDevuelto = procesadas.fold<double>(0.0, (sum, d) {
-          if (d.tipo == 'devolucion') return sum + d.totalDevuelto;
-          return sum;
-        });
-
-        final totalCobradoCambios = procesadas.fold<double>(0.0, (sum, d) {
-          if (d.tipo == 'cambio' && (d.tipoDiferencia ?? '').toLowerCase() == 'cobrar') {
-            return sum + (d.diferencia ?? 0.0);
-          }
-          return sum;
-        });
-
-        final totalDevueltoCambios = procesadas.fold<double>(0.0, (sum, d) {
-          if (d.tipo == 'cambio' && (d.tipoDiferencia ?? '').toLowerCase() == 'devolver') {
-            return sum + (d.diferencia ?? 0.0);
-          }
-          return sum;
-        });
-
-        final balanceNeto = totalCobradoCambios - totalDevuelto - totalDevueltoCambios;
+        final devuelto = proc.fold<double>(0, (s, d) =>
+            d.tipo == 'devolucion' ? s + d.totalDevuelto : s);
+        final cobrado = proc.fold<double>(0, (s, d) =>
+            (d.tipo == 'cambio' &&
+                    d.tipoDiferencia?.toLowerCase() == 'cobrar')
+                ? s + (d.diferencia ?? 0)
+                : s);
+        final devCambios = proc.fold<double>(0, (s, d) =>
+            (d.tipo == 'cambio' &&
+                    d.tipoDiferencia?.toLowerCase() == 'devolver')
+                ? s + (d.diferencia ?? 0)
+                : s);
+        final balance = cobrado - devuelto - devCambios;
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _Header(
-                totalDevuelto: totalDevuelto,
-                totalCobradoCambios: totalCobradoCambios,
-                totalDevueltoCambios: totalDevueltoCambios,
-                balanceNeto: balanceNeto,
-                fmt: _fmt,
-                cantidad: devoluciones.length,
-                onNueva: () => DevolucionFormSheet.show(
-                  context,
-                  onCreada: _recargar,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _ResumenChip(
-                    label: 'Devuelto',
-                    value: '- ${_fmt.format(totalDevuelto)}',
-                    color: Colors.orange.shade700,
-                  ),
-                  _ResumenChip(
-                    label: 'Cobrado cambios',
-                    value: '+ ${_fmt.format(totalCobradoCambios)}',
-                    color: Colors.green.shade700,
-                  ),
-                  _ResumenChip(
-                    label: 'Devuelto cambios',
-                    value: '- ${_fmt.format(totalDevueltoCambios)}',
-                    color: Colors.deepOrange.shade600,
-                  ),
-                  _ResumenChip(
-                    label: 'Balance neto',
-                    value: balanceNeto > 0
-                        ? '+ ${_fmt.format(balanceNeto)}'
-                        : balanceNeto < 0
-                            ? '- ${_fmt.format(balanceNeto.abs())}'
-                            : _fmt.format(0),
-                    color: balanceNeto > 0
-                        ? Colors.green.shade700
-                        : balanceNeto < 0
-                            ? Colors.deepOrange.shade600
-                            : Colors.blueGrey.shade600,
-                    filled: true,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
+              _buildHeader(devs.length),
+              const SizedBox(height: 14),
+              _buildStats(devuelto, cobrado, balance),
+              const SizedBox(height: 14),
               FiltrosBar(
                 onFiltrar: ({fecha, fechaIni, fechaFin, estado}) => _cargar(
-                  fecha: fecha,
-                  fechaIni: fechaIni,
-                  fechaFin: fechaFin,
-                  estado: estado,
+                  fecha: fecha, fechaIni: fechaIni,
+                  fechaFin: fechaFin, estado: estado,
                 ),
               ),
               const SizedBox(height: 12),
               if (prov.error != null) ...[
-                _ErrorBanner(mensaje: prov.error!),
+                _buildError(prov.error!),
                 const SizedBox(height: 12),
               ],
               if (prov.cargando)
                 const Expanded(
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (devoluciones.isEmpty)
-                _EstadoVacio(
-                  onNueva: () => DevolucionFormSheet.show(
-                    context,
-                    onCreada: _recargar,
+                  child: Center(
+                    child: CircularProgressIndicator(color: _kGreen),
                   ),
                 )
+              else if (devs.isEmpty)
+                _buildEmpty()
               else
                 Expanded(
                   child: RefreshIndicator(
+                    color: _kGreen,
                     onRefresh: _recargar,
                     child: ListView.builder(
-                      itemCount: devoluciones.length,
+                      itemCount: devs.length,
                       itemBuilder: (_, i) {
-                        final dev = devoluciones[i];
+                        final dev = devs[i];
                         return DevolucionCard(
-                          dev: dev,
-                          fmt: _fmt,
+                          dev:         dev,
+                          fmt:         _fmt,
                           puedeCancel: _puedeCancel,
                           onTap: () => DevolucionDetalleSheet.show(
-                            context,
-                            dev: dev,
-                            fmt: _fmt,
-                          ),
+                              context, dev: dev, fmt: _fmt),
                           onCancelar: () => _confirmarCancelar(dev),
                         );
                       },
@@ -263,206 +204,197 @@ class _DevolucionesScreenState extends State<DevolucionesScreen> {
       },
     );
   }
-}
 
-class _Header extends StatelessWidget {
-  final double totalDevuelto;
-  final double totalCobradoCambios;
-  final double totalDevueltoCambios;
-  final double balanceNeto;
-  final NumberFormat fmt;
-  final int cantidad;
-  final VoidCallback onNueva;
+  // ── Widgets ───────────────────────────────────────────────
 
-  const _Header({
-    required this.totalDevuelto,
-    required this.totalCobradoCambios,
-    required this.totalDevueltoCambios,
-    required this.balanceNeto,
-    required this.fmt,
-    required this.cantidad,
-    required this.onNueva,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Devoluciones',
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: const Color(0xFF1A1A2E),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '$cantidad registro${cantidad != 1 ? 's' : ''}',
-                style: GoogleFonts.poppins(
-                  fontSize: 11,
-                  color: Colors.grey.shade500,
-                ),
-              ),
-            ],
-          ),
+  Widget _buildHeader(int cantidad) {
+    return Row(children: [
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Devoluciones',
+                style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 18,
+                    color: _kText)),
+            const SizedBox(height: 2),
+            Text('$cantidad registro${cantidad != 1 ? 's' : ''}',
+                style: GoogleFonts.inter(
+                    fontSize: 12, color: _kTextMuted)),
+          ],
         ),
-        ElevatedButton.icon(
-          onPressed: onNueva,
-          icon: const Icon(Icons.add_rounded, size: 18),
-          label: Text(
-            'Nueva',
-            style: GoogleFonts.poppins(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(Constants.primaryColor),
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            elevation: 0,
-          ),
+      ),
+      ElevatedButton.icon(
+        icon: const Icon(Icons.add_rounded, size: 16),
+        label: Text('Nueva',
+            style: GoogleFonts.inter(
+                fontSize: 13, fontWeight: FontWeight.w600)),
+        onPressed: () =>
+            DevolucionFormSheet.show(context, onCreada: _recargar),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _kGreen,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10)),
         ),
-      ],
+      ),
+    ]);
+  }
+
+  Widget _buildStats(double devuelto, double cobrado, double balance) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(children: [
+        _StatCard(
+          label:  'Devuelto',
+          value:  _fmt.format(devuelto),
+          prefix: '-',
+          icon:   Icons.arrow_circle_up_rounded,
+          color:  _kOrange,
+          bg:     _kOrangeBg,
+        ),
+        const SizedBox(width: 10),
+        _StatCard(
+          label:  'Cobrado (cambios)',
+          value:  _fmt.format(cobrado),
+          prefix: '+',
+          icon:   Icons.arrow_circle_down_rounded,
+          color:  _kGreen,
+          bg:     _kMintLight,
+        ),
+        const SizedBox(width: 10),
+        _StatCard(
+          label:  'Balance neto',
+          value:  _fmt.format(balance.abs()),
+          prefix: balance > 0 ? '+' : balance < 0 ? '-' : '',
+          icon:   Icons.account_balance_wallet_rounded,
+          color:  balance >= 0 ? _kGreen : _kError,
+          bg:     balance >= 0 ? _kMintLight : _kErrorBg,
+        ),
+      ]),
     );
   }
-}
 
-class _ResumenChip extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-  final bool filled;
-
-  const _ResumenChip({
-    required this.label,
-    required this.value,
-    required this.color,
-    this.filled = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: filled ? color.withOpacity(0.12) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.22)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: GoogleFonts.poppins(
-              fontSize: 10,
-              color: color.withOpacity(0.85),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              color: color,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ErrorBanner extends StatelessWidget {
-  final String mensaje;
-
-  const _ErrorBanner({required this.mensaje});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildError(String msg) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(Constants.errorColor).withOpacity(0.08),
+        color: _kErrorBg,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: const Color(Constants.errorColor).withOpacity(0.3),
+        border: Border.all(color: _kError.withValues(alpha: 0.3)),
+      ),
+      child: Row(children: [
+        const Icon(Icons.error_outline_rounded, color: _kError, size: 16),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(msg,
+              style: GoogleFonts.inter(fontSize: 12, color: _kError)),
         ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.error_outline_rounded,
-            color: const Color(Constants.errorColor),
-            size: 18,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              mensaje,
-              style: GoogleFonts.poppins(
-                fontSize: 12,
-                color: const Color(Constants.errorColor),
-              ),
-            ),
-          ),
-        ],
-      ),
+      ]),
     );
   }
-}
 
-class _EstadoVacio extends StatelessWidget {
-  final VoidCallback onNueva;
-
-  const _EstadoVacio({required this.onNueva});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildEmpty() {
     return Expanded(
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.assignment_return_rounded,
-              size: 56,
-              color: Colors.grey.shade300,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Sin devoluciones en este período',
-              style: GoogleFonts.poppins(
-                color: Colors.grey.shade400,
-                fontSize: 15,
+            Container(
+              width: 72, height: 72,
+              decoration: BoxDecoration(
+                color: _kSurface,
+                shape: BoxShape.circle,
+                border: Border.all(color: _kBorder),
               ),
+              child: const Icon(Icons.assignment_return_rounded,
+                  size: 32, color: _kTextMuted),
             ),
             const SizedBox(height: 16),
-            TextButton.icon(
-              onPressed: onNueva,
-              icon: const Icon(Icons.add_rounded),
-              label: Text(
-                'Registrar devolución',
-                style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-              ),
-              style: TextButton.styleFrom(
-                foregroundColor: const Color(Constants.primaryColor),
+            Text('Sin devoluciones en este período',
+                style: GoogleFonts.inter(
+                    color: _kTextMuted, fontSize: 14)),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.add_rounded, size: 16),
+              label: Text('Registrar devolución',
+                  style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w600, fontSize: 13)),
+              onPressed: () =>
+                  DevolucionFormSheet.show(context, onCreada: _recargar),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _kGreen,
+                side: const BorderSide(color: _kGreen),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── Stat card ─────────────────────────────────────────────────
+
+class _StatCard extends StatelessWidget {
+  final String   label;
+  final String   value;
+  final String   prefix;
+  final IconData icon;
+  final Color    color;
+  final Color    bg;
+
+  const _StatCard({
+    required this.label,
+    required this.value,
+    required this.prefix,
+    required this.icon,
+    required this.color,
+    required this.bg,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Row(children: [
+        Container(
+          width: 36, height: 36,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: 18, color: color),
+        ),
+        const SizedBox(width: 10),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: color)),
+            const SizedBox(height: 2),
+            Text('$prefix ${prefix.isEmpty ? value : value}'.trim(),
+                style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: color)),
+          ],
+        ),
+      ]),
     );
   }
 }
