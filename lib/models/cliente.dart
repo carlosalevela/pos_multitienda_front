@@ -1,13 +1,35 @@
+class TierInfo {
+  final int    id;
+  final String nombre;
+  final double descuentoPct;
+  final String colorHex;
+
+  const TierInfo({
+    required this.id,
+    required this.nombre,
+    required this.descuentoPct,
+    required this.colorHex,
+  });
+
+  factory TierInfo.fromJson(Map<String, dynamic> j) => TierInfo(
+    id:           j['id'] as int,
+    nombre:       j['nombre'] as String,
+    descuentoPct: double.parse(j['descuento_pct'].toString()),
+    colorHex:     j['color_hex'] as String? ?? '#76777D',
+  );
+}
+
 class Cliente {
-  final int      id;
-  final String   nombre;
-  final String   apellido;
-  final String?  cedulaNit;
-  final String   telefono;
-  final String   email;
-  final String   direccion;
-  final bool     activo;
-  final DateTime createdAt;   // ✅ DateTime en lugar de String
+  final int       id;
+  final String    nombre;
+  final String    apellido;
+  final String?   cedulaNit;
+  final String    telefono;
+  final String    email;
+  final String    direccion;
+  final bool      activo;
+  final DateTime  createdAt;
+  final TierInfo? tierInfo;
 
   Cliente({
     required this.id,
@@ -19,6 +41,7 @@ class Cliente {
     required this.direccion,
     required this.activo,
     required this.createdAt,
+    this.tierInfo,
   });
 
   factory Cliente.fromJson(Map<String, dynamic> j) => Cliente(
@@ -30,9 +53,12 @@ class Cliente {
     email:     j['email']     as String? ?? '',
     direccion: j['direccion'] as String? ?? '',
     activo:    j['activo']    as bool?   ?? true,
-    createdAt: j['created_at'] != null            // ✅ parseo seguro
+    createdAt: j['created_at'] != null
         ? DateTime.parse(j['created_at'] as String)
         : DateTime.now(),
+    tierInfo:  j['tier_info'] != null
+        ? TierInfo.fromJson(j['tier_info'] as Map<String, dynamic>)
+        : null,
   );
 
   // Para crear / editar
@@ -49,15 +75,16 @@ class Cliente {
 
   // ✅ copyWith para edición en formularios
   Cliente copyWith({
-    int?     id,
-    String?  nombre,
-    String?  apellido,
-    String?  cedulaNit,
-    String?  telefono,
-    String?  email,
-    String?  direccion,
-    bool?    activo,
+    int?      id,
+    String?   nombre,
+    String?   apellido,
+    String?   cedulaNit,
+    String?   telefono,
+    String?   email,
+    String?   direccion,
+    bool?     activo,
     DateTime? createdAt,
+    TierInfo? tierInfo,
   }) =>
       Cliente(
         id:        id        ?? this.id,
@@ -69,6 +96,7 @@ class Cliente {
         direccion: direccion ?? this.direccion,
         activo:    activo    ?? this.activo,
         createdAt: createdAt ?? this.createdAt,
+        tierInfo:  tierInfo  ?? this.tierInfo,
       );
 
   // ✅ Nombre completo sin espacio doble cuando no hay apellido

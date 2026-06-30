@@ -1,10 +1,13 @@
 // lib/screens/configuracion/configuracion_screen.dart
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../models/tier_model.dart';
+import '../../models/tienda_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/config_provider.dart';
 import '../../providers/tienda_provider.dart';
-import '../../models/tienda_model.dart';
+import '../../services/tier_service.dart';
 
 class ConfiguracionScreen extends StatefulWidget {
   const ConfiguracionScreen({super.key});
@@ -58,7 +61,7 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
+    _tabs = TabController(length: 5, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _cargar());
   }
 
@@ -305,6 +308,7 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
                             guardando:     _guardando,
                             onGuardar:     _guardarImpresion,
                           ),
+                          _TabFidelizacion(puedeEditar: puedeEditar),
                         ],
                       ),
           ),
@@ -440,6 +444,7 @@ class _TabBar extends StatelessWidget {
           Tab(icon: Icon(Icons.storefront_outlined,     size: 18), text: 'Mayoreo'),
           Tab(icon: Icon(Icons.bookmark_border_rounded, size: 18), text: 'Separados'),
           Tab(icon: Icon(Icons.print_outlined,          size: 18), text: 'Impresión'),
+          Tab(icon: Icon(Icons.star_outline_rounded,    size: 18), text: 'Fidelización'),
         ],
       ),
     );
@@ -1125,4 +1130,521 @@ class _TabImpresion extends StatelessWidget {
       ],
     );
   }
+}
+
+// ── Tab Fidelización ──────────────────────────────────────────
+
+class _TabFidelizacion extends StatefulWidget {
+  final bool puedeEditar;
+  const _TabFidelizacion({required this.puedeEditar});
+
+  @override
+  State<_TabFidelizacion> createState() => _TabFidelizacionState();
+}
+
+class _TabFidelizacionState extends State<_TabFidelizacion> {
+  final _svc   = TierService();
+  final _fmt   = NumberFormat('#,##0', 'es_CO');
+  List<TierModel> _tiers    = [];
+  bool            _cargando = false;
+  String?         _error;
+
+  static const _coloresPreset = [
+    '#CD7F32', // Bronce
+    '#A8A9AD', // Plata
+    '#D4AF37', // Oro
+    '#5E4DB2', // Platinum
+    '#006C49', // Verde
+    '#0066CC', // Azul
+    '#C0392B', // Rojo
+    '#76777D', // Gris
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  Future<void> _cargar() async {
+    setState(() { _cargando = true; _error = null; });
+    final r = await _svc.getTiers();
+    if (!mounted) return;
+    if (r['success'] == true) {
+      setState(() { _tiers = List<TierModel>.from(r['data'] as List); _cargando = false; });
+    } else {
+      setState(() { _error = r['error'] as String?; _cargando = false; });
+    }
+  }
+
+  Future<void> _abrirFormulario([TierModel? tier]) async {
+    final resultado = await showDialog<TierModel>(
+      context: context,
+      builder: (_) => _TierDialog(tier: tier, colores: _coloresPreset),
+    );
+    if (resultado == null || !mounted) return;
+
+    final r = tier?.id != null
+        ? await _svc.actualizarTier(tier!.id!, resultado)
+        : await _svc.crearTier(resultado);
+
+    if (!mounted) return;
+    if (r['success'] == true) {
+      _cargar();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(r['error'] as String? ?? 'Error'),
+        backgroundColor: const Color(0xFFBE123C),
+        behavior: SnackBarBehavior.floating,
+      ));
+    }
+  }
+
+  Future<void> _eliminar(TierModel tier) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text('¿Eliminar tier?',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: Text(
+          'Se eliminará el tier "${tier.nombre}". Los clientes que estén en este tier '
+          'quedarán sin tier hasta que lo reconfigures.',
+          style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFBE123C),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final r = await _svc.eliminarTier(tier.id!);
+    if (!mounted) return;
+    if (r['success'] == true) {
+      _cargar();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(r['error'] as String? ?? 'Error al eliminar'),
+        backgroundColor: const Color(0xFFBE123C),
+        behavior: SnackBarBehavior.floating,
+      ));
+    }
+  }
+
+  Color _hexColor(String hex) {
+    try {
+      return Color(int.parse(hex.replaceFirst('#', '0xFF')));
+    } catch (_) {
+      return const Color(0xFF76777D);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 32),
+      children: [
+        _card(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF9C3),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.star_rounded, size: 16, color: Color(0xFFD4AF37)),
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Tiers de fidelización',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700,
+                          color: Color(0xFF111827))),
+                  Text('Los clientes suben de tier según su total acumulado de compras.',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+                ]),
+              ),
+            ]),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0FDF4),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFBBF7D0)),
+              ),
+              child: const Row(children: [
+                Icon(Icons.info_outline_rounded, size: 14, color: Color(0xFF16A34A)),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'El descuento del tier se aplica automáticamente en el POS cuando el cajero asocia un cliente a la venta.',
+                    style: TextStyle(fontSize: 11, color: Color(0xFF15803D)),
+                  ),
+                ),
+              ]),
+            ),
+          ],
+        )),
+
+        if (_cargando)
+          const Padding(
+            padding: EdgeInsets.all(32),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (_error != null)
+          _card(child: Text(_error!, style: const TextStyle(color: Color(0xFFBE123C))))
+        else ...[
+          ..._tiers.map((tier) => _card(child: Row(children: [
+            Container(
+              width: 44, height: 44,
+              decoration: BoxDecoration(
+                color: _hexColor(tier.colorHex),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.star_rounded, color: Colors.white, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Text(tier.nombre,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700,
+                        color: Color(0xFF111827))),
+                if (!tier.activo) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3F4F6),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text('Inactivo',
+                        style: TextStyle(fontSize: 10, color: Color(0xFF9CA3AF))),
+                  ),
+                ],
+              ]),
+              const SizedBox(height: 2),
+              Text(
+                'Desde \$${_fmt.format(tier.umbralMin)}'
+                '${tier.umbralMax != null ? " hasta \$${_fmt.format(tier.umbralMax!)}" : " en adelante"}',
+                style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${tier.descuentoPct.toStringAsFixed(tier.descuentoPct % 1 == 0 ? 0 : 1)}% de descuento',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                    color: _hexColor(tier.colorHex)),
+              ),
+            ])),
+            if (widget.puedeEditar) Row(mainAxisSize: MainAxisSize.min, children: [
+              IconButton(
+                onPressed: () => _abrirFormulario(tier),
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                color: const Color(0xFF3730A3),
+                tooltip: 'Editar',
+              ),
+              IconButton(
+                onPressed: () => _eliminar(tier),
+                icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                color: const Color(0xFFBE123C),
+                tooltip: 'Eliminar',
+              ),
+            ]),
+          ]))),
+
+          if (_tiers.isEmpty)
+            _card(child: const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Text('No hay tiers configurados. ¡Agrega el primero!',
+                    style: TextStyle(fontSize: 13, color: Color(0xFF9CA3AF))),
+              ),
+            )),
+        ],
+
+        if (widget.puedeEditar)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: ElevatedButton.icon(
+              onPressed: _abrirFormulario,
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Agregar tier'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF3730A3),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+
+// ── Dialog crear / editar tier ────────────────────────────────
+
+class _TierDialog extends StatefulWidget {
+  final TierModel?   tier;
+  final List<String> colores;
+  const _TierDialog({this.tier, required this.colores});
+
+  @override
+  State<_TierDialog> createState() => _TierDialogState();
+}
+
+class _TierDialogState extends State<_TierDialog> {
+  final _formKey       = GlobalKey<FormState>();
+  final _nombreCtrl    = TextEditingController();
+  final _umbralMinCtrl = TextEditingController();
+  final _umbralMaxCtrl = TextEditingController();
+  final _descuentoCtrl = TextEditingController();
+  final _ordenCtrl     = TextEditingController();
+
+  String _colorHex = '#D4AF37';
+  bool   _activo   = true;
+
+  @override
+  void initState() {
+    super.initState();
+    final t = widget.tier;
+    if (t != null) {
+      _nombreCtrl.text    = t.nombre;
+      _umbralMinCtrl.text = t.umbralMin.toStringAsFixed(0);
+      _umbralMaxCtrl.text = t.umbralMax?.toStringAsFixed(0) ?? '';
+      _descuentoCtrl.text = t.descuentoPct.toStringAsFixed(
+          t.descuentoPct % 1 == 0 ? 0 : 2);
+      _ordenCtrl.text     = t.orden.toString();
+      _colorHex           = t.colorHex;
+      _activo             = t.activo;
+    } else {
+      _ordenCtrl.text = '0';
+    }
+  }
+
+  @override
+  void dispose() {
+    _nombreCtrl.dispose();
+    _umbralMinCtrl.dispose();
+    _umbralMaxCtrl.dispose();
+    _descuentoCtrl.dispose();
+    _ordenCtrl.dispose();
+    super.dispose();
+  }
+
+  Color _hexColor(String hex) {
+    try { return Color(int.parse(hex.replaceFirst('#', '0xFF'))); }
+    catch (_) { return const Color(0xFF76777D); }
+  }
+
+  void _confirmar() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.pop(context, TierModel(
+      id:           widget.tier?.id,
+      nombre:       _nombreCtrl.text.trim(),
+      umbralMin:    double.parse(_umbralMinCtrl.text),
+      umbralMax:    _umbralMaxCtrl.text.trim().isEmpty
+                      ? null
+                      : double.parse(_umbralMaxCtrl.text),
+      descuentoPct: double.parse(_descuentoCtrl.text),
+      colorHex:     _colorHex,
+      activo:       _activo,
+      orden:        int.tryParse(_ordenCtrl.text) ?? 0,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final esNuevo = widget.tier == null;
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text(esNuevo ? 'Nuevo tier' : 'Editar tier',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+      content: SizedBox(
+        width: 360,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _label('Nombre del tier'),
+                TextFormField(
+                  controller: _nombreCtrl,
+                  decoration: _inputDeco('Ej: Oro, Platino, VIP…'),
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'Requerido' : null,
+                ),
+                const SizedBox(height: 14),
+
+                Row(children: [
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    _label('Desde (\$)'),
+                    TextFormField(
+                      controller: _umbralMinCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: _inputDeco('0'),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Requerido';
+                        if (double.tryParse(v) == null) return 'Inválido';
+                        return null;
+                      },
+                    ),
+                  ])),
+                  const SizedBox(width: 10),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    _label('Hasta (\$) — vacío = ∞'),
+                    TextFormField(
+                      controller: _umbralMaxCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: _inputDeco('Sin límite'),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return null;
+                        if (double.tryParse(v) == null) return 'Inválido';
+                        return null;
+                      },
+                    ),
+                  ])),
+                ]),
+                const SizedBox(height: 14),
+
+                _label('Descuento (%)'),
+                TextFormField(
+                  controller: _descuentoCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: _inputDeco('Ej: 5'),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Requerido';
+                    final d = double.tryParse(v);
+                    if (d == null || d < 0 || d > 100) return '0–100';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 14),
+
+                _label('Color del badge'),
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  ...widget.colores.map((c) => GestureDetector(
+                    onTap: () => setState(() => _colorHex = c),
+                    child: Container(
+                      width: 32, height: 32,
+                      decoration: BoxDecoration(
+                        color: _hexColor(c),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: _colorHex == c
+                              ? const Color(0xFF111827)
+                              : Colors.transparent,
+                          width: 2.5,
+                        ),
+                      ),
+                    ),
+                  )),
+                ]),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Container(
+                    width: 28, height: 28,
+                    decoration: BoxDecoration(
+                      color: _hexColor(_colorHex),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(child: TextFormField(
+                    initialValue: _colorHex,
+                    decoration: _inputDeco('#D4AF37'),
+                    onChanged: (v) {
+                      if (RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(v)) {
+                        setState(() => _colorHex = v.toUpperCase());
+                      }
+                    },
+                    validator: (v) => (v == null ||
+                            !RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(v))
+                        ? 'Formato: #RRGGBB'
+                        : null,
+                  )),
+                ]),
+                const SizedBox(height: 14),
+
+                Row(children: [
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    _label('Orden'),
+                    TextFormField(
+                      controller: _ordenCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: _inputDeco('0'),
+                    ),
+                  ])),
+                  const SizedBox(width: 16),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    _label('Estado'),
+                    Row(children: [
+                      Switch(
+                        value: _activo,
+                        onChanged: (v) => setState(() => _activo = v),
+                        activeThumbColor: const Color(0xFF3730A3),
+                        activeTrackColor: const Color(0xFFBFBFF7),
+                      ),
+                      Text(_activo ? 'Activo' : 'Inactivo',
+                          style: TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600,
+                            color: _activo
+                                ? const Color(0xFF3730A3)
+                                : const Color(0xFF9CA3AF),
+                          )),
+                    ]),
+                  ])),
+                ]),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar',
+              style: TextStyle(color: Color(0xFF6B7280))),
+        ),
+        ElevatedButton(
+          onPressed: _confirmar,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF3730A3),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          child: Text(esNuevo ? 'Crear tier' : 'Guardar cambios'),
+        ),
+      ],
+    );
+  }
+
+  InputDecoration _inputDeco(String hint) => InputDecoration(
+    hintText: hint,
+    hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13),
+    filled: true, fillColor: Colors.white,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
+    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
+    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFF3730A3), width: 1.5)),
+    errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFFBE123C))),
+  );
 }

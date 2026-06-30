@@ -157,8 +157,17 @@ class _PosScreenState extends State<PosScreen> {
 
   Future<void> _cargarClienteResumen(int clienteId) async {
     final resumen = await ClienteService().getClienteResumen(clienteId);
-    if (mounted) {
-      setState(() => _separadosCliente = (resumen['separados_activos'] as int?) ?? 0);
+    if (!mounted) return;
+    setState(() => _separadosCliente = (resumen['separados_activos'] as int?) ?? 0);
+
+    // Aplicar descuento del tier si el cliente lo tiene y el carrito tiene items
+    final pct = _clienteSeleccionado?.tierInfo?.descuentoPct ?? 0;
+    if (pct > 0) {
+      final pos = context.read<PosProvider>();
+      if (pos.total > 0) {
+        pos.setDescuentoPorcentaje(pct.round());
+        _descuentoCtrl.text = pos.descuento.toStringAsFixed(0);
+      }
     }
   }
 
@@ -1005,47 +1014,97 @@ class _PosScreenState extends State<PosScreen> {
 
   Widget _buildClienteCard() {
     if (_clienteSeleccionado == null) return const SizedBox.shrink();
+    final tier = _clienteSeleccionado!.tierInfo;
+    final tierColor = tier != null ? _hexFromString(tier.colorHex) : _kGreen;
+
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: _kSurfaceLow,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _kBorder),
+        border: Border.all(color: tier != null ? tierColor.withValues(alpha: 0.4) : _kBorder),
       ),
-      child: Row(children: [
-        Container(
-          width: 40, height: 40,
-          decoration: BoxDecoration(
-            color: _kGreen.withValues(alpha: 0.12),
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Icons.account_circle_rounded, color: _kGreenDark, size: 24),
-        ),
-        const SizedBox(width: 10),
-        Expanded(child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Cliente: ${_clienteSeleccionado!.nombreCompleto}',
-                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: _kText),
-                maxLines: 1, overflow: TextOverflow.ellipsis),
-            Text(
-              'ID: ${_clienteSeleccionado!.cedulaNit ?? '–'}',
-              style: GoogleFonts.inter(fontSize: 11, color: _kTextSub),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Container(
+              width: 38, height: 38,
+              decoration: BoxDecoration(
+                color: (tier != null ? tierColor : _kGreen).withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.account_circle_rounded,
+                  color: tier != null ? tierColor : _kGreenDark, size: 22),
             ),
+            const SizedBox(width: 10),
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_clienteSeleccionado!.nombreCompleto,
+                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: _kText),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(
+                  'ID: ${_clienteSeleccionado!.cedulaNit ?? '–'}',
+                  style: GoogleFonts.inter(fontSize: 11, color: _kTextSub),
+                ),
+              ],
+            )),
+            IconButton(
+              onPressed: () {
+                setState(() {
+                  _clienteSeleccionado = null;
+                  _separadosCliente    = 0;
+                });
+                context.read<PosProvider>().setDescuento(0);
+                _descuentoCtrl.clear();
+              },
+              icon: const Icon(Icons.close_rounded, size: 16, color: _kTextMuted),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            ),
+          ]),
+
+          // Badge del tier
+          if (tier != null) ...[
+            const SizedBox(height: 8),
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: tierColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: tierColor.withValues(alpha: 0.3)),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.star_rounded, size: 11, color: tierColor),
+                  const SizedBox(width: 4),
+                  Text(tier.nombre,
+                      style: GoogleFonts.inter(
+                          fontSize: 11, fontWeight: FontWeight.w700, color: tierColor)),
+                ]),
+              ),
+              const SizedBox(width: 6),
+              if (tier.descuentoPct > 0)
+                Text(
+                  '${tier.descuentoPct.toStringAsFixed(tier.descuentoPct % 1 == 0 ? 0 : 1)}% desc. aplicado',
+                  style: GoogleFonts.inter(fontSize: 11, color: _kTextSub),
+                ),
+            ]),
           ],
-        )),
-        IconButton(
-          onPressed: () => setState(() {
-            _clienteSeleccionado = null;
-            _separadosCliente    = 0;
-          }),
-          icon: const Icon(Icons.close_rounded, size: 16, color: _kTextMuted),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-        ),
-      ]),
+        ],
+      ),
     );
+  }
+
+  // Convierte un hex string a Color
+  Color _hexFromString(String hex) {
+    try {
+      return Color(int.parse(hex.replaceFirst('#', '0xFF')));
+    } catch (_) {
+      return _kGreen;
+    }
   }
 
   Widget _buildSeparadosBadge() => Container(
@@ -1619,6 +1678,10 @@ class _PosScreenState extends State<PosScreen> {
                             itemCount: cp.clientesSimple.length,
                             itemBuilder: (_, i) {
                               final c = cp.clientesSimple[i];
+                              final tierC = c.tierInfo;
+                              final tColor = tierC != null
+                                  ? _hexFromString(tierC.colorHex)
+                                  : _kGreen;
                               return ListTile(
                                 dense: true,
                                 contentPadding: const EdgeInsets.symmetric(
@@ -1626,18 +1689,41 @@ class _PosScreenState extends State<PosScreen> {
                                 leading: Container(
                                   width: 36, height: 36,
                                   decoration: BoxDecoration(
-                                    color: _kGreen.withValues(alpha: 0.12),
+                                    color: tColor.withValues(alpha: 0.12),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Center(child: Text(
                                     c.nombre.isNotEmpty ? c.nombre[0].toUpperCase() : '?',
                                     style: GoogleFonts.inter(
-                                        color: _kGreenDark, fontSize: 14, fontWeight: FontWeight.w800),
+                                        color: tColor, fontSize: 14, fontWeight: FontWeight.w800),
                                   )),
                                 ),
-                                title: Text(c.nombreCompleto,
-                                    style: GoogleFonts.inter(
-                                        fontSize: 13, fontWeight: FontWeight.w600, color: _kText)),
+                                title: Row(children: [
+                                  Expanded(
+                                    child: Text(c.nombreCompleto,
+                                        style: GoogleFonts.inter(
+                                            fontSize: 13, fontWeight: FontWeight.w600, color: _kText),
+                                        overflow: TextOverflow.ellipsis),
+                                  ),
+                                  if (tierC != null) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: tColor.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                        Icon(Icons.star_rounded, size: 9, color: tColor),
+                                        const SizedBox(width: 2),
+                                        Text(tierC.nombre,
+                                            style: GoogleFonts.inter(
+                                                fontSize: 10, fontWeight: FontWeight.w700,
+                                                color: tColor)),
+                                      ]),
+                                    ),
+                                  ],
+                                ]),
                                 subtitle: (c.cedulaNit != null && c.cedulaNit!.isNotEmpty)
                                     ? Text(c.cedulaNit!,
                                         style: GoogleFonts.inter(fontSize: 11, color: _kTextMuted))
