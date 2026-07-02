@@ -5,8 +5,10 @@ import 'package:provider/provider.dart';
 import '../../../models/venta_model.dart';
 import '../../../models/producto.dart';
 import '../../../models/cliente.dart';
+import '../../../models/devolucion_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/devoluciones_provider.dart';
+import '../../../services/devolucion_print_service.dart';
 import '../../../services/venta_service.dart';
 import '../../../services/inventario_service.dart';
 import '../../../services/cliente_service.dart';
@@ -314,15 +316,73 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
     if (!mounted) return;
 
     if (resp['success'] == true) {
-      final msg = _tipoOperacion == 'cambio'
-          ? (resp['mensaje_ui']?.toString() ?? 'Cambio registrado ✅')
-          : (resp['data']?['detail']?.toString() ?? 'Devolución registrada ✅');
+      // Intentar parsear el modelo creado para poder imprimir
+      DevolucionModel? devCreada;
+      try {
+        final rawData = resp['data'];
+        if (rawData is Map<String, dynamic>) {
+          devCreada = DevolucionModel.fromJson(rawData);
+        }
+      } catch (_) {}
+
       Navigator.pop(context);
       widget.onCreada();
-      _showSnack(msg);
+
+      if (devCreada != null && mounted) {
+        _mostrarDialogoImprimir(devCreada);
+      }
     } else {
       _showSnack(resp['error']?.toString() ?? 'Error al registrar operación', error: true);
     }
+  }
+
+  void _mostrarDialogoImprimir(DevolucionModel dev) {
+    final scaffoldCtx = context;
+    showDialog(
+      context: scaffoldCtx,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: _kGreen.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.check_circle_outline_rounded,
+                color: _kGreen, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Text(dev.tipo == 'cambio' ? 'Cambio registrado' : 'Devolución registrada',
+              style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 15)),
+        ]),
+        content: Text('¿Deseas imprimir el comprobante DEV-${dev.id}?',
+            style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF76777D))),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('No, gracias',
+                style: GoogleFonts.inter(color: const Color(0xFF76777D))),
+          ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.print_rounded, size: 16),
+            label: Text('Imprimir',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+            onPressed: () {
+              Navigator.pop(ctx);
+              DevolucionPrintService.imprimir(scaffoldCtx, dev);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _kGreen,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSnack(String msg, {bool error = false}) {

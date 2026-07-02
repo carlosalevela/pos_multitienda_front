@@ -24,6 +24,9 @@ class CajaService {
 
   // ── Sesión activa ──────────────────────────────────────
 
+  /// Retorna la sesión activa, null si no hay sesión (404),
+  /// o lanza [Exception] si hay error de red/servidor (para que el provider
+  /// pueda conservar el estado anterior en lugar de asumir "sin caja").
   Future<SesionCaja?> getSesionActiva(int tiendaId) async {
     if (tiendaId <= 0) return null;
     try {
@@ -32,10 +35,10 @@ class CajaService {
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) return null;
       debugPrint('❌ getSesionActiva error: ${e.response?.data}');
-      return null;
+      throw Exception('network');
     } catch (e) {
       debugPrint('❌ getSesionActiva error: $e');
-      return null;
+      throw Exception('network');
     }
   }
 

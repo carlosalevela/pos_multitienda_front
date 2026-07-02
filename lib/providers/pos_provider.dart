@@ -1,6 +1,8 @@
 // lib/providers/pos_provider.dart
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/producto.dart';
 import '../models/item_carrito.dart';
 import '../services/inventario_service.dart';
@@ -24,6 +26,40 @@ class TicketParkado {
 
   double get total => carrito.fold(0, (s, i) => s + i.subtotal);
   int    get items => carrito.fold(0, (s, i) => s + i.cantidad);
+
+  Map<String, dynamic> toJson() => {
+    'numero':         numero,
+    'metodoPago':     metodoPago,
+    'montoRecibido':  montoRecibido,
+    'descuento':      descuento,
+    'items': carrito.map((i) => {
+      'producto':           i.producto.toJson(),
+      'cantidad':           i.cantidad,
+      'descuento':          i.descuento,
+      'precioPersonalizado': i.precioPersonalizado,
+    }).toList(),
+  };
+
+  factory TicketParkado.fromJson(Map<String, dynamic> j) {
+    final items = (j['items'] as List).map((e) {
+      final item = ItemCarrito(
+        producto:  Producto.fromJson(e['producto'] as Map<String, dynamic>),
+        cantidad:  (e['cantidad'] as num).toInt(),
+        descuento: (e['descuento'] as num).toDouble(),
+      );
+      if (e['precioPersonalizado'] != null) {
+        item.precioPersonalizado = (e['precioPersonalizado'] as num).toDouble();
+      }
+      return item;
+    }).toList();
+    return TicketParkado(
+      numero:        (j['numero'] as num).toInt(),
+      metodoPago:    j['metodoPago'] as String,
+      montoRecibido: (j['montoRecibido'] as num).toDouble(),
+      descuento:     (j['descuento'] as num).toDouble(),
+      carrito:       items,
+    );
+  }
 }
 
 class PosProvider extends ChangeNotifier {
@@ -46,6 +82,7 @@ class PosProvider extends ChangeNotifier {
   double _descuento     = 0;
 
   // ── Tickets parkados ──────────────────────────────────
+  static const _kStorageKey = 'pos_tickets_parkados';
   final List<TicketParkado> _ticketsParkados = [];
   int  _contadorTickets = 1;
   int? _numeroActual;
@@ -244,6 +281,7 @@ class PosProvider extends ChangeNotifier {
     _errorMsg      = '';
     _successMsg    = '';
     _numeroActual  = null;
+    _guardarTickets();
     notifyListeners();
     return true;
   }
@@ -269,6 +307,7 @@ class PosProvider extends ChangeNotifier {
     _numeroActual  = snap.numero;
     _errorMsg      = '';
     _successMsg    = '';
+    _guardarTickets();
     notifyListeners();
   }
 
@@ -276,6 +315,56 @@ class PosProvider extends ChangeNotifier {
   void descartarTicketParkado(int index) {
     if (index < 0 || index >= _ticketsParkados.length) return;
     _ticketsParkados.removeAt(index);
+    _guardarTickets();
+    notifyListeners();
+  }
+
+  // ── Persistencia de tickets parkados ──────────────────
+
+  /// Serializa y guarda todos los tickets parkados en disco.
+  void _guardarTickets() {
+    SharedPreferences.getInstance().then((prefs) {
+      final payload = jsonEncode({
+        'contador': _contadorTickets,
+        'tickets':  _ticketsParkados.map((t) => t.toJson()).toList(),
+      });
+      prefs.setString(_kStorageKey, payload);
+    });
+  }
+
+  /// Carga los tickets parkados que quedaron guardados en disco.
+  /// Llamar una vez al iniciar la app (en main.dart o en el widget raíz).
+  Future<void> cargarTicketsGuardados() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw   = prefs.getString(_kStorageKey);
+      if (raw == null || raw.isEmpty) return;
+
+      final data    = jsonDecode(raw) as Map<String, dynamic>;
+      _contadorTickets = (data['contador'] as num?)?.toInt() ?? 1;
+
+      final lista = (data['tickets'] as List?) ?? [];
+      _ticketsParkados.clear();
+      for (final item in lista) {
+        try {
+          _ticketsParkados.add(
+            TicketParkado.fromJson(item as Map<String, dynamic>));
+        } catch (_) {
+          // Ticket corrupto — ignorar ese ticket en lugar de romper todo
+        }
+      }
+      if (_ticketsParkados.isNotEmpty) notifyListeners();
+    } catch (_) {
+      // Si el storage está corrupto, empezar limpio
+    }
+  }
+
+  /// Borra los tickets guardados (llamar al hacer logout o cambio de tienda).
+  Future<void> limpiarTicketsGuardados() async {
+    _ticketsParkados.clear();
+    _contadorTickets = 1;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_kStorageKey);
     notifyListeners();
   }
 
@@ -331,8 +420,40 @@ class PosProvider extends ChangeNotifier {
     }
 
     _errorMsg = result['error'] ?? 'Error desconocido';
+
+    // Si el error es de stock, refrescar inventario del carrito para que
+    // el cajero vea inmediatamente la cantidad real disponible.
+    if (_errorMsg.toLowerCase().contains('stock')) {
+      await _refrescarStockCarrito(tiendaId);
+    }
+
     notifyListeners();
     return false;
+  }
+
+  Future<void> _refrescarStockCarrito(int tiendaId) async {
+    if (_carrito.isEmpty) return;
+    final result = await _inventarioService.getProductos(tiendaId: tiendaId);
+    if (result['success'] != true) return;
+
+    final Map<int, Producto> frescos = {
+      for (final p in result['data'] as List<Producto>) p.id: p,
+    };
+
+    final nuevos = <ItemCarrito>[];
+    for (final item in _carrito) {
+      final fresco = frescos[item.producto.id] ?? item.producto;
+      final stockDisp = fresco.stockActual.toInt();
+      if (stockDisp <= 0) continue; // sin stock — sacar del carrito
+      final nuevaCantidad = item.cantidad.clamp(1, stockDisp);
+      nuevos.add(ItemCarrito(
+        producto:           fresco,
+        cantidad:           nuevaCantidad,
+        descuento:          item.descuento,
+      )..precioPersonalizado = item.precioPersonalizado);
+    }
+    _carrito = nuevos;
+    _ajustarDescuento();
   }
 
   // ── Listar ventas ─────────────────────────────────────

@@ -9,7 +9,11 @@ import 'package:pos_multitienda_app/models/item_carrito.dart';
 import 'package:pos_multitienda_app/providers/caja_provider.dart';
 import 'package:provider/provider.dart';
 import '../../../models/cliente.dart';
+import '../../../models/separado.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/cliente_provider.dart';
+import '../../../services/recibo_pdf_service.dart';
+import '../../../services/thermal_printer_service.dart';
 
 // ── Paleta del sistema de diseño ─────────────────────────────
 const _kGreen     = Color(0xFF61DDAA);   // mint — igual que dashboard
@@ -209,19 +213,80 @@ class _SeparadoFormState extends State<SeparadoForm> {
       if (_abono > 0) 'metodo_pago':   _metodoPago,
     };
 
-    final prov = context.read<ClienteProvider>();
-    final ok   = await prov.crearSeparado(data);
+    final prov   = context.read<ClienteProvider>();
+    final creado = await prov.crearSeparado(data);
     if (!mounted) return;
 
-    if (ok) {
+    if (creado != null) {
+      // Preguntar si imprimir antes de cerrar el panel
+      final imprimir = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Separado creado'),
+          content: const Text('¿Deseas imprimir el recibo del separado?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('No, cerrar'),
+            ),
+            FilledButton.icon(
+              icon: const Icon(Icons.print_rounded, size: 18),
+              label: const Text('Imprimir'),
+              onPressed: () => Navigator.pop(ctx, true),
+            ),
+          ],
+        ),
+      );
+
+      if (!mounted) return;
+
+      if (imprimir == true) {
+        await _imprimirSeparado(creado);
+        if (!mounted) return;
+      }
+
+      // Guardar el messenger ANTES del pop para evitar usar contexto desactivado
+      final messenger = ScaffoldMessenger.of(context);
+      final msg = _abono > 0
+          ? 'Separado creado con abono ${widget.fmt.format(_abono)}'
+          : 'Separado creado correctamente';
       Navigator.pop(context);
       widget.onCreado?.call();
-      _snack(_abono > 0
-          ? 'Separado creado con abono ${widget.fmt.format(_abono)}'
-          : 'Separado creado correctamente');
+      messenger.showSnackBar(SnackBar(
+        content: Text(msg,
+            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
+        backgroundColor: _kGreenDark,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ));
     } else {
       _snack(prov.error ?? 'Error al crear separado', isError: true);
     }
+  }
+
+  Future<void> _imprimirSeparado(Separado separado) async {
+    final empresaNombre = context.read<AuthProvider>().empresaNombre;
+    final nombre = empresaNombre.isNotEmpty ? empresaNombre : separado.tiendaNombre;
+    if (ThermalPrinterService.isWebUsbSupported) {
+      try {
+        final dev = await ThermalPrinterService.getAutoDevice();
+        if (dev != null) {
+          final bytes = await ThermalPrinterService.buildSeparadoRecibo(
+            separado, empresaNombre: nombre);
+          await ThermalPrinterService.printBytes(dev, bytes);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Recibo impreso')));
+          }
+          return;
+        }
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    await ReciboPdfService.imprimirSeparado(
+        separado: separado, empresaNombre: nombre);
   }
 
   void _snack(String msg, {bool isError = false}) {

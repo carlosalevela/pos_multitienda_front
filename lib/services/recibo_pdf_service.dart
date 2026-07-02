@@ -5,6 +5,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../models/item_carrito.dart';
+import '../models/devolucion_model.dart';
+import '../models/separado.dart';
 
 class ReciboPdfService {
   // ── Colores ──────────────────────────────────────────────────
@@ -14,11 +16,16 @@ class ReciboPdfService {
   static const _grey700  = PdfColors.grey700;
   static const _grey500  = PdfColors.grey500;
   static const _grey300  = PdfColors.grey300;
+  // Colores para separados
+  static const _teal     = PdfColor.fromInt(0xFF01696F);
+  static const _tealBg   = PdfColor.fromInt(0xFFCEDCD8);
+  static const _amber    = PdfColor.fromInt(0xFFF59E0B);
+  static const _amberBg  = PdfColor.fromInt(0xFFFEF3C7);
 
-  // 80 mm receipt width
+  // 80 mm receipt — height finita requerida por MultiPage (pdf ≥3.12)
   static final _pageFormat = PdfPageFormat(
     80  * PdfPageFormat.mm,
-    double.infinity,
+    1500 * PdfPageFormat.mm,
     marginLeft:   4 * PdfPageFormat.mm,
     marginRight:  4 * PdfPageFormat.mm,
     marginTop:    5 * PdfPageFormat.mm,
@@ -378,6 +385,619 @@ class ReciboPdfService {
       case 'tarjeta':       return 'Tarjeta débito / crédito';
       case 'nota_credito':  return 'Nota de crédito';
       default:              return 'Efectivo';
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  //  COMPROBANTE DE DEVOLUCIÓN / CAMBIO
+  // ─────────────────────────────────────────────────────────────────────
+
+  static Future<void> imprimirComprobanteDevolucion({
+    required DevolucionModel dev,
+    required String          empresaNombre,
+    String                   nit       = '',
+    String                   direccion = '',
+    String                   telefono  = '',
+  }) async {
+    final fontReg  = await PdfGoogleFonts.interRegular();
+    final fontBold = await PdfGoogleFonts.interBold();
+    final fontMono = await PdfGoogleFonts.sourceCodeProRegular();
+
+    final esCambio   = dev.tipo == 'cambio';
+    final titulo     = esCambio ? 'COMPROBANTE DE CAMBIO' : 'COMPROBANTE DE DEVOLUCIÓN';
+    final devId      = 'DEV-${dev.id}';
+    final fecha      = DateFormat('dd/MM/yyyy').format(dev.createdAt);
+    final hora       = DateFormat('HH:mm:ss').format(dev.createdAt);
+    final tipoDif    = (dev.tipoDiferencia ?? 'exacto').toLowerCase();
+
+    const orange   = PdfColor.fromInt(0xFFF59E0B);
+    const orangeBg = PdfColor.fromInt(0xFFFEF3C7);
+
+    final doc = pw.Document();
+
+    doc.addPage(pw.MultiPage(
+      pageFormat: _pageFormat,
+      build: (ctx) => [
+        // ── 1. Encabezado ─────────────────────────────────────
+        _encabezado(fontBold, fontReg, empresaNombre, dev.tiendaNombre,
+            nit, direccion, telefono),
+        _divider(),
+
+        // ── 2. Título ──────────────────────────────────────────
+        pw.Center(
+          child: pw.Text(titulo,
+            style: pw.TextStyle(
+                font: fontBold, fontSize: 9,
+                color: esCambio ? _green : orange,
+                letterSpacing: 1.2)),
+        ),
+        _divider(),
+
+        // ── 3. Info comprobante ────────────────────────────────
+        _filaInfo(fontBold, fontReg, 'N° Comprobante:', devId, boldValue: true),
+        _filaInfo(fontBold, fontReg, 'Fact. original:', dev.ventaNumero),
+        _filaInfo(fontBold, fontReg, 'Empleado:',       dev.empleadoNombre),
+        _filaInfo(fontBold, fontReg, 'Fecha:',          fecha),
+        _filaInfo(fontBold, fontReg, 'Hora:',           hora),
+        _divider(),
+
+        // ── 4. Productos devueltos ─────────────────────────────
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 4),
+          child: pw.Text(
+            esCambio ? 'PRODUCTOS RECIBIDOS' : 'PRODUCTOS DEVUELTOS',
+            style: pw.TextStyle(font: fontBold, fontSize: 7,
+                color: orange, letterSpacing: 0.8),
+          ),
+        ),
+        pw.SizedBox(height: 2),
+        ...dev.detalles.map((d) => _detalleRow(d, fontBold, fontReg)),
+        pw.SizedBox(height: 4),
+        _divider(),
+
+        // ── 5. Producto entregado (cambio) ─────────────────────
+        if (esCambio && dev.productoReemplazoNombre != null) ...[
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(bottom: 4),
+            child: pw.Text('PRODUCTO ENTREGADO',
+              style: pw.TextStyle(font: fontBold, fontSize: 7,
+                  color: _green, letterSpacing: 0.8)),
+          ),
+          _reemplazoRow(dev, fontBold, fontReg),
+          pw.SizedBox(height: 4),
+          _divider(),
+        ],
+
+        // ── 6. Método y diferencia ─────────────────────────────
+        _filaInfo(fontBold, fontReg, 'Método:', _metodoLabel(dev.metodoDevolucion)),
+        if (esCambio && tipoDif != 'exacto' && (dev.diferencia ?? 0) > 0) ...[
+          _filaInfo(fontBold, fontReg,
+            tipoDif == 'cobrar' ? 'Cobrado al cliente:' : 'Devuelto al cliente:',
+            '\$${_fmt.format(dev.diferencia ?? 0)}',
+          ),
+          if (dev.cambioEntregado != null && (dev.cambioEntregado ?? 0) > 0)
+            _filaInfo(fontBold, fontReg, 'Cambio entregado:',
+                '\$${_fmt.format(dev.cambioEntregado!)}'),
+        ],
+        if (dev.observaciones.isNotEmpty)
+          _filaInfo(fontBold, fontReg, 'Obs.:', dev.observaciones),
+        pw.SizedBox(height: 4),
+
+        // ── 7. Total ───────────────────────────────────────────
+        pw.Container(
+          width:   double.infinity,
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: pw.BoxDecoration(
+            color: esCambio ? _greenBg : orangeBg,
+          ),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(esCambio ? 'VALOR RECONOCIDO' : 'TOTAL DEVUELTO',
+                style: pw.TextStyle(font: fontBold, fontSize: 10,
+                    color: esCambio ? _green : orange)),
+              pw.Text('\$${_fmt.format(dev.totalDevuelto)}',
+                style: pw.TextStyle(font: fontBold, fontSize: 13,
+                    color: esCambio ? _green : orange)),
+            ],
+          ),
+        ),
+        _divider(),
+
+        // ── 8. Código de barras (DEV-ID) ───────────────────────
+        pw.SizedBox(height: 4),
+        pw.Center(
+          child: pw.BarcodeWidget(
+            barcode:  pw.Barcode.code128(),
+            data:     devId,
+            width:    60 * PdfPageFormat.mm,
+            height:   24,
+            drawText: false,
+            color:    _dark,
+          ),
+        ),
+        pw.SizedBox(height: 3),
+        pw.Center(
+          child: pw.Text(devId,
+            style: pw.TextStyle(font: fontMono, fontSize: 8, color: _grey700)),
+        ),
+        pw.SizedBox(height: 6),
+        _divider(),
+
+        // ── 9. Footer ──────────────────────────────────────────
+        _footerDevolucion(fontBold, fontReg, empresaNombre, esCambio),
+      ],
+    ));
+
+    await Printing.layoutPdf(
+      onLayout: (_) async => doc.save(),
+      name: 'Comprobante_$devId.pdf',
+    );
+  }
+
+  static pw.Widget _detalleRow(
+    DetalleDevolucionModel d,
+    pw.Font fontBold,
+    pw.Font fontReg,
+  ) {
+    final cantStr = d.cantidad % 1 == 0
+        ? d.cantidad.toStringAsFixed(0)
+        : d.cantidad.toStringAsFixed(2);
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 5),
+      child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+        pw.Expanded(
+          child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.Text(d.productoNombre,
+              style: pw.TextStyle(font: fontBold, fontSize: 9)),
+            pw.Text('$cantStr × \$${_fmt.format(d.precioUnitario)} c/u',
+              style: pw.TextStyle(font: fontReg, fontSize: 7, color: _grey500)),
+            if (d.motivo.isNotEmpty)
+              pw.Text('Motivo: ${d.motivo}',
+                style: pw.TextStyle(font: fontReg, fontSize: 7, color: _grey500)),
+          ]),
+        ),
+        pw.SizedBox(width: 6),
+        pw.Text('\$${_fmt.format(d.subtotal)}',
+          style: pw.TextStyle(font: fontBold, fontSize: 10)),
+      ]),
+    );
+  }
+
+  static pw.Widget _reemplazoRow(
+    DevolucionModel dev,
+    pw.Font fontBold,
+    pw.Font fontReg,
+  ) {
+    final cant = dev.cantidadReemplazo ?? 0;
+    final cantStr = cant % 1 == 0 ? cant.toStringAsFixed(0) : cant.toStringAsFixed(2);
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 5),
+      child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+        pw.Expanded(
+          child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.Text(dev.productoReemplazoNombre ?? '',
+              style: pw.TextStyle(font: fontBold, fontSize: 9)),
+            if (dev.precioReemplazo != null)
+              pw.Text('$cantStr × \$${_fmt.format(dev.precioReemplazo!)} c/u',
+                style: pw.TextStyle(font: fontReg, fontSize: 7, color: _grey500)),
+          ]),
+        ),
+        pw.SizedBox(width: 6),
+        if (dev.subtotalReemplazo != null)
+          pw.Text('\$${_fmt.format(dev.subtotalReemplazo!)}',
+            style: pw.TextStyle(font: fontBold, fontSize: 10)),
+      ]),
+    );
+  }
+
+  static pw.Widget _footerDevolucion(
+    pw.Font fontBold, pw.Font fontReg,
+    String empresa, bool esCambio,
+  ) =>
+    pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.center,
+      children: [
+        pw.SizedBox(height: 6),
+        pw.Text(
+          esCambio
+              ? '¡Gracias por elegir nuestros productos!'
+              : 'Devolución procesada exitosamente',
+          textAlign: pw.TextAlign.center,
+          style: pw.TextStyle(font: fontBold, fontSize: 10, color: _green),
+        ),
+        pw.SizedBox(height: 4),
+        pw.Text(
+          'Conserve este comprobante como\nrespaldo de la transacción.',
+          textAlign: pw.TextAlign.center,
+          style: pw.TextStyle(font: fontReg, fontSize: 7, color: _grey500),
+        ),
+        pw.SizedBox(height: 6),
+        pw.Text(empresa,
+          textAlign: pw.TextAlign.center,
+          style: pw.TextStyle(font: fontBold, fontSize: 8, color: _grey700)),
+        pw.SizedBox(height: 4),
+      ],
+    );
+
+
+  // ─────────────────────────────────────────────────────────────────────
+  //  FACTURA COMPLETA DE SEPARADO
+  // ─────────────────────────────────────────────────────────────────────
+
+  static Future<void> imprimirSeparado({
+    required Separado separado,
+    required String   empresaNombre,
+  }) async {
+    final fontReg  = await PdfGoogleFonts.interRegular();
+    final fontBold = await PdfGoogleFonts.interBold();
+    final fontMono = await PdfGoogleFonts.sourceCodeProRegular();
+    final sepId    = 'SEP-${separado.id}';
+
+    final doc = pw.Document();
+
+    doc.addPage(pw.MultiPage(
+      pageFormat: _pageFormat,
+      build: (ctx) => [
+        // ── 1. Encabezado ─────────────────────────────────────
+        _encabezado(fontBold, fontReg, empresaNombre,
+            separado.tiendaNombre, '', '', ''),
+        _divider(),
+
+        // ── 2. Título ──────────────────────────────────────────
+        pw.Center(
+          child: pw.Text('SEPARADO DE MERCANCÍA',
+            style: pw.TextStyle(font: fontBold, fontSize: 9,
+                color: _teal, letterSpacing: 1.5)),
+        ),
+        _divider(),
+
+        // ── 3. Info del separado ───────────────────────────────
+        _filaInfo(fontBold, fontReg, 'N° Separado:', sepId, boldValue: true),
+        _filaInfo(fontBold, fontReg, 'Fecha:',
+            DateFormat('dd/MM/yyyy HH:mm').format(separado.createdAt)),
+        if (separado.fechaLimite != null)
+          _filaInfo(fontBold, fontReg, 'Límite pago:', _formatFecha(separado.fechaLimite!)),
+        if (separado.empleadoNombre != null)
+          _filaInfo(fontBold, fontReg, 'Atendido por:', separado.empleadoNombre!),
+        _divider(),
+
+        // ── 4. Cliente ─────────────────────────────────────────
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 3),
+          child: pw.Text('CLIENTE',
+            style: pw.TextStyle(font: fontBold, fontSize: 7,
+                color: _grey500, letterSpacing: 0.8)),
+        ),
+        pw.Text(separado.clienteNombre,
+          style: pw.TextStyle(font: fontBold, fontSize: 10, color: _dark)),
+        if (separado.clienteCedulaNit != null &&
+            separado.clienteCedulaNit!.isNotEmpty)
+          pw.Text('C.C./NIT: ${separado.clienteCedulaNit}',
+            style: pw.TextStyle(font: fontReg, fontSize: 8, color: _grey700)),
+        if (separado.clienteTelefono != null &&
+            separado.clienteTelefono!.isNotEmpty)
+          pw.Text('Tel: ${separado.clienteTelefono}',
+            style: pw.TextStyle(font: fontReg, fontSize: 8, color: _grey700)),
+        _divider(),
+
+        // ── 5. Productos ───────────────────────────────────────
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 4),
+          child: pw.Row(children: [
+            pw.Text('DESCRIPCIÓN',
+                style: pw.TextStyle(font: fontBold, fontSize: 7, color: _grey500)),
+            pw.Spacer(),
+            pw.Text('TOTAL',
+                style: pw.TextStyle(font: fontBold, fontSize: 7, color: _grey500)),
+          ]),
+        ),
+        pw.SizedBox(height: 2),
+        ...separado.detalles.map((d) => _detalleSeparadoRow(d, fontBold, fontReg)),
+        pw.SizedBox(height: 4),
+
+        // Total separado (verde)
+        pw.Container(
+          width:   double.infinity,
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: const pw.BoxDecoration(color: _tealBg),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('TOTAL SEPARADO',
+                style: pw.TextStyle(font: fontBold, fontSize: 11, color: _teal)),
+              pw.Text('\$${_fmt.format(separado.total)}',
+                style: pw.TextStyle(font: fontBold, fontSize: 13, color: _teal)),
+            ],
+          ),
+        ),
+        _divider(),
+
+        // ── 6. Abonos ──────────────────────────────────────────
+        if (separado.abonos.isNotEmpty) ...[
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(bottom: 4),
+            child: pw.Text('ABONOS REGISTRADOS',
+              style: pw.TextStyle(font: fontBold, fontSize: 7,
+                  color: _grey500, letterSpacing: 0.8)),
+          ),
+          ...separado.abonos.map((a) => _abonoRow(a, fontBold, fontReg)),
+          pw.SizedBox(height: 2),
+          _filaTotal(fontReg, fontMono, 'Total abonado:',
+              '\$${_fmt.format(separado.abonoAcumulado)}',
+              color: _teal),
+          pw.SizedBox(height: 4),
+        ],
+
+        // Saldo pendiente
+        pw.Container(
+          width:   double.infinity,
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: pw.BoxDecoration(
+            color: separado.saldoPendiente > 0 ? _amberBg : _greenBg,
+          ),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(
+                separado.saldoPendiente > 0 ? 'SALDO PENDIENTE' : '¡SEPARADO PAGADO!',
+                style: pw.TextStyle(font: fontBold, fontSize: 10,
+                    color: separado.saldoPendiente > 0 ? _amber : _green)),
+              pw.Text('\$${_fmt.format(separado.saldoPendiente)}',
+                style: pw.TextStyle(font: fontBold, fontSize: 13,
+                    color: separado.saldoPendiente > 0 ? _amber : _green)),
+            ],
+          ),
+        ),
+        _divider(),
+
+        // ── 7. Código de barras ────────────────────────────────
+        pw.SizedBox(height: 4),
+        pw.Center(
+          child: pw.BarcodeWidget(
+            barcode: pw.Barcode.code128(),
+            data:    sepId,
+            width:   65 * PdfPageFormat.mm,
+            height:  28,
+            drawText: false,
+            color:   _dark,
+          ),
+        ),
+        pw.SizedBox(height: 3),
+        pw.Center(
+          child: pw.Text(sepId,
+            style: pw.TextStyle(font: fontMono, fontSize: 8, color: _grey700)),
+        ),
+        pw.SizedBox(height: 6),
+        _divider(),
+
+        // ── 8. Footer ──────────────────────────────────────────
+        pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          children: [
+            pw.SizedBox(height: 4),
+            pw.Text('Conserve este comprobante',
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(font: fontBold, fontSize: 10, color: _teal)),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              'Presente este documento al momento\n'
+              'de realizar abonos o retirar su mercancía.',
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(font: fontReg, fontSize: 7, color: _grey500)),
+            pw.SizedBox(height: 6),
+            pw.Text(empresaNombre,
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(font: fontBold, fontSize: 8, color: _grey700)),
+            pw.SizedBox(height: 4),
+          ],
+        ),
+      ],
+    ));
+
+    await Printing.layoutPdf(
+      onLayout: (_) async => doc.save(),
+      name: 'Separado_$sepId.pdf',
+    );
+  }
+
+
+  // ─────────────────────────────────────────────────────────────────────
+  //  RECIBO DE ABONO (compacto)
+  // ─────────────────────────────────────────────────────────────────────
+
+  static Future<void> imprimirReciboAbono({
+    required Separado separado,
+    required double   monto,
+    required String   metodoPago,
+    required String   empresaNombre,
+  }) async {
+    final fontReg  = await PdfGoogleFonts.interRegular();
+    final fontBold = await PdfGoogleFonts.interBold();
+    final fontMono = await PdfGoogleFonts.sourceCodeProRegular();
+    final sepId    = 'SEP-${separado.id}';
+    final now      = DateTime.now();
+    final nuevoSaldo = (separado.saldoPendiente - monto).clamp(0.0, double.infinity);
+
+    final doc = pw.Document();
+
+    doc.addPage(pw.MultiPage(
+      pageFormat: _pageFormat,
+      build: (ctx) => [
+        // ── 1. Encabezado ─────────────────────────────────────
+        _encabezado(fontBold, fontReg, empresaNombre,
+            separado.tiendaNombre, '', '', ''),
+        _divider(),
+
+        // ── 2. Título ──────────────────────────────────────────
+        pw.Center(
+          child: pw.Text('RECIBO DE ABONO',
+            style: pw.TextStyle(font: fontBold, fontSize: 9,
+                color: _teal, letterSpacing: 1.5)),
+        ),
+        _divider(),
+
+        // ── 3. Info ────────────────────────────────────────────
+        _filaInfo(fontBold, fontReg, 'N° Separado:', sepId, boldValue: true),
+        _filaInfo(fontBold, fontReg, 'Fecha:', DateFormat('dd/MM/yyyy').format(now)),
+        _filaInfo(fontBold, fontReg, 'Hora:', DateFormat('HH:mm:ss').format(now)),
+        _divider(),
+
+        // ── 4. Cliente ─────────────────────────────────────────
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 3),
+          child: pw.Text('CLIENTE',
+            style: pw.TextStyle(font: fontBold, fontSize: 7,
+                color: _grey500, letterSpacing: 0.8)),
+        ),
+        pw.Text(separado.clienteNombre,
+          style: pw.TextStyle(font: fontBold, fontSize: 10, color: _dark)),
+        _divider(),
+
+        // ── 5. Monto abonado ───────────────────────────────────
+        pw.Center(
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: [
+              pw.Text('ABONO RECIBIDO',
+                style: pw.TextStyle(font: fontBold, fontSize: 8,
+                    color: _grey500, letterSpacing: 0.8)),
+              pw.SizedBox(height: 6),
+              pw.Text('\$${_fmt.format(monto)}',
+                style: pw.TextStyle(font: fontBold, fontSize: 22, color: _teal)),
+              pw.SizedBox(height: 4),
+              pw.Text('Método: ${_metodoLabel(metodoPago)}',
+                style: pw.TextStyle(font: fontReg, fontSize: 9, color: _grey700)),
+            ],
+          ),
+        ),
+        _divider(),
+
+        // ── 6. Resumen saldo ───────────────────────────────────
+        _filaTotal(fontReg, fontMono, 'Total separado:',
+            '\$${_fmt.format(separado.total)}'),
+        _filaTotal(fontReg, fontMono, 'Abono anterior:',
+            '\$${_fmt.format(separado.abonoAcumulado)}'),
+        _filaTotal(fontReg, fontMono, 'Este abono:',
+            '\$${_fmt.format(monto)}', color: _teal),
+        pw.SizedBox(height: 4),
+        pw.Container(
+          width:   double.infinity,
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: pw.BoxDecoration(
+            color: nuevoSaldo > 0 ? _amberBg : _greenBg,
+          ),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(
+                nuevoSaldo > 0 ? 'NUEVO SALDO' : '¡SEPARADO PAGADO!',
+                style: pw.TextStyle(font: fontBold, fontSize: 10,
+                    color: nuevoSaldo > 0 ? _amber : _green)),
+              pw.Text('\$${_fmt.format(nuevoSaldo)}',
+                style: pw.TextStyle(font: fontBold, fontSize: 13,
+                    color: nuevoSaldo > 0 ? _amber : _green)),
+            ],
+          ),
+        ),
+        _divider(),
+
+        // ── 7. Código de barras ────────────────────────────────
+        pw.SizedBox(height: 4),
+        pw.Center(
+          child: pw.BarcodeWidget(
+            barcode: pw.Barcode.code128(),
+            data:    sepId,
+            width:   65 * PdfPageFormat.mm,
+            height:  24,
+            drawText: false,
+            color:   _dark,
+          ),
+        ),
+        pw.SizedBox(height: 3),
+        pw.Center(
+          child: pw.Text(sepId,
+            style: pw.TextStyle(font: fontMono, fontSize: 8, color: _grey700)),
+        ),
+        _divider(),
+
+        // ── 8. Footer ──────────────────────────────────────────
+        pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          children: [
+            pw.SizedBox(height: 4),
+            pw.Text('Conserve este recibo de abono',
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(font: fontBold, fontSize: 10, color: _teal)),
+            pw.SizedBox(height: 6),
+            pw.Text(empresaNombre,
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(font: fontBold, fontSize: 8, color: _grey700)),
+            pw.SizedBox(height: 4),
+          ],
+        ),
+      ],
+    ));
+
+    await Printing.layoutPdf(
+      onLayout: (_) async => doc.save(),
+      name: 'Abono_$sepId.pdf',
+    );
+  }
+
+
+  // ── Helpers para separados ───────────────────────────────────
+
+  static pw.Widget _detalleSeparadoRow(
+    DetalleSeparado d,
+    pw.Font fontBold,
+    pw.Font fontReg,
+  ) {
+    final cantStr = d.cantidad % 1 == 0
+        ? d.cantidad.toStringAsFixed(0)
+        : d.cantidad.toStringAsFixed(2);
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 6),
+      child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+        pw.Expanded(
+          child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.Text(d.productoNombre,
+              style: pw.TextStyle(font: fontBold, fontSize: 9)),
+            pw.Text('$cantStr × \$${_fmt.format(d.precioUnitario)} c/u',
+              style: pw.TextStyle(font: fontReg, fontSize: 7, color: _grey500)),
+          ]),
+        ),
+        pw.SizedBox(width: 8),
+        pw.Text('\$${_fmt.format(d.subtotal)}',
+          style: pw.TextStyle(font: fontBold, fontSize: 10)),
+      ]),
+    );
+  }
+
+  static pw.Widget _abonoRow(
+    AbonoSeparado a,
+    pw.Font fontBold,
+    pw.Font fontReg,
+  ) {
+    final fechaStr = DateFormat('dd/MM/yy').format(a.createdAt);
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 3),
+      child: pw.Row(children: [
+        pw.Expanded(
+          child: pw.Text('$fechaStr · ${_metodoLabel(a.metodoPago)}',
+            style: pw.TextStyle(font: fontReg, fontSize: 8, color: _grey700)),
+        ),
+        pw.Text('\$${_fmt.format(a.monto)}',
+          style: pw.TextStyle(font: fontBold, fontSize: 9)),
+      ]),
+    );
+  }
+
+  static String _formatFecha(String isoDate) {
+    try {
+      return DateFormat('dd/MM/yyyy').format(DateTime.parse(isoDate));
+    } catch (_) {
+      return isoDate;
     }
   }
 }

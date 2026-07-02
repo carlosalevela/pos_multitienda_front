@@ -99,13 +99,15 @@ class Separado {
   final String                tiendaNombre;
   final int                   cliente;
   final String                clienteNombre;
+  final String?               clienteCedulaNit;
+  final String?               clienteTelefono;
   final String?               empleadoNombre;
   final double                total;
   final double                abonoAcumulado;
   final double                saldoPendiente;
   final String?               fechaLimite;
   final String                estado;
-  final DateTime              createdAt;     // ✅ DateTime
+  final DateTime              createdAt;
   final List<DetalleSeparado> detalles;
   final List<AbonoSeparado>   abonos;
 
@@ -115,6 +117,8 @@ class Separado {
     required this.tiendaNombre,
     required this.cliente,
     required this.clienteNombre,
+    this.clienteCedulaNit,
+    this.clienteTelefono,
     this.empleadoNombre,
     required this.total,
     required this.abonoAcumulado,
@@ -127,13 +131,15 @@ class Separado {
   });
 
   factory Separado.fromJson(Map<String, dynamic> j) => Separado(
-    id:             j['id']     as int,
-    tienda:         j['tienda'] as int,
-    tiendaNombre:   j['tienda_nombre']  as String? ?? '',
-    cliente:        j['cliente']        as int,
-    clienteNombre:  j['cliente_nombre'] as String? ?? '',
-    empleadoNombre: j['empleado_nombre'] as String?,
-    total:          _toDouble(j['total']),
+    id:               j['id']     as int,
+    tienda:           j['tienda'] as int,
+    tiendaNombre:     j['tienda_nombre']     as String? ?? '',
+    cliente:          j['cliente']           as int,
+    clienteNombre:    j['cliente_nombre']    as String? ?? '',
+    clienteCedulaNit: j['cliente_cedula_nit'] as String?,
+    clienteTelefono:  j['cliente_telefono']  as String?,
+    empleadoNombre:   j['empleado_nombre']   as String?,
+    total:            _toDouble(j['total']),
     abonoAcumulado: _toDouble(j['abono_acumulado']),
     saldoPendiente: _toDouble(j['saldo_pendiente']),
     fechaLimite:    j['fecha_limite'] as String?,
@@ -156,6 +162,8 @@ class Separado {
     String?                tiendaNombre,
     int?                   cliente,
     String?                clienteNombre,
+    String?                clienteCedulaNit,
+    String?                clienteTelefono,
     String?                empleadoNombre,
     double?                total,
     double?                abonoAcumulado,
@@ -167,12 +175,14 @@ class Separado {
     List<AbonoSeparado>?   abonos,
   }) =>
       Separado(
-        id:             id             ?? this.id,
-        tienda:         tienda         ?? this.tienda,
-        tiendaNombre:   tiendaNombre   ?? this.tiendaNombre,
-        cliente:        cliente        ?? this.cliente,
-        clienteNombre:  clienteNombre  ?? this.clienteNombre,
-        empleadoNombre: empleadoNombre ?? this.empleadoNombre,
+        id:               id               ?? this.id,
+        tienda:           tienda           ?? this.tienda,
+        tiendaNombre:     tiendaNombre     ?? this.tiendaNombre,
+        cliente:          cliente          ?? this.cliente,
+        clienteNombre:    clienteNombre    ?? this.clienteNombre,
+        clienteCedulaNit: clienteCedulaNit ?? this.clienteCedulaNit,
+        clienteTelefono:  clienteTelefono  ?? this.clienteTelefono,
+        empleadoNombre:   empleadoNombre   ?? this.empleadoNombre,
         total:          total          ?? this.total,
         abonoAcumulado: abonoAcumulado ?? this.abonoAcumulado,
         saldoPendiente: saldoPendiente ?? this.saldoPendiente,
@@ -193,12 +203,14 @@ class Separado {
   // ✅ Renombrado de toJsonUpdate a toJsonFull — más descriptivo
   //    y usa los nuevos toJsonFull de los sub-modelos
   Map<String, dynamic> toJsonFull() => {
-    'id':              id,
-    'tienda':          tienda,
-    'tienda_nombre':   tiendaNombre,
-    'cliente':         cliente,
-    'cliente_nombre':  clienteNombre,
-    'empleado_nombre': empleadoNombre,
+    'id':                 id,
+    'tienda':             tienda,
+    'tienda_nombre':      tiendaNombre,
+    'cliente':            cliente,
+    'cliente_nombre':     clienteNombre,
+    'cliente_cedula_nit': clienteCedulaNit,
+    'cliente_telefono':   clienteTelefono,
+    'empleado_nombre':    empleadoNombre,
     'total':           total,
     'abono_acumulado': abonoAcumulado,
     'saldo_pendiente': saldoPendiente,

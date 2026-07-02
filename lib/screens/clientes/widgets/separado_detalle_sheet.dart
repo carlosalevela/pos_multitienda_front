@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../../models/separado.dart';
-import 'abonar_sheet.dart';
+import '../../../providers/auth_provider.dart';
+import '../../../services/recibo_pdf_service.dart';
+import '../../../services/thermal_printer_service.dart';
 
 class SeparadoDetalleSheet extends StatelessWidget {
   final Separado     separado;
@@ -312,6 +315,17 @@ class SeparadoDetalleSheet extends StatelessWidget {
                 ),
                 const Spacer(),
 
+                // Botón imprimir factura
+                IconButton(
+                  icon: const Icon(Icons.print_rounded,
+                      color: Color(0xFF01696F), size: 22),
+                  onPressed: () => _imprimir(context),
+                  tooltip: 'Imprimir factura',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                const SizedBox(width: 8),
+
                 // Chip estado
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -546,4 +560,40 @@ class SeparadoDetalleSheet extends StatelessWidget {
           ),
         ],
       );
+
+  // ── Imprimir factura ────────────────────────────────────
+  Future<void> _imprimir(BuildContext context) async {
+    final auth          = context.read<AuthProvider>();
+    final empresaNombre = auth.empresaNombre.isNotEmpty
+        ? auth.empresaNombre
+        : separado.tiendaNombre;
+
+    // Prioridad 1: impresora térmica USB
+    if (ThermalPrinterService.isWebUsbSupported) {
+      try {
+        final dev = await ThermalPrinterService.getAutoDevice();
+        if (dev != null) {
+          final bytes = await ThermalPrinterService.buildSeparadoRecibo(
+            separado, empresaNombre: empresaNombre);
+          await ThermalPrinterService.printBytes(dev, bytes);
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('Factura impresa',
+                  style: GoogleFonts.poppins(fontSize: 13)),
+              backgroundColor: const Color(0xFF437A22),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ));
+          }
+          return;
+        }
+      } catch (_) {}
+    }
+
+    // Prioridad 2: PDF (diálogo del navegador)
+    if (!context.mounted) return;
+    await ReciboPdfService.imprimirSeparado(
+      separado: separado, empresaNombre: empresaNombre);
+  }
 }

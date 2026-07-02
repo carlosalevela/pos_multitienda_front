@@ -15,6 +15,7 @@ class DevolucionCard extends StatelessWidget {
   final DevolucionModel  dev;
   final NumberFormat     fmt;
   final bool             puedeCancel;
+  final bool             selected;
   final VoidCallback     onTap;
   final VoidCallback?    onCancelar;
 
@@ -24,6 +25,7 @@ class DevolucionCard extends StatelessWidget {
     required this.fmt,
     required this.puedeCancel,
     required this.onTap,
+    this.selected    = false,
     this.onCancelar,
   });
 
@@ -55,9 +57,12 @@ class DevolucionCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: selected ? _kGreen.withValues(alpha: 0.04) : Colors.white,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: _kBorder),
+          border: Border.all(
+            color: selected ? _kGreen.withValues(alpha: 0.5) : _kBorder,
+            width: selected ? 1.5 : 1,
+          ),
           boxShadow: cancelada ? null : [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.03),

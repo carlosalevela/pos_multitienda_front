@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../models/devolucion_model.dart';
+import '../../../services/devolucion_print_service.dart';
 
 const _kGreen     = Color(0xFF006C49);
 const _kMintLight = Color(0xFFE8FFF4);
@@ -50,7 +51,7 @@ class DevolucionDetalleSheet extends StatelessWidget {
           Expanded(
             child: ListView(
               controller: controller,
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
               children: [
                 _headerCard(),
                 const SizedBox(height: 16),
@@ -64,6 +65,30 @@ class DevolucionDetalleSheet extends StatelessWidget {
                 const SizedBox(height: 16),
                 _seccionTotal(),
               ],
+            ),
+          ),
+          // ── Botón imprimir ──────────────────────────────
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: Color(0xFFE0E3E5))),
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.print_rounded, size: 16),
+                label: Text('Imprimir comprobante',
+                    style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 14)),
+                onPressed: () => DevolucionPrintService.imprimir(context, dev),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _kGreen,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
             ),
           ),
         ]),

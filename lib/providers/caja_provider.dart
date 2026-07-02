@@ -47,7 +47,13 @@ class CajaProvider extends ChangeNotifier {
   Future<void> verificarSesion(int tiendaId) async {
     _cargando = true;
     notifyListeners();
-    _sesionActiva = await _service.getSesionActiva(tiendaId);
+    try {
+      _sesionActiva = await _service.getSesionActiva(tiendaId);
+    } catch (_) {
+      // Error de red: conservamos el estado anterior en lugar de asumir
+      // que no hay caja abierta, evitando bloquear al cajero por un corte
+      // momentáneo de conexión.
+    }
     _cargando = false;
     notifyListeners();
   }

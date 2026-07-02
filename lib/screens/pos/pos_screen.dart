@@ -18,6 +18,9 @@ import '../../services/cliente_service.dart';
 import '../clientes/widgets/separado_form.dart';
 import '../../providers/notificaciones_provider.dart';
 import '../../services/recibo_pdf_service.dart';
+import '../../services/thermal_printer_service.dart';
+import '../../providers/config_provider.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 
 // ── Design system (Material You / Enterprise POS) ─────────
 const _kGreen          = Color(0xFF61DDAA);   // mint — igual que dashboard _C.green
@@ -82,6 +85,7 @@ class _PosScreenState extends State<PosScreen> {
       _cargarAlertas();
       _cargarCategorias();
       _cargarTodos();
+      context.read<PosProvider>().cargarTicketsGuardados();
     });
   }
 
@@ -1790,20 +1794,59 @@ class _PosScreenState extends State<PosScreen> {
     final ok = await pos.cobrar(auth.tiendaId);
     if (!ok || !mounted) return;
 
-    final factura = pos.ultimaVenta?['numero_factura']?.toString() ?? '-';
+    final factura    = pos.ultimaVenta?['numero_factura']?.toString() ?? '-';
+    final config     = context.read<ConfigProvider>();
+    final tipoPapel  = config.tipoPapel;
+    final esCash     = metodoPago == 'efectivo' || metodoPago == 'mixto';
 
-    await ReciboPdfService.imprimirRecibo(
-      items:          items,
-      numeroFactura:  factura,
-      tiendaNombre:   auth.tiendaNombre,
-      empresaNombre:  auth.empresaNombre,
-      cajeroNombre:   auth.nombre,
-      metodoPago:     metodoPago,
-      descuento:      descuento,
-      total:          total,
-      montoRecibido:  montoRecibido,
-      vuelto:         vuelto,
-    );
+    try {
+      if (tipoPapel != 'pdf' && ThermalPrinterService.isWebUsbSupported) {
+        final device = await ThermalPrinterService.getOrRequestDevice();
+        if (device != null) {
+          final paperSize = tipoPapel == '58mm' ? PaperSize.mm58 : PaperSize.mm80;
+          final bytes = await ThermalPrinterService.buildRecibo(
+            items:         items,
+            numeroFactura: factura,
+            tiendaNombre:  auth.tiendaNombre,
+            empresaNombre: auth.empresaNombre,
+            cajeroNombre:  auth.nombre,
+            metodoPago:    metodoPago,
+            descuento:     descuento,
+            total:         total,
+            montoRecibido: montoRecibido,
+            vuelto:        vuelto,
+            paperSize:     paperSize,
+          );
+          await ThermalPrinterService.printBytes(device, bytes);
+          // Abrir caja si el pago es en efectivo y la caja está conectada
+          if (esCash && await ThermalPrinterService.hasCashDrawer()) {
+            await ThermalPrinterService.kickDrawer(device);
+          }
+          return;
+        }
+      }
+      // Fallback: diálogo PDF del navegador
+      await ReciboPdfService.imprimirRecibo(
+        items:         items,
+        numeroFactura: factura,
+        tiendaNombre:  auth.tiendaNombre,
+        empresaNombre: auth.empresaNombre,
+        cajeroNombre:  auth.nombre,
+        metodoPago:    metodoPago,
+        descuento:     descuento,
+        total:         total,
+        montoRecibido: montoRecibido,
+        vuelto:        vuelto,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Error al imprimir: $e'),
+        backgroundColor: const Color(0xFFBE123C),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ));
+    }
   }
 
   void _confirmarLimpiar(PosProvider pos) {

@@ -4,7 +4,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../models/separado.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/cliente_provider.dart';
+import '../../../services/recibo_pdf_service.dart';
+import '../../../services/thermal_printer_service.dart';
 
 class AbonarSheet extends StatefulWidget {
   final Separado     separado;
@@ -84,9 +87,70 @@ class _AbonarSheetState extends State<AbonarSheet> {
     if (!mounted) return;
 
     if (ok) {
+      // Preguntar si desea imprimir recibo antes de cerrar el sheet
+      final imprimir = await showDialog<bool>(
+        context:             context,
+        barrierDismissible: true,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16)),
+          title: Row(children: [
+            const Icon(Icons.check_circle_rounded,
+                color: Color(0xFF437A22), size: 22),
+            const SizedBox(width: 8),
+            Text('Abono registrado',
+                style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w700, fontSize: 16,
+                    color: const Color(0xFF28251D))),
+          ]),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(
+              '${widget.fmt.format(monto)} recibidos correctamente.',
+              style: GoogleFonts.poppins(
+                  fontSize: 13, color: const Color(0xFF28251D)),
+            ),
+            const SizedBox(height: 6),
+            Text('¿Imprimir recibo de abono?',
+                style: GoogleFonts.poppins(
+                    fontSize: 13, color: const Color(0xFF7A7974))),
+          ]),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('No gracias',
+                  style: GoogleFonts.poppins(
+                      color: const Color(0xFF7A7974))),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(ctx, true),
+              icon: const Icon(Icons.print_rounded, size: 16),
+              label: Text('Imprimir',
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w700)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF01696F),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+      );
+
+      if (!mounted) return;
+
+      if (imprimir == true) {
+        await _imprimirReciboAbono(monto, _metodoPago);
+        if (!mounted) return;
+      }
+
+      // Guardar el messenger ANTES del pop para evitar usar contexto desactivado
+      final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
       widget.onAbonado?.call();
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text(
             'Abono de ${widget.fmt.format(monto)} registrado ✅',
@@ -112,6 +176,39 @@ class _AbonarSheetState extends State<AbonarSheet> {
         ),
       );
     }
+  }
+
+  // ── Imprimir recibo del abono (térmica → PDF) ──────────
+  Future<void> _imprimirReciboAbono(double monto, String metodo) async {
+    final auth          = context.read<AuthProvider>();
+    final empresaNombre = auth.empresaNombre.isNotEmpty
+        ? auth.empresaNombre
+        : widget.separado.tiendaNombre;
+
+    if (ThermalPrinterService.isWebUsbSupported) {
+      try {
+        final dev = await ThermalPrinterService.getAutoDevice();
+        if (dev != null) {
+          final bytes = await ThermalPrinterService.buildReciboAbono(
+            separado:     widget.separado,
+            monto:        monto,
+            metodoPago:   metodo,
+            empresaNombre: empresaNombre,
+          );
+          await ThermalPrinterService.printBytes(dev, bytes);
+          return;
+        }
+      } catch (_) {}
+    }
+
+    // Fallback PDF
+    if (!mounted) return;
+    await ReciboPdfService.imprimirReciboAbono(
+      separado:     widget.separado,
+      monto:        monto,
+      metodoPago:   metodo,
+      empresaNombre: empresaNombre,
+    );
   }
 
   // ── Resumen de deuda ───────────────────────────────────

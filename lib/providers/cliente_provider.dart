@@ -261,7 +261,7 @@ class ClienteProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> crearSeparado(Map<String, dynamic> data) async {
+  Future<Separado?> crearSeparado(Map<String, dynamic> data) async {
     _guardando = true;
     error      = null;
     notifyListeners();
@@ -273,12 +273,14 @@ class ClienteProvider extends ChangeNotifier {
       final nuevo = result['data'] as Separado;
       separados   = [nuevo, ...separados];
       notifyListeners();
-      return true;
+      // Refrescar detalle del cliente para que aparezca el nuevo separado
+      await _refrescarDetalleCliente();
+      return nuevo;
     }
 
     error = result['error'] ?? 'No se pudo crear el separado';
     notifyListeners();
-    return false;
+    return null;
   }
 
   Future<bool> abonarSeparado(int id, double monto, String metodoPago) async {

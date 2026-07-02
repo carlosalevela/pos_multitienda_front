@@ -1,12 +1,18 @@
 // lib/screens/configuracion/configuracion_screen.dart
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../../models/tier_model.dart';
 import '../../models/tienda_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/config_provider.dart';
 import '../../providers/tienda_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/thermal_printer_service.dart';
 import '../../services/tier_service.dart';
 
 class ConfiguracionScreen extends StatefulWidget {
@@ -1117,11 +1123,12 @@ class _TabImpresion extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             const Text(
-              'Solo referencial. La conexión de impresora se configura desde el sistema operativo del dispositivo.',
+              'Nombre referencial guardado en la configuración.',
               style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
             ),
           ],
         )),
+        const _ConexionImpresoraCard(),
         if (puedeEditar)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1647,4 +1654,610 @@ class _TierDialogState extends State<_TierDialog> {
     errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: Color(0xFFBE123C))),
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Tarjeta de hardware: impresora térmica + caja de dinero
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ConexionImpresoraCard extends StatefulWidget {
+  const _ConexionImpresoraCard();
+
+  @override
+  State<_ConexionImpresoraCard> createState() => _ConexionImpresoraCardState();
+}
+
+class _ConexionImpresoraCardState extends State<_ConexionImpresoraCard> {
+  ThermalDevice? _device;
+  bool           _cargando   = false;
+  bool           _trabajando = false;
+  bool           _tieneCaja  = false;   // toggle persistente
+  String?        _error;
+
+  static const _indigo = Color(0xFF3730A3);
+  static const _green  = Color(0xFF0B7A53);
+  static const _red    = Color(0xFFBE123C);
+  static const _grey   = Color(0xFF6B7280);
+
+  static const _kHasCaja = 'thermal_has_drawer';
+
+  @override
+  void initState() {
+    super.initState();
+    _inicializar();
+  }
+
+  Future<void> _inicializar() async {
+    // Cargar preferencia de caja
+    final prefs = await SharedPreferences.getInstance();
+    final hasCaja = prefs.getBool(_kHasCaja) ?? false;
+    if (!mounted) return;
+    setState(() => _tieneCaja = hasCaja);
+
+    if (!ThermalPrinterService.isWebUsbSupported) return;
+    setState(() { _cargando = true; _error = null; });
+    try {
+      final dev = await ThermalPrinterService.getAutoDevice();
+      if (!mounted) return;
+      setState(() { _device = dev; _cargando = false; });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _error = e.toString(); _cargando = false; });
+    }
+  }
+
+  Future<void> _seleccionar() async {
+    setState(() { _cargando = true; _error = null; });
+    final dev = await ThermalPrinterService.requestDevice();
+    if (!mounted) return;
+    setState(() { _device = dev; _cargando = false; });
+  }
+
+  Future<void> _desvincular() async {
+    await ThermalPrinterService.clearSaved();
+    if (!mounted) return;
+    setState(() => _device = null);
+  }
+
+  Future<void> _toggleCaja(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kHasCaja, value);
+    if (!mounted) return;
+    setState(() => _tieneCaja = value);
+  }
+
+  Future<void> _imprimirPrueba() async {
+    if (ThermalPrinterService.isWebUsbSupported) {
+      if (_device == null) return;
+      setState(() => _trabajando = true);
+      try {
+        final bytes = await ThermalPrinterService.buildTestPage();
+        await ThermalPrinterService.printBytes(_device!, bytes);
+        if (!mounted) return;
+        _snack('Página de prueba impresa', true);
+      } catch (e) {
+        if (!mounted) return;
+        _snack('Error: $e', false);
+      } finally {
+        if (mounted) setState(() => _trabajando = false);
+      }
+    } else {
+      setState(() => _trabajando = true);
+      try {
+        await Printing.layoutPdf(
+          onLayout: (_) => _buildPdfTestPage(),
+          name: 'Prueba_Impresora.pdf',
+        );
+      } finally {
+        if (mounted) setState(() => _trabajando = false);
+      }
+    }
+  }
+
+  Future<void> _abrirCaja() async {
+    if (_device == null) return;
+    setState(() => _trabajando = true);
+    try {
+      await ThermalPrinterService.kickDrawer(_device!);
+      if (!mounted) return;
+      // El comando llegó a la impresora. Si la caja no abrió es un problema físico.
+      _snack('Señal enviada. Si no abrió, verifica el cable RJ-11.', true);
+    } catch (e) {
+      if (!mounted) return;
+      _snack('Error al enviar señal: $e', false);
+    } finally {
+      if (mounted) setState(() => _trabajando = false);
+    }
+  }
+
+  void _snack(String msg, bool ok) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg, style: const TextStyle(fontSize: 13)),
+      backgroundColor: ok ? _green : _red,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    ));
+  }
+
+  // Página de prueba PDF (fallback Firefox/Safari)
+  Future<Uint8List> _buildPdfTestPage() async {
+    final fontReg  = await PdfGoogleFonts.interRegular();
+    final fontBold = await PdfGoogleFonts.interBold();
+    final fontMono = await PdfGoogleFonts.sourceCodeProRegular();
+    final now      = DateFormat('dd/MM/yyyy  HH:mm:ss').format(DateTime.now());
+
+    const pdfGreen   = PdfColor.fromInt(0xFF006C49);
+    const pdfGreenBg = PdfColor.fromInt(0xFFE8FFF4);
+
+    final doc = pw.Document();
+    doc.addPage(pw.MultiPage(
+      pageFormat: PdfPageFormat(
+        80 * PdfPageFormat.mm, 1500 * PdfPageFormat.mm,
+        marginLeft: 4 * PdfPageFormat.mm, marginRight: 4 * PdfPageFormat.mm,
+        marginTop:  5 * PdfPageFormat.mm, marginBottom: 8 * PdfPageFormat.mm,
+      ),
+      build: (ctx) => [
+        pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          decoration: const pw.BoxDecoration(color: pdfGreen),
+          child: pw.Text('PÁGINA DE PRUEBA',
+            textAlign: pw.TextAlign.center,
+            style: pw.TextStyle(font: fontBold, fontSize: 13,
+                color: PdfColors.white, letterSpacing: 1.5)),
+        ),
+        pw.SizedBox(height: 6),
+        pw.Center(child: pw.Text('POS MULTITIENDA',
+            style: pw.TextStyle(font: fontBold, fontSize: 9, color: PdfColors.grey700))),
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(vertical: 5),
+          child: pw.Divider(color: PdfColors.grey300, thickness: 0.5),
+        ),
+        pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+          pw.Text('Fecha / Hora:',
+              style: pw.TextStyle(font: fontReg, fontSize: 8, color: PdfColors.grey500)),
+          pw.Text(now,
+              style: pw.TextStyle(font: fontMono, fontSize: 8, color: PdfColors.grey700)),
+        ]),
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(vertical: 5),
+          child: pw.Divider(color: PdfColors.grey300, thickness: 0.5),
+        ),
+        pw.SizedBox(height: 4),
+        pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.all(10),
+          decoration: pw.BoxDecoration(
+            color: pdfGreenBg,
+            borderRadius: pw.BorderRadius.circular(4),
+          ),
+          child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.center, children: [
+            pw.Text('Impresora funcionando correctamente',
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(font: fontBold, fontSize: 10, color: pdfGreen)),
+            pw.SizedBox(height: 4),
+            pw.Text('La conexión es correcta.',
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(font: fontReg, fontSize: 8, color: PdfColors.grey500)),
+          ]),
+        ),
+        pw.SizedBox(height: 10),
+        pw.Text('Texto normal — 9pt',
+            style: pw.TextStyle(font: fontReg, fontSize: 9, color: PdfColors.grey700)),
+        pw.Text('TEXTO EN NEGRITA — 9pt',
+            style: pw.TextStyle(font: fontBold, fontSize: 9, color: PdfColors.black)),
+        pw.SizedBox(height: 6),
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(vertical: 5),
+          child: pw.Divider(color: PdfColors.grey300, thickness: 0.5),
+        ),
+        pw.Center(child: pw.BarcodeWidget(
+          barcode:  pw.Barcode.code128(),
+          data:     'PRUEBA-POS-80MM',
+          width:    58 * PdfPageFormat.mm,
+          height:   22,
+          drawText: false,
+          color:    PdfColors.black,
+        )),
+        pw.SizedBox(height: 3),
+        pw.Center(child: pw.Text('PRUEBA-POS-80MM',
+            style: pw.TextStyle(font: fontMono, fontSize: 7, color: PdfColors.grey700))),
+        pw.SizedBox(height: 8),
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(vertical: 5),
+          child: pw.Divider(color: PdfColors.grey300, thickness: 0.5),
+        ),
+        pw.Center(child: pw.Text('— Fin de página de prueba —',
+          textAlign: pw.TextAlign.center,
+          style: pw.TextStyle(font: fontReg, fontSize: 8, color: PdfColors.grey500))),
+        pw.SizedBox(height: 6),
+      ],
+    ));
+    return doc.save();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final webUsb    = ThermalPrinterService.isWebUsbSupported;
+    final conectada = _device != null;
+
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+
+          // ══════════════════════════════════════════════════
+          // SECCIÓN 1 — Impresora térmica
+          // ══════════════════════════════════════════════════
+          _DeviceRow(
+            icon: conectada ? Icons.print_rounded : Icons.print_outlined,
+            iconColor: conectada ? _green : _grey,
+            iconBg: conectada ? const Color(0xFFECFDF5) : const Color(0xFFF3F4F6),
+            loading: _cargando,
+            title: 'Impresora térmica',
+            subtitle: _cargando   ? 'Buscando…'
+                    : conectada   ? _device!.displayName
+                    : webUsb      ? 'Sin impresora configurada'
+                                  : 'Requiere Chrome o Edge',
+            subtitleColor: conectada ? _green : _grey,
+          ),
+
+          if (webUsb) ...[
+            const SizedBox(height: 10),
+            if (conectada) ...[
+              // ── Impresora conectada ──────────────────────
+              _StatusChip(
+                label: _device!.displayName,
+                sub: _device!.manufacturer.isNotEmpty ? _device!.manufacturer : null,
+                color: _green,
+                bgColor: const Color(0xFFECFDF5),
+                borderColor: const Color(0xFF6EE7B7),
+                icon: Icons.check_circle_rounded,
+                trailing: TextButton(
+                  onPressed: _desvincular,
+                  child: const Text('Desvincular',
+                      style: TextStyle(fontSize: 11, color: _red)),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(children: [
+                Expanded(
+                  child: _ActionBtn(
+                    label: 'Prueba de impresión',
+                    icon: Icons.print_rounded,
+                    color: _indigo,
+                    loading: _trabajando,
+                    onTap: _imprimirPrueba,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _trabajando ? null : _seleccionar,
+                  icon: const Icon(Icons.swap_horiz_rounded, size: 15),
+                  label: const Text('Cambiar'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _indigo,
+                    side: const BorderSide(color: Color(0xFFBFBFF7)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    textStyle: const TextStyle(fontSize: 12,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ]),
+            ] else ...[
+              // ── Sin impresora: botón configurar ──────────
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _cargando ? null : _seleccionar,
+                  icon: const Icon(Icons.usb_rounded, size: 16),
+                  label: const Text('Conectar impresora USB'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _indigo,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    textStyle: const TextStyle(fontSize: 13,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              _InfoBanner(
+                icon: Icons.info_outline_rounded,
+                color: const Color(0xFF0284C7),
+                bg: const Color(0xFFF0F9FF),
+                border: const Color(0xFFBAE6FD),
+                text: 'Chrome mostrará el picker USB. '
+                    'El permiso queda guardado — la próxima vez '
+                    'la impresora se conecta automáticamente.',
+              ),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              _InfoBanner(
+                icon: Icons.error_outline_rounded,
+                color: _red,
+                bg: const Color(0xFFFFF1F2),
+                border: const Color(0xFFFECACA),
+                text: _error!,
+              ),
+            ],
+          ] else ...[
+            // ── Fallback Firefox/Safari ────────────────────
+            const SizedBox(height: 10),
+            _InfoBanner(
+              icon: Icons.warning_amber_rounded,
+              color: const Color(0xFFD97706),
+              bg: const Color(0xFFFFF7ED),
+              border: const Color(0xFFFED7AA),
+              text: 'La conexión directa requiere Chrome o Edge (WebUSB).',
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: _ActionBtn(
+                label: 'Imprimir prueba (diálogo)',
+                icon: Icons.print_rounded,
+                color: _grey,
+                loading: _trabajando,
+                onTap: _imprimirPrueba,
+              ),
+            ),
+          ],
+
+          // ══════════════════════════════════════════════════
+          // SECCIÓN 2 — Caja de dinero
+          // ══════════════════════════════════════════════════
+          const SizedBox(height: 20),
+          const Divider(color: Color(0xFFE5E7EB)),
+          const SizedBox(height: 14),
+
+          _DeviceRow(
+            icon: _tieneCaja
+                ? Icons.point_of_sale_rounded
+                : Icons.point_of_sale_outlined,
+            iconColor: _tieneCaja ? const Color(0xFF92400E) : _grey,
+            iconBg: _tieneCaja
+                ? const Color(0xFFFEF9C3)
+                : const Color(0xFFF3F4F6),
+            loading: false,
+            title: 'Caja de dinero',
+            subtitle: _tieneCaja
+                ? 'Configurada (puerto RJ-11 de la impresora)'
+                : 'Sin caja de dinero configurada',
+            subtitleColor: _tieneCaja ? const Color(0xFF92400E) : _grey,
+            trailing: Switch(
+              value: _tieneCaja,
+              onChanged: _toggleCaja,
+              activeThumbColor: const Color(0xFF92400E),
+              activeTrackColor: const Color(0xFFFDE68A),
+            ),
+          ),
+
+          if (_tieneCaja) ...[
+            const SizedBox(height: 10),
+            if (conectada) ...[
+              _StatusChip(
+                label: 'Conectada vía ${_device!.displayName}',
+                sub: 'El cable RJ-11 debe estar enchufado a la impresora',
+                color: const Color(0xFF92400E),
+                bgColor: const Color(0xFFFEF9C3),
+                borderColor: const Color(0xFFFDE68A),
+                icon: Icons.cable_rounded,
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: _ActionBtn(
+                  label: 'Probar apertura de caja',
+                  icon: Icons.lock_open_rounded,
+                  color: const Color(0xFF92400E),
+                  loading: _trabajando,
+                  onTap: _abrirCaja,
+                ),
+              ),
+            ] else ...[
+              _InfoBanner(
+                icon: Icons.warning_amber_rounded,
+                color: const Color(0xFFD97706),
+                bg: const Color(0xFFFFF7ED),
+                border: const Color(0xFFFED7AA),
+                text: 'Conecta la impresora primero para poder '
+                    'operar la caja de dinero.',
+              ),
+            ],
+          ] else ...[
+            const SizedBox(height: 6),
+            _InfoBanner(
+              icon: Icons.info_outline_rounded,
+              color: _grey,
+              bg: const Color(0xFFF9FAFB),
+              border: const Color(0xFFE5E7EB),
+              text: 'Activa este toggle si tienes una caja de dinero '
+                  'conectada al puerto RJ-11 de la impresora.',
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Widgets auxiliares de la tarjeta de hardware ─────────────────────────────
+
+class _DeviceRow extends StatelessWidget {
+  final IconData icon;
+  final Color    iconColor;
+  final Color    iconBg;
+  final bool     loading;
+  final String   title;
+  final String   subtitle;
+  final Color    subtitleColor;
+  final Widget?  trailing;
+
+  const _DeviceRow({
+    required this.icon,
+    required this.iconColor,
+    required this.iconBg,
+    required this.loading,
+    required this.title,
+    required this.subtitle,
+    required this.subtitleColor,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(children: [
+      Container(
+        width: 36, height: 36,
+        decoration: BoxDecoration(
+          color: loading ? const Color(0xFFF3F4F6) : iconBg,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: loading
+            ? const Padding(
+                padding: EdgeInsets.all(10),
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Color(0xFF3730A3)))
+            : Icon(icon, size: 18, color: iconColor),
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700,
+                  color: Color(0xFF111827))),
+          Text(subtitle,
+              style: TextStyle(fontSize: 11, color: subtitleColor)),
+        ]),
+      ),
+      if (trailing case final t?) t, // ignore: use_null_aware_elements
+    ]);
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  final String  label;
+  final String? sub;
+  final Color   color;
+  final Color   bgColor;
+  final Color   borderColor;
+  final IconData icon;
+  final Widget? trailing;
+
+  const _StatusChip({
+    required this.label,
+    this.sub,
+    required this.color,
+    required this.bgColor,
+    required this.borderColor,
+    required this.icon,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label,
+                style: TextStyle(fontSize: 13,
+                    fontWeight: FontWeight.w600, color: color)),
+            if (sub != null)
+              Text(sub!,
+                  style: TextStyle(fontSize: 11,
+                      color: color.withValues(alpha: 0.75))),
+          ]),
+        ),
+        if (trailing case final t?) t, // ignore: use_null_aware_elements
+      ]),
+    );
+  }
+}
+
+class _InfoBanner extends StatelessWidget {
+  final IconData icon;
+  final Color    color;
+  final Color    bg;
+  final Color    border;
+  final String   text;
+
+  const _InfoBanner({
+    required this.icon,
+    required this.color,
+    required this.bg,
+    required this.border,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: border),
+      ),
+      child: Row(children: [
+        Icon(icon, size: 13, color: color),
+        const SizedBox(width: 7),
+        Expanded(child: Text(text,
+            style: TextStyle(fontSize: 11, color: color))),
+      ]),
+    );
+  }
+}
+
+class _ActionBtn extends StatelessWidget {
+  final String   label;
+  final IconData icon;
+  final Color    color;
+  final bool     loading;
+  final VoidCallback onTap;
+
+  const _ActionBtn({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.loading,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton.icon(
+      onPressed: loading ? null : onTap,
+      icon: loading
+          ? const SizedBox(width: 14, height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2,
+                  color: Colors.white))
+          : Icon(icon, size: 15),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
 }
