@@ -1,5 +1,6 @@
 // lib/screens/clientes/widgets/separado_form.dart
 
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,6 +15,9 @@ import '../../../providers/auth_provider.dart';
 import '../../../providers/cliente_provider.dart';
 import '../../../services/recibo_pdf_service.dart';
 import '../../../services/thermal_printer_service.dart';
+import '../../../models/producto.dart';
+import '../../../services/barcode_service.dart';
+import '../../../services/inventario_service.dart';
 
 // ── Paleta del sistema de diseño ─────────────────────────────
 const _kGreen     = Color(0xFF61DDAA);   // mint — igual que dashboard
@@ -128,6 +132,7 @@ class _SeparadoFormState extends State<SeparadoForm> {
 
   String _metodoPago = 'efectivo';
   final List<_ItemSep> _items = [];
+  StreamSubscription<String>? _barcodeSub;
 
   static const _metodos = [
     ('efectivo',      'Efectivo',      Icons.payments_rounded),
@@ -142,6 +147,7 @@ class _SeparadoFormState extends State<SeparadoForm> {
   @override
   void initState() {
     super.initState();
+    _barcodeSub = BarcodeService.instance.onBarcode.listen(_onBarcode);
     if (widget.itemsIniciales.isNotEmpty) {
       for (final ic in widget.itemsIniciales) {
         final item = _ItemSep(
@@ -166,9 +172,46 @@ class _SeparadoFormState extends State<SeparadoForm> {
 
   @override
   void dispose() {
+    _barcodeSub?.cancel();
     _abonoCtrl.dispose();
     for (final i in _items) { i.dispose(); }
     super.dispose();
+  }
+
+  // ── Lector de código de barras ────────────────────────────
+
+  Future<void> _onBarcode(String codigo) async {
+    if (!mounted) return;
+    if (ModalRoute.of(context)?.isCurrent == false) return;
+
+    final result = await InventarioService().buscarProductoPos(
+      q: codigo, tiendaId: widget.tiendaId,
+    );
+    if (!mounted) return;
+
+    final productos = result['data'] as List<Producto>;
+    if (productos.isEmpty) {
+      _snack('Código no encontrado: $codigo', isError: true);
+      return;
+    }
+
+    // Usar el primer resultado (el backend ya priorizó match exacto en codigo_barras)
+    final p   = productos.first;
+    final idx = _items.indexWhere((i) => i.productoId == p.id);
+    if (idx >= 0) {
+      setState(() => _items[idx].cantidad++);
+      _snack('${p.nombre} · ${_items[idx].cantidad} unidades');
+    } else {
+      final item = _ItemSep(
+        productoId: p.id,
+        nombre:     p.nombre,
+        cantidad:   1,
+        precio:     p.precio,
+      );
+      item.initCtrls();
+      setState(() => _items.add(item));
+      _snack('${p.nombre} agregado');
+    }
   }
 
   // ── Guardar ───────────────────────────────────────────────

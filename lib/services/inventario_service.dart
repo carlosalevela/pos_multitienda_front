@@ -154,6 +154,41 @@ class InventarioService {
     }
   }
 
+  // ── Búsqueda POS (para lector de barras y buscador rápido) ──
+
+  /// Llama a /productos/buscar/?q=...&tienda_id=...
+  /// El backend hace match exacto en codigo_barras y parcial en nombre.
+  /// Retorna {'success': bool, 'data': List<Producto>, 'error': String?}
+  Future<Map<String, dynamic>> buscarProductoPos({
+    required String q,
+    int? tiendaId,
+  }) async {
+    try {
+      final response = await ApiClient.instance.get(
+        '/productos/buscar/',
+        queryParameters: {
+          'q': q,
+          if (tiendaId != null) 'tienda_id': tiendaId.toString(),
+        },
+      );
+      final List data = response.data is List ? response.data : [];
+      final productos = data.map((e) => Producto.fromJson(e)).toList();
+      return {'success': true, 'data': productos};
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'data': <Producto>[],
+        'error': _extractError(e, 'Error al buscar producto'),
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'data': <Producto>[],
+        'error': 'Error inesperado al buscar',
+      };
+    }
+  }
+
   // ── Ajustar stock ──────────────────────────────────────
 
   Future<Map<String, dynamic>> ajustarStock({

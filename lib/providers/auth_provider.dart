@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../services/documento_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
@@ -61,6 +62,7 @@ class AuthProvider extends ChangeNotifier {
       _empresaId     = emp['empresa_id']?.toString()     ?? '';
       _empresaNombre = emp['empresa_nombre']?.toString() ?? '';
       _isLoggedIn    = true;
+      DocumentoService.instance.setTienda(_tiendaNombre.isNotEmpty ? _tiendaNombre : _empresaNombre);
     } else {
       _errorMsg = result['error'] ?? 'Error desconocido';
     }
@@ -105,6 +107,7 @@ class AuthProvider extends ChangeNotifier {
     _empresaId     = data['empresa_id']?.toString()     ?? '';
     _empresaNombre = data['empresa_nombre']?.toString() ?? '';
     _isLoggedIn    = true;
+    DocumentoService.instance.setTienda(_tiendaNombre.isNotEmpty ? _tiendaNombre : _empresaNombre);
     notifyListeners();
   }
 

@@ -1,5 +1,6 @@
 // lib/services/recibo_pdf_service.dart
 
+import 'dart:async';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -7,6 +8,7 @@ import 'package:printing/printing.dart';
 import '../models/item_carrito.dart';
 import '../models/devolucion_model.dart';
 import '../models/separado.dart';
+import 'documento_service.dart';
 
 class ReciboPdfService {
   // ── Colores ──────────────────────────────────────────────────
@@ -132,8 +134,12 @@ class ReciboPdfService {
       ],
     ));
 
+    final bytes = await doc.save();
+    unawaited(DocumentoService.instance.guardarVenta(
+      bytes: bytes, numeroFactura: numeroFactura,
+    ));
     await Printing.layoutPdf(
-      onLayout: (_) async => doc.save(),
+      onLayout: (_) async => bytes,
       name: 'Recibo_$numeroFactura.pdf',
     );
   }
@@ -529,8 +535,12 @@ class ReciboPdfService {
       ],
     ));
 
+    final bytes = await doc.save();
+    unawaited(DocumentoService.instance.guardarDevolucion(
+      bytes: bytes, referencia: devId,
+    ));
     await Printing.layoutPdf(
-      onLayout: (_) async => doc.save(),
+      onLayout: (_) async => bytes,
       name: 'Comprobante_$devId.pdf',
     );
   }
@@ -795,8 +805,12 @@ class ReciboPdfService {
       ],
     ));
 
+    final bytes = await doc.save();
+    unawaited(DocumentoService.instance.guardarSeparado(
+      bytes: bytes, numeroSeparado: sepId,
+    ));
     await Printing.layoutPdf(
-      onLayout: (_) async => doc.save(),
+      onLayout: (_) async => bytes,
       name: 'Separado_$sepId.pdf',
     );
   }
@@ -939,8 +953,12 @@ class ReciboPdfService {
       ],
     ));
 
+    final bytes = await doc.save();
+    unawaited(DocumentoService.instance.guardarAbono(
+      bytes: bytes, referencia: '${sepId}_${DateTime.now().millisecondsSinceEpoch}',
+    ));
     await Printing.layoutPdf(
-      onLayout: (_) async => doc.save(),
+      onLayout: (_) async => bytes,
       name: 'Abono_$sepId.pdf',
     );
   }

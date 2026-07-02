@@ -1,10 +1,12 @@
 // lib/screens/caja/widgets/pdf/cierre_pdf.dart
 
+import 'dart:async';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../../../models/sesion_historial.dart';
+import '../../../../services/documento_service.dart';
 
 // ── Palette (Enterprise POS) ──────────────────────────────
 const _pGreen      = PdfColor.fromInt(0xFF006C49);
@@ -111,7 +113,12 @@ Future<void> exportarCierrePDF(SesionHistorial sesion) async {
 
   final filename =
       'CIERRE_${sesion.id}_${sesion.tiendaNombre.replaceAll(' ', '_')}.pdf';
-  await Printing.sharePdf(bytes: await doc.save(), filename: filename);
+  final bytes = await doc.save();
+  unawaited(DocumentoService.instance.guardarCierre(
+    bytes: bytes,
+    referencia: 'cierre_${sesion.id}_${sesion.tiendaNombre.replaceAll(' ', '_')}',
+  ));
+  await Printing.sharePdf(bytes: bytes, filename: filename);
 }
 
 // ════════════════════════════════════════════════════════

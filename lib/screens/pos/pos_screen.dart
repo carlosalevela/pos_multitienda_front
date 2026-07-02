@@ -20,6 +20,7 @@ import '../../providers/notificaciones_provider.dart';
 import '../../services/recibo_pdf_service.dart';
 import '../../services/thermal_printer_service.dart';
 import '../../providers/config_provider.dart';
+import '../../services/barcode_service.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 
 // ── Design system (Material You / Enterprise POS) ─────────
@@ -76,10 +77,12 @@ class _PosScreenState extends State<PosScreen> {
   OverlayEntry? _notifOverlay;
 
   Timer? _debounceSearch;
+  StreamSubscription<String>? _barcodeSub;
 
   @override
   void initState() {
     super.initState();
+    _barcodeSub = BarcodeService.instance.onBarcode.listen(_onBarcode);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _notifProv = context.read<NotificacionesProvider>()..iniciarPolling();
       _cargarAlertas();
@@ -91,6 +94,7 @@ class _PosScreenState extends State<PosScreen> {
 
   @override
   void dispose() {
+    _barcodeSub?.cancel();
     _notifProv?.detenerPolling();
     _searchCtrl.dispose();
     _montoCtrl.dispose();
@@ -173,6 +177,54 @@ class _PosScreenState extends State<PosScreen> {
         _descuentoCtrl.text = pos.descuento.toStringAsFixed(0);
       }
     }
+  }
+
+  // ── Lector de código de barras ───────────────────────────
+
+  Future<void> _onBarcode(String codigo) async {
+    if (!mounted) return;
+    // Ignorar si hay un modal/diálogo encima (ej: buscador, separado form)
+    if (ModalRoute.of(context)?.isCurrent == false) return;
+
+    final auth    = context.read<AuthProvider>();
+    final tiendaId = auth.tiendaId > 0 ? auth.tiendaId : null;
+
+    final result   = await InventarioService().buscarProductoPos(
+      q: codigo, tiendaId: tiendaId,
+    );
+    if (!mounted) return;
+
+    final productos = result['data'] as List<Producto>;
+
+    if (productos.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Código no encontrado: $codigo'),
+        backgroundColor: _kError,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ));
+      return;
+    }
+
+    if (productos.length == 1) {
+      final p = productos.first;
+      if (p.stockActual <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${p.nombre}: sin stock disponible'),
+          backgroundColor: _kAmber,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ));
+        return;
+      }
+      context.read<PosProvider>().agregarAlCarrito(p);
+      HapticFeedback.lightImpact();
+      return;
+    }
+
+    // Múltiples resultados → mostrar en el catálogo via búsqueda
+    _searchCtrl.text = codigo;
+    context.read<PosProvider>().buscarProductos(codigo, tiendaId ?? 0);
   }
 
   // ══════════════════════════════════════════════════════════

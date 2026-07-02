@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -23,21 +24,29 @@ class BuscadorProductosSheet extends StatefulWidget {
 }
 
 class _BuscadorProductosSheetState extends State<BuscadorProductosSheet> {
-  final _ctrl = TextEditingController();
+  final _ctrl    = TextEditingController();
   final _service = InventarioService();
   List<Producto> _productos = [];
-  bool _cargando = false;
+  bool  _cargando = false;
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
-    _ctrl.addListener(_buscar);
+    _ctrl.addListener(_buscarDebounced);
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _ctrl.dispose();
     super.dispose();
+  }
+
+  void _buscarDebounced() {
+    _debounce?.cancel();
+    // 200 ms: suficiente para agrupar la ráfaga del scanner y el tipeo humano
+    _debounce = Timer(const Duration(milliseconds: 200), _buscar);
   }
 
   Future<void> _buscar() async {
@@ -121,7 +130,8 @@ class _BuscadorProductosSheetState extends State<BuscadorProductosSheet> {
                           size: 18, color: Colors.grey.shade400),
                       onPressed: () {
                         _ctrl.clear();
-                        _buscar();
+                        _debounce?.cancel();
+                        setState(() => _productos.clear());
                       },
                     )
                   : null,
