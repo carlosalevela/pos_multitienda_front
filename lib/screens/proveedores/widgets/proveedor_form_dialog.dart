@@ -8,10 +8,10 @@
 //                Guardar bloqueado hasta seleccionar ambos.
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/proveedores_provider.dart';
-import '../../../core/constants.dart';
+import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 
 class ProveedorFormDialog extends StatefulWidget {
   final Map<String, dynamic>?              proveedor;
@@ -34,8 +34,6 @@ class ProveedorFormDialog extends StatefulWidget {
 }
 
 class _ProveedorFormDialogState extends State<ProveedorFormDialog> {
-  static const _accent = Color(Constants.primaryColor);
-
   final _formKey = GlobalKey<FormState>();
 
   late final TextEditingController _cNombre;
@@ -63,7 +61,6 @@ class _ProveedorFormDialogState extends State<ProveedorFormDialog> {
     _cCiudad    = TextEditingController(text: p?['ciudad']    ?? '');
 
     if (widget.esSuperadmin) {
-      // En edición pre-poblar empresa/tienda existentes
       if (_esEdicion) {
         _empresaSelId = p?['empresa_id']?.toString();
         _tiendaSelId  = p?['tienda_id'] != null
@@ -73,7 +70,6 @@ class _ProveedorFormDialogState extends State<ProveedorFormDialog> {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         final prov = context.read<ProveedoresProvider>();
         await prov.cargarEmpresasSimple();
-        // Si hay empresa pre-seleccionada (edición), cargar sus tiendas
         if (_empresaSelId != null) {
           await prov.cargarTiendasSimple(
               empresaId: int.tryParse(_empresaSelId!));
@@ -122,8 +118,6 @@ class _ProveedorFormDialogState extends State<ProveedorFormDialog> {
           : widget.tiendaIdFijo,
     };
 
-    debugPrint('📦 payload proveedor: $data');
-
     final prov = context.read<ProveedoresProvider>();
     final ok   = _esEdicion
         ? await prov.editarProveedor(widget.proveedor!['id'], data)
@@ -136,10 +130,11 @@ class _ProveedorFormDialogState extends State<ProveedorFormDialog> {
 
   void _snackError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg, style: const TextStyle(color: Colors.white)),
-      backgroundColor: Colors.orange.shade700,
+      content: Text(msg,
+          style: const TextStyle(color: Colors.white)),
+      backgroundColor: AppColors.warning,
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      shape: const RoundedRectangleBorder(borderRadius: AppRadius.xl),
       margin: const EdgeInsets.all(16),
     ));
   }
@@ -147,16 +142,16 @@ class _ProveedorFormDialogState extends State<ProveedorFormDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(16))),
       title: Row(children: [
         Icon(
           _esEdicion ? Icons.edit_rounded : Icons.add_business_rounded,
-          color: _accent, size: 22),
+          color: AppColors.secondary, size: 22),
         const SizedBox(width: 10),
         Text(
           _esEdicion ? 'Editar proveedor' : 'Nuevo proveedor',
-          style: GoogleFonts.poppins(
-              fontWeight: FontWeight.bold, fontSize: 16)),
+          style: AppTextStyles.headlineSm),
       ]),
       content: SizedBox(
         width: 520,
@@ -185,7 +180,7 @@ class _ProveedorFormDialogState extends State<ProveedorFormDialog> {
                         setState(() => _tiendaSelId = id),
                   ),
                   const SizedBox(height: 16),
-                  Divider(height: 1, color: Colors.grey.shade200),
+                  const Divider(height: 1, color: AppColors.outlineVariant),
                   const SizedBox(height: 16),
                 ],
 
@@ -242,27 +237,30 @@ class _ProveedorFormDialogState extends State<ProveedorFormDialog> {
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: Text('Cancelar',
-              style: GoogleFonts.poppins(color: Colors.grey.shade600))),
+              style: AppTextStyles.bodyMd
+                  .copyWith(color: AppColors.onSurfaceVariant))),
         Consumer<ProveedoresProvider>(
-          builder: (_, p, __) => ElevatedButton.icon(
+          builder: (context2, p, child) => ElevatedButton.icon(
             onPressed: p.guardando ? null : _guardar,
             icon: p.guardando
                 ? const SizedBox(
                     width: 14, height: 14,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
+                        strokeWidth: 2,
+                        color: AppColors.onSecondary))
                 : Icon(
                     _esEdicion ? Icons.save_rounded : Icons.add_rounded,
                     size: 16),
             label: Text(
               _esEdicion ? 'Guardar cambios' : 'Crear proveedor',
-              style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+              style: AppTextStyles.bodyMd
+                  .copyWith(fontWeight: FontWeight.w600)),
             style: ElevatedButton.styleFrom(
-              backgroundColor: _accent,
-              foregroundColor: Colors.white,
+              backgroundColor: AppColors.secondary,
+              foregroundColor: AppColors.onSecondary,
               elevation: 0,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
+              shape: const RoundedRectangleBorder(
+                  borderRadius: AppRadius.xl),
               padding: const EdgeInsets.symmetric(
                   horizontal: 20, vertical: 12),
             ),
@@ -283,25 +281,26 @@ class _ProveedorFormDialogState extends State<ProveedorFormDialog> {
       controller:   ctrl,
       keyboardType: inputType,
       validator:    validator,
-      style:        GoogleFonts.poppins(fontSize: 13),
+      style: AppTextStyles.bodyMd.copyWith(fontSize: 13),
       decoration: InputDecoration(
         labelText:  label,
-        labelStyle: GoogleFonts.poppins(fontSize: 12),
-        prefixIcon: Icon(icon, size: 18, color: Colors.grey.shade400),
+        labelStyle: AppTextStyles.bodySm,
+        prefixIcon: Icon(icon, size: 18, color: AppColors.outline),
         filled:     true,
-        fillColor:  const Color(0xFFF4F6FA),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFE0E0E0))),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFE0E0E0))),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _accent, width: 1.5)),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Colors.red.shade400)),
+        fillColor:  AppColors.surfaceContainerLow,
+        border: const OutlineInputBorder(
+          borderRadius: AppRadius.xl,
+          borderSide: BorderSide(color: AppColors.outlineVariant)),
+        enabledBorder: const OutlineInputBorder(
+          borderRadius: AppRadius.xl,
+          borderSide: BorderSide(color: AppColors.outlineVariant)),
+        focusedBorder: const OutlineInputBorder(
+          borderRadius: AppRadius.xl,
+          borderSide: BorderSide(
+              color: AppColors.secondary, width: 1.5)),
+        errorBorder: const OutlineInputBorder(
+          borderRadius: AppRadius.xl,
+          borderSide: BorderSide(color: AppColors.error)),
         contentPadding: const EdgeInsets.symmetric(
             horizontal: 14, vertical: 12),
       ),
@@ -323,8 +322,6 @@ class _EmpresaTiendaSelector extends StatelessWidget {
     required this.onTiendaChanged,
   });
 
-  static const _accent = Color(Constants.primaryColor);
-
   @override
   Widget build(BuildContext context) {
     final prov = context.watch<ProveedoresProvider>();
@@ -334,17 +331,13 @@ class _EmpresaTiendaSelector extends StatelessWidget {
       children: [
         Row(children: [
           const Icon(Icons.business_center_rounded,
-              size: 15, color: _accent),
+              size: 15, color: AppColors.secondary),
           const SizedBox(width: 6),
           Text('Asignación',
-            style: GoogleFonts.poppins(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade700)),
+            style: AppTextStyles.labelMd),
         ]),
         const SizedBox(height: 10),
         Row(children: [
-          // Dropdown empresa
           Expanded(child: _dropdown<String>(
             label:     'Empresa *',
             icon:      Icons.domain_rounded,
@@ -357,7 +350,6 @@ class _EmpresaTiendaSelector extends StatelessWidget {
             hint:      'Seleccionar empresa',
           )),
           const SizedBox(width: 12),
-          // Dropdown tienda — se habilita al elegir empresa
           Expanded(child: _dropdown<int>(
             label:     'Tienda *',
             icon:      Icons.store_rounded,
@@ -394,24 +386,24 @@ class _EmpresaTiendaSelector extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-          style: GoogleFonts.poppins(
-              fontSize: 12, color: Colors.grey.shade600)),
+        Text(label, style: AppTextStyles.bodySm),
         const SizedBox(height: 4),
         Container(
           height: 48,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
             color: disabled
-                ? const Color(0xFFF0F0F0)
-                : const Color(0xFFF4F6FA),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFE0E0E0)),
+                ? AppColors.surfaceContainerHigh
+                : AppColors.surfaceContainerLow,
+            borderRadius: AppRadius.xl,
+            border: Border.all(color: AppColors.outlineVariant),
           ),
           child: loading
               ? const Center(child: SizedBox(
                   width: 18, height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2)))
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.secondary)))
               : DropdownButtonHideUnderline(
                   child: DropdownButton<T>(
                     value:      value,
@@ -419,25 +411,23 @@ class _EmpresaTiendaSelector extends StatelessWidget {
                     hint: Row(children: [
                       Icon(icon, size: 16,
                           color: disabled
-                              ? Colors.grey.shade300
-                              : Colors.grey.shade400),
+                              ? AppColors.outlineVariant
+                              : AppColors.outline),
                       const SizedBox(width: 8),
                       Flexible(child: Text(hint,
                         overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.poppins(
-                            fontSize: 13,
+                        style: AppTextStyles.bodySm.copyWith(
                             color: disabled
-                                ? Colors.grey.shade400
-                                : Colors.grey.shade500))),
+                                ? AppColors.outlineVariant
+                                : AppColors.outline))),
                     ]),
-                    style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        color: const Color(0xFF1A1A2E)),
+                    style: AppTextStyles.bodyMd
+                        .copyWith(color: AppColors.onSurface),
                     onChanged: disabled ? null : onChanged,
                     items: items.map((e) => DropdownMenuItem<T>(
                       value: toValue(e),
                       child: Text(toLabel(e),
-                          style: GoogleFonts.poppins(fontSize: 13)),
+                          style: AppTextStyles.bodyMd),
                     )).toList(),
                   ),
                 ),

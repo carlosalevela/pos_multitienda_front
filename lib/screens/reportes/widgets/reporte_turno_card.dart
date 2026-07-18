@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../models/sesion_caja.dart';
 import '../../../providers/caja_provider.dart';
 import '../../../providers/reportes_provider.dart';
-import '../../../services/reporte_pdf_service.dart';
+import '../../../services/cierre_turno_print_service.dart';
 import 'reporte_utils.dart';
 
 // ── Paleta verde (caja cerrada / lista para imprimir) ─────────
@@ -132,7 +132,8 @@ class ReporteTurnoCard extends StatelessWidget {
                 ElevatedButton.icon(
                   onPressed: caja.cargandoGastos
                       ? null
-                      : () => ReportePdfService.generarCierreTurno(
+                      : () => CierreTurnoPrintService.imprimir(
+                            context:       context,
                             sesion:        sesion,
                             fecha:         fecha,
                             tiendaNombre:  tiendaNombre,
@@ -184,7 +185,7 @@ class ReporteTurnoCard extends StatelessWidget {
               const _Arrow(),
               _BalanceCell(
                 label: 'Gastos del turno',
-                value: '-\$${fmtNum(caja.gastosTotalSesion)}',
+                value: '-\$${fmtNum(cajaAbierta ? caja.gastosTotalSesion : sesion.gastosTotal)}',
                 icon: Icons.remove_circle_outline_rounded,
                 accent: accent,
               ),

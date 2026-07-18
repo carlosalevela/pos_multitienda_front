@@ -174,7 +174,8 @@ class ProveedoresProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> obtenerCompra(int id) =>
       _compraService.obtener(id);
 
-  Future<bool> crearCompra(Map<String, dynamic> data) async {
+  /// Retorna la compra creada (Map con todos los campos) o null si falló.
+  Future<Map<String, dynamic>?> crearCompra(Map<String, dynamic> data) async {
     guardando = true;
     errorMsg  = null;
     notifyListeners();
@@ -184,16 +185,15 @@ class ProveedoresProvider extends ChangeNotifier {
         successMsg = '✅ Compra registrada correctamente';
         guardando  = false;
         notifyListeners();
-        // ✅ Refresca con los últimos filtros activos
         await cargarCompras(
             tiendaId: _ultimaTiendaId, estado: _ultimoEstado);
-        return true;
+        return res['data'] as Map<String, dynamic>?;
       }
       errorMsg = res['error'] ?? 'Error al crear compra';
-      return false;
+      return null;
     } catch (e) {
       errorMsg = 'Error inesperado al registrar compra';
-      return false;
+      return null;
     } finally {
       guardando = false;
       notifyListeners();

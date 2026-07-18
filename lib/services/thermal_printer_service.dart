@@ -1,210 +1,72 @@
 // lib/services/thermal_printer_service.dart
 //
 // Comunicación directa ESC/POS con impresoras térmicas USB vía WebUSB API.
-// Chrome/Edge únicamente. Firefox/Safari no soportan WebUSB.
+// Chrome/Edge únicamente para la parte USB. En desktop (Windows/exe) la
+// impresión va por el paquete Printing (PDF → diálogo del sistema).
 //
-// Flujo:
+// Flujo web:
 //   1. ThermalPrinterService.requestDevice() → muestra picker USB del browser
 //   2. El browser recuerda el permiso; getGrantedDevices() lo recupera sin diálogo
 //   3. printBytes(dev, bytes) → envía bytes ESC/POS directo sin diálogo
 //   4. kickDrawer(dev) → abre caja de dinero vía pulso ESC/POS
 
-import 'dart:js_interop';
-import 'dart:js_interop_unsafe';
-
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
-import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/devolucion_model.dart';
 import '../models/item_carrito.dart';
 import '../models/separado.dart';
+import '../models/sesion_caja.dart';
+import '../models/sesion_historial.dart';
 
-// ─── WebUSB JS bindings ───────────────────────────────────────
-// Accede a window.navigator.usb vía la ruta global de dart:js_interop
-
-@JS('navigator.usb')
-external JSAny? get _usbRaw;
-
-extension type _USB._(JSObject _) implements JSObject {
-  external JSPromise<JSArray<_UsbDev>> getDevices();
-  external JSPromise<_UsbDev> requestDevice(JSObject options);
-}
-
-extension type _UsbDev._(JSObject _) implements JSObject {
-  external String  get productName;
-  external String? get manufacturerName;
-  external int     get vendorId;
-  external int     get productId;
-  external JSPromise<JSAny?> open();
-  external JSPromise<JSAny?> close();
-  external JSPromise<JSAny?> selectConfiguration(int v);
-  external JSPromise<JSAny?> claimInterface(int n);
-  external JSPromise<JSAny?> releaseInterface(int n);
-  external JSPromise<JSObject> transferOut(int ep, JSUint8Array data);
-}
-
-// ─── Modelo público ───────────────────────────────────────────
-
-class ThermalDevice {
-  final String   name;
-  final String   manufacturer;
-  final int      vendorId;
-  final int      productId;
-  // ignore: library_private_types_in_public_api
-  final _UsbDev _raw;
-
-  ThermalDevice._({
-    required this.name,
-    required this.manufacturer,
-    required this.vendorId,
-    required this.productId,
-    required _UsbDev raw,
-  }) : _raw = raw;
-
-  String get displayName => name.isNotEmpty
-      ? name
-      : '${vendorId.toRadixString(16).padLeft(4, '0')}:'
-        '${productId.toRadixString(16).padLeft(4, '0')}';
-}
-
-// ─── Servicio ─────────────────────────────────────────────────
+// Importación condicional: web usa WebUSB real; desktop usa stubs vacíos.
+import 'thermal_usb_web.dart' if (dart.library.io) 'thermal_usb_stub.dart' as _impl;
+export 'thermal_usb_web.dart' if (dart.library.io) 'thermal_usb_stub.dart' show ThermalDevice;
 
 class ThermalPrinterService {
   ThermalPrinterService._();
 
-  static const _kVid  = 'thermal_vid';
-  static const _kPid  = 'thermal_pid';
-  static const _kName = 'thermal_name';
-
   // ── Detección ─────────────────────────────────────────────
 
-  static bool get isWebUsbSupported {
-    if (!kIsWeb) return false;
-    try { return _usbRaw != null; } catch (_) { return false; }
-  }
-
-  static _USB? get _usb {
-    final raw = _usbRaw;
-    if (raw == null) return null;
-    return _USB._(raw as JSObject);
-  }
+  static bool get isWebUsbSupported => _impl.isWebUsbSupported;
 
   // ── Dispositivos ──────────────────────────────────────────
 
-  /// Devuelve los dispositivos que el usuario ya aprobó (sin diálogo).
-  static Future<List<ThermalDevice>> getGrantedDevices() async {
-    final usb = _usb;
-    if (usb == null) return [];
-    try {
-      final arr = await usb.getDevices().toDart;
-      return arr.toDart.map(_fromRaw).toList();
-    } catch (_) {
-      return [];
-    }
-  }
+  static Future<List<_impl.ThermalDevice>> getGrantedDevices() =>
+      _impl.getGrantedDevices();
 
-  /// Muestra el picker USB del navegador para seleccionar una impresora.
-  /// Filtra por clase USB 7 (impresoras).
-  /// Retorna null si el usuario cancela.
-  static Future<ThermalDevice?> requestDevice() async {
-    final usb = _usb;
-    if (usb == null) return null;
-    try {
-      final filter = JSObject();
-      filter['classCode'] = 7.toJS;        // USB printer class
-      final opts = JSObject();
-      opts['filters'] = [filter].toJS;
+  static Future<_impl.ThermalDevice?> requestDevice() =>
+      _impl.requestDevice();
 
-      final raw = await usb.requestDevice(opts).toDart;
-      final dev = _fromRaw(raw);
+  static Future<_impl.ThermalDevice?> getAutoDevice() =>
+      _impl.getAutoDevice();
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_kVid, dev.vendorId);
-      await prefs.setInt(_kPid, dev.productId);
-      await prefs.setString(_kName, dev.displayName);
-      return dev;
-    } catch (_) {
-      return null; // usuario canceló
-    }
-  }
+  static Future<String?> getSavedName() =>
+      _impl.getSavedName();
 
-  /// Auto-recupera el dispositivo guardado de los dispositivos aprobados.
-  static Future<ThermalDevice?> getAutoDevice() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedVid = prefs.getInt(_kVid);
-    final savedPid = prefs.getInt(_kPid);
-    if (savedVid == null || savedPid == null) return null;
+  static Future<_impl.ThermalDevice?> getOrRequestDevice() =>
+      _impl.getOrRequestDevice();
 
-    final devices = await getGrantedDevices();
-    try {
-      return devices.firstWhere(
-        (d) => d.vendorId == savedVid && d.productId == savedPid,
-      );
-    } catch (_) {
-      return devices.isNotEmpty ? devices.first : null;
-    }
-  }
-
-  static Future<String?> getSavedName() async =>
-      (await SharedPreferences.getInstance()).getString(_kName);
-
-  /// Igual que [getAutoDevice] pero, si el permiso de Chrome venció
-  /// (HTTP no persiste entre sesiones), llama a [requestDevice]
-  /// para re-autorizarlo sin que el usuario tenga que ir a Configuración.
-  static Future<ThermalDevice?> getOrRequestDevice() async {
-    // 1. Intento normal
-    final dev = await getAutoDevice();
-    if (dev != null) return dev;
-
-    // 2. ¿Hay una impresora guardada pero sin permiso activo?
-    final prefs = await SharedPreferences.getInstance();
-    final savedVid = prefs.getInt(_kVid);
-    if (savedVid == null) return null; // Sin configurar → no hacer nada
-
-    // 3. Re-pedir permiso (válido porque venimos de un gesto del usuario)
-    return requestDevice();
-  }
-
-  static Future<void> clearSaved() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kVid);
-    await prefs.remove(_kPid);
-    await prefs.remove(_kName);
-  }
+  static Future<void> clearSaved() =>
+      _impl.clearSaved();
 
   // ── Impresión ─────────────────────────────────────────────
 
-  /// Envía bytes ESC/POS directo al dispositivo USB.
-  /// Intenta interfaz 0; si falla, intenta interfaz 1.
-  static Future<void> printBytes(ThermalDevice dev, List<int> bytes) async {
-    final d = dev._raw;
-    await d.open().toDart;
+  static Future<void> printBytes(_impl.ThermalDevice dev, List<int> bytes) =>
+      _impl.printBytes(dev, bytes);
 
-    int iface = 0;
-    try {
-      await d.selectConfiguration(1).toDart;
-      try {
-        await d.claimInterface(0).toDart;
-      } catch (_) {
-        await d.claimInterface(1).toDart;
-        iface = 1;
-      }
-      await d.transferOut(1, Uint8List.fromList(bytes).toJS).toDart;
-    } finally {
-      try { await d.releaseInterface(iface).toDart; } catch (_) {}
-      try { await d.close().toDart; } catch (_) {}
-    }
-  }
+  static Future<void> kickDrawer(_impl.ThermalDevice dev) =>
+      _impl.kickDrawer(dev);
 
-  /// Abre la caja de dinero conectada al puerto RJ-11 de la impresora.
-  static Future<void> kickDrawer(ThermalDevice dev) async {
-    final profile = await CapabilityProfile.load();
-    final gen     = Generator(PaperSize.mm80, profile);
-    await printBytes(dev, gen.drawer(pin: PosDrawer.pin2));
-  }
+  // ── Preferencia caja de dinero ────────────────────────────
 
-  /// Genera una página de prueba en formato ESC/POS 80 mm.
+  static const _kHasCaja = 'thermal_has_drawer';
+
+  static Future<bool> hasCashDrawer() async =>
+      (await SharedPreferences.getInstance()).getBool(_kHasCaja) ?? false;
+
+  // ── Builder página de prueba ──────────────────────────────
+
   static Future<List<int>> buildTestPage() async {
     final profile = await CapabilityProfile.load();
     final gen     = Generator(PaperSize.mm80, profile);
@@ -392,13 +254,6 @@ class ThermalPrinterService {
     _               => 'Efectivo',
   };
 
-  // ── Preferencia caja de dinero ────────────────────────────
-
-  static const _kHasCaja = 'thermal_has_drawer';
-
-  static Future<bool> hasCashDrawer() async =>
-      (await SharedPreferences.getInstance()).getBool(_kHasCaja) ?? false;
-
   // ── Builder recibo de venta ───────────────────────────────
 
   static Future<List<int>> buildRecibo({
@@ -412,10 +267,11 @@ class ThermalPrinterService {
     required double            total,
     required double            montoRecibido,
     required double            vuelto,
-    String                     nit       = '',
-    String                     direccion = '',
-    String                     telefono  = '',
-    PaperSize                  paperSize = PaperSize.mm80,
+    String                     nit           = '',
+    String                     direccion     = '',
+    String                     telefono      = '',
+    String                     clienteNombre = '',
+    PaperSize                  paperSize     = PaperSize.mm80,
   }) async {
     final profile    = await CapabilityProfile.load();
     final gen        = Generator(paperSize, profile);
@@ -460,6 +316,11 @@ class ThermalPrinterService {
         PosColumn(text: 'Cajero:', width: 4, styles: const PosStyles()),
         PosColumn(text: cajeroNombre, width: 8, styles: PosStyles(align: PosAlign.right)),
       ]),
+      if (clienteNombre.isNotEmpty)
+        ...gen.row([
+          PosColumn(text: 'Cliente:', width: 4, styles: const PosStyles()),
+          PosColumn(text: clienteNombre, width: 8, styles: PosStyles(align: PosAlign.right)),
+        ]),
       ...gen.hr(),
 
       // ── Cabecera productos ──────────────────────────────────
@@ -549,8 +410,6 @@ class ThermalPrinterService {
 
   // ── Factura completa de separado ──────────────────────────
 
-  /// Genera bytes ESC/POS para la factura completa de un separado.
-  /// Incluye datos del cliente, productos, abonos y saldo pendiente.
   static Future<List<int>> buildSeparadoRecibo(
     Separado separado, {
     required String empresaNombre,
@@ -797,6 +656,321 @@ class ThermalPrinterService {
     ];
   }
 
+  /// Genera bytes ESC/POS para el recibo de cierre de turno.
+  static Future<List<int>> buildCierreTurno({
+    required SesionCaja          sesion,
+    required String              empresaNombre,
+    required Map<String, double> metodosPago,
+    required double              totalGastos,
+    PaperSize                    paperSize = PaperSize.mm80,
+  }) async {
+    final profile = await CapabilityProfile.load();
+    final gen     = Generator(paperSize, profile);
+    final fmt     = NumberFormat('#,##0', 'es_CO');
+    final fechaAp = DateFormat('dd/MM/yy HH:mm').format(sesion.fecha_apertura);
+    final fechaCi = sesion.fecha_cierre != null
+        ? DateFormat('dd/MM/yy HH:mm').format(sesion.fecha_cierre!)
+        : '---';
+
+    String _ml(String m) => switch (m) {
+      'tarjeta'       => 'Tarjeta',
+      'transferencia' => 'Transferencia',
+      'mixto'         => 'Mixto',
+      _               => 'Efectivo',
+    };
+
+    return [
+      // ── Encabezado ─────────────────────────────────────────
+      ...gen.text(empresaNombre.toUpperCase(),
+        styles: PosStyles(align: PosAlign.center, bold: true,
+          height: PosTextSize.size2, width: PosTextSize.size2)),
+      ...gen.text(sesion.tiendaNombre,
+        styles: PosStyles(align: PosAlign.center)),
+      ...gen.hr(),
+      ...gen.text('CIERRE DE CAJA',
+        styles: PosStyles(align: PosAlign.center, bold: true)),
+      ...gen.hr(),
+
+      // ── Info sesión ────────────────────────────────────────
+      ...gen.row([
+        PosColumn(text: 'Sesion #:', width: 5, styles: const PosStyles()),
+        PosColumn(text: '${sesion.id}', width: 7,
+          styles: PosStyles(bold: true, align: PosAlign.right)),
+      ]),
+      ...gen.row([
+        PosColumn(text: 'Cajero:', width: 4, styles: const PosStyles()),
+        PosColumn(text: sesion.empleadoNombre, width: 8,
+          styles: PosStyles(align: PosAlign.right)),
+      ]),
+      ...gen.row([
+        PosColumn(text: 'Apertura:', width: 4, styles: const PosStyles()),
+        PosColumn(text: fechaAp, width: 8, styles: PosStyles(align: PosAlign.right)),
+      ]),
+      ...gen.row([
+        PosColumn(text: 'Cierre:', width: 4, styles: const PosStyles()),
+        PosColumn(text: fechaCi, width: 8, styles: PosStyles(align: PosAlign.right)),
+      ]),
+      ...gen.hr(),
+
+      // ── Ventas por método ──────────────────────────────────
+      ...gen.text('VENTAS POR METODO', styles: PosStyles(bold: true)),
+      ...metodosPago.entries.expand((e) => [
+        ...gen.row([
+          PosColumn(text: '${_ml(e.key)}:', width: 6, styles: const PosStyles()),
+          PosColumn(text: '\$${fmt.format(e.value)}', width: 6,
+            styles: PosStyles(align: PosAlign.right, bold: true)),
+        ]),
+      ]),
+      ...gen.row([
+        PosColumn(text: 'TOTAL VENTAS:', width: 7, styles: PosStyles(bold: true)),
+        PosColumn(text: '\$${fmt.format(sesion.ventasTotal)}', width: 5,
+          styles: PosStyles(bold: true, align: PosAlign.right)),
+      ]),
+      ...gen.hr(),
+
+      // ── Gastos ─────────────────────────────────────────────
+      if (totalGastos > 0) ...[
+        ...gen.row([
+          PosColumn(text: 'GASTOS:', width: 7, styles: PosStyles(bold: true)),
+          PosColumn(text: '-\$${fmt.format(totalGastos)}', width: 5,
+            styles: PosStyles(bold: true, align: PosAlign.right)),
+        ]),
+        ...gen.hr(),
+      ],
+
+      // ── Balance ────────────────────────────────────────────
+      ...gen.row([
+        PosColumn(text: 'Saldo inicial:', width: 7, styles: const PosStyles()),
+        PosColumn(text: '\$${fmt.format(sesion.saldo_inicial)}', width: 5,
+          styles: PosStyles(align: PosAlign.right)),
+      ]),
+      ...gen.row([
+        PosColumn(text: 'Transacciones:', width: 7, styles: const PosStyles()),
+        PosColumn(text: '${sesion.numTransacciones}', width: 5,
+          styles: PosStyles(align: PosAlign.right)),
+      ]),
+      ...gen.hr(),
+
+      // ── Efectivo esperado (destacado) ──────────────────────
+      ...gen.text('EFECTIVO ESPERADO EN CAJA',
+        styles: PosStyles(align: PosAlign.center, bold: true)),
+      ...gen.emptyLines(1),
+      ...gen.text('\$${fmt.format(sesion.montoEsperado)}',
+        styles: PosStyles(align: PosAlign.center, bold: true,
+          height: PosTextSize.size2, width: PosTextSize.size2)),
+      ...gen.hr(),
+
+      // ── Footer ─────────────────────────────────────────────
+      ...gen.emptyLines(1),
+      ...gen.text('Cierre procesado exitosamente',
+        styles: PosStyles(align: PosAlign.center, bold: true)),
+      ...gen.emptyLines(3),
+      ...gen.cut(),
+    ];
+  }
+
+  /// Genera bytes ESC/POS para el comprobante de cierre de caja con datos completos
+  /// (montoFinalReal, diferencia, desglose por método, etc.).
+  static Future<List<int>> buildCierreHistorial({
+    required SesionHistorial sesion,
+    PaperSize                paperSize = PaperSize.mm80,
+  }) async {
+    final profile  = await CapabilityProfile.load();
+    final gen      = Generator(paperSize, profile);
+    final fmt      = NumberFormat('#,##0', 'es_CO');
+    final fechaAp  = _parseFechaHoraISO(sesion.fechaApertura);
+    final fechaCi  = _parseFechaHoraISO(sesion.fechaCierre);
+    final difAbs   = sesion.diferencia.abs();
+    final difLabel = difAbs < 0.01
+        ? 'CUADRE EXACTO'
+        : sesion.diferencia > 0 ? 'SOBRANTE' : 'FALTANTE';
+
+    return [
+      // ── Encabezado ─────────────────────────────────────────
+      ...gen.text(sesion.tiendaNombre.toUpperCase(),
+        styles: PosStyles(align: PosAlign.center, bold: true,
+          height: PosTextSize.size2, width: PosTextSize.size2)),
+      ...gen.hr(),
+      ...gen.text('CIERRE DE CAJA',
+        styles: PosStyles(align: PosAlign.center, bold: true)),
+      ...gen.hr(),
+
+      // ── Info sesión ────────────────────────────────────────
+      ...gen.row([
+        PosColumn(text: 'Sesion #:', width: 5, styles: const PosStyles()),
+        PosColumn(text: '${sesion.id}', width: 7,
+          styles: PosStyles(bold: true, align: PosAlign.right)),
+      ]),
+      ...gen.row([
+        PosColumn(text: 'Cajero:', width: 4, styles: const PosStyles()),
+        PosColumn(text: sesion.empleadoNombre, width: 8,
+          styles: PosStyles(align: PosAlign.right)),
+      ]),
+      ...gen.row([
+        PosColumn(text: 'Apertura:', width: 4, styles: const PosStyles()),
+        PosColumn(text: fechaAp, width: 8, styles: PosStyles(align: PosAlign.right)),
+      ]),
+      ...gen.row([
+        PosColumn(text: 'Cierre:', width: 4, styles: const PosStyles()),
+        PosColumn(text: fechaCi, width: 8, styles: PosStyles(align: PosAlign.right)),
+      ]),
+      ...gen.hr(),
+
+      // ── Ventas ─────────────────────────────────────────────
+      ...gen.text('VENTAS  (${sesion.numTransacciones} transacciones)',
+        styles: PosStyles(bold: true)),
+      if (sesion.ventasEfectivo > 0)
+        ...gen.row([
+          PosColumn(text: '  Efectivo:', width: 7, styles: const PosStyles()),
+          PosColumn(text: '\$${fmt.format(sesion.ventasEfectivo)}', width: 5,
+            styles: PosStyles(align: PosAlign.right)),
+        ]),
+      if (sesion.ventasTarjeta > 0)
+        ...gen.row([
+          PosColumn(text: '  Tarjeta:', width: 7, styles: const PosStyles()),
+          PosColumn(text: '\$${fmt.format(sesion.ventasTarjeta)}', width: 5,
+            styles: PosStyles(align: PosAlign.right)),
+        ]),
+      if (sesion.ventasTransferencia > 0)
+        ...gen.row([
+          PosColumn(text: '  Transferencia:', width: 7, styles: const PosStyles()),
+          PosColumn(text: '\$${fmt.format(sesion.ventasTransferencia)}', width: 5,
+            styles: PosStyles(align: PosAlign.right)),
+        ]),
+      if (sesion.ventasMixto > 0)
+        ...gen.row([
+          PosColumn(text: '  Mixto:', width: 7, styles: const PosStyles()),
+          PosColumn(text: '\$${fmt.format(sesion.ventasMixto)}', width: 5,
+            styles: PosStyles(align: PosAlign.right)),
+        ]),
+      ...gen.row([
+        PosColumn(text: 'TOTAL VENTAS:', width: 7, styles: PosStyles(bold: true)),
+        PosColumn(text: '\$${fmt.format(sesion.ventasTotal)}', width: 5,
+          styles: PosStyles(bold: true, align: PosAlign.right)),
+      ]),
+      ...gen.hr(),
+
+      // ── Apartados / Abonos ─────────────────────────────────
+      if (sesion.abonosTotal > 0) ...[
+        ...gen.text('APARTADOS  (${sesion.numAbonos} folios)',
+          styles: PosStyles(bold: true)),
+        if (sesion.abonosEfectivo > 0)
+          ...gen.row([
+            PosColumn(text: '  Efectivo:', width: 7, styles: const PosStyles()),
+            PosColumn(text: '\$${fmt.format(sesion.abonosEfectivo)}', width: 5,
+              styles: PosStyles(align: PosAlign.right)),
+          ]),
+        if (sesion.abonosTarjeta > 0)
+          ...gen.row([
+            PosColumn(text: '  Tarjeta:', width: 7, styles: const PosStyles()),
+            PosColumn(text: '\$${fmt.format(sesion.abonosTarjeta)}', width: 5,
+              styles: PosStyles(align: PosAlign.right)),
+          ]),
+        if (sesion.abonosTransferencia > 0)
+          ...gen.row([
+            PosColumn(text: '  Transferencia:', width: 7, styles: const PosStyles()),
+            PosColumn(text: '\$${fmt.format(sesion.abonosTransferencia)}', width: 5,
+              styles: PosStyles(align: PosAlign.right)),
+          ]),
+        ...gen.row([
+          PosColumn(text: 'TOTAL APARTADOS:', width: 7, styles: PosStyles(bold: true)),
+          PosColumn(text: '\$${fmt.format(sesion.abonosTotal)}', width: 5,
+            styles: PosStyles(bold: true, align: PosAlign.right)),
+        ]),
+        ...gen.hr(),
+      ],
+
+      // ── Gastos ─────────────────────────────────────────────
+      if (sesion.gastosTotal > 0) ...[
+        ...gen.text('GASTOS', styles: PosStyles(bold: true)),
+        ...gen.row([
+          PosColumn(text: '  Total gastos:', width: 7, styles: const PosStyles()),
+          PosColumn(text: '-\$${fmt.format(sesion.gastosTotal)}', width: 5,
+            styles: PosStyles(align: PosAlign.right)),
+        ]),
+        ...gen.hr(),
+      ],
+
+      // ── Devoluciones ───────────────────────────────────────
+      if (sesion.numDevoluciones > 0) ...[
+        ...gen.text('DEVOLUCIONES', styles: PosStyles(bold: true)),
+        if (sesion.numDevoluciones - sesion.numCambiosProducto > 0) ...[
+          ...gen.row([
+            PosColumn(text: '  En efectivo:', width: 7, styles: const PosStyles()),
+            PosColumn(
+              text: '${sesion.numDevoluciones - sesion.numCambiosProducto} (-\$${fmt.format(sesion.devolucionesEfectivo)})',
+              width: 5, styles: PosStyles(align: PosAlign.right)),
+          ]),
+        ],
+        if (sesion.numCambiosProducto > 0)
+          ...gen.row([
+            PosColumn(text: '  Cambios:', width: 7, styles: const PosStyles()),
+            PosColumn(text: '${sesion.numCambiosProducto}', width: 5,
+              styles: PosStyles(align: PosAlign.right)),
+          ]),
+        ...gen.hr(),
+      ],
+
+      // ── Saldo inicial ──────────────────────────────────────
+      ...gen.row([
+        PosColumn(text: 'Saldo inicial:', width: 7, styles: const PosStyles()),
+        PosColumn(text: '\$${fmt.format(sesion.saldoInicial)}', width: 5,
+          styles: PosStyles(align: PosAlign.right)),
+      ]),
+      ...gen.hr(),
+
+      // ── Arqueo ─────────────────────────────────────────────
+      ...gen.text('EFECTIVO EN SISTEMA',
+        styles: PosStyles(align: PosAlign.center, bold: true)),
+      ...gen.text('\$${fmt.format(sesion.montoFinalSistema)}',
+        styles: PosStyles(align: PosAlign.center, bold: true,
+          height: PosTextSize.size2, width: PosTextSize.size2)),
+      ...gen.emptyLines(1),
+      ...gen.text('EFECTIVO CONTADO',
+        styles: PosStyles(align: PosAlign.center, bold: true)),
+      ...gen.text('\$${fmt.format(sesion.montoFinalReal)}',
+        styles: PosStyles(align: PosAlign.center, bold: true,
+          height: PosTextSize.size2, width: PosTextSize.size2)),
+      ...gen.hr(),
+
+      // ── Diferencia ─────────────────────────────────────────
+      ...gen.text(difLabel,
+        styles: PosStyles(align: PosAlign.center, bold: true)),
+      if (difAbs >= 0.01)
+        ...gen.text('${sesion.diferencia > 0 ? '+' : '-'}\$${fmt.format(difAbs)}',
+          styles: PosStyles(align: PosAlign.center, bold: true,
+            height: PosTextSize.size2, width: PosTextSize.size2)),
+      ...gen.hr(),
+
+      // ── Observaciones ──────────────────────────────────────
+      if (sesion.observaciones.isNotEmpty) ...[
+        ...gen.text('Obs: ${sesion.observaciones}',
+          styles: const PosStyles()),
+        ...gen.hr(),
+      ],
+
+      // ── Footer ─────────────────────────────────────────────
+      ...gen.emptyLines(1),
+      ...gen.text('Cierre procesado exitosamente',
+        styles: PosStyles(align: PosAlign.center, bold: true)),
+      ...gen.emptyLines(3),
+      ...gen.cut(),
+    ];
+  }
+
+  static String _parseFechaHoraISO(String iso) {
+    try {
+      final dt = DateTime.parse(iso.replaceAll(' ', 'T')).toLocal();
+      return '${dt.day.toString().padLeft(2, '0')}/'
+             '${dt.month.toString().padLeft(2, '0')}/'
+             '${dt.year}  '
+             '${dt.hour.toString().padLeft(2, '0')}:'
+             '${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return iso.length >= 16 ? iso.substring(0, 16) : iso;
+    }
+  }
+
   static String _formatFechaLimite(String isoDate) {
     try {
       final dt = DateTime.parse(isoDate);
@@ -805,14 +979,4 @@ class ThermalPrinterService {
       return isoDate;
     }
   }
-
-  // ─────────────────────────────────────────────────────────
-
-  static ThermalDevice _fromRaw(_UsbDev d) => ThermalDevice._(
-    name:         d.productName,
-    manufacturer: d.manufacturerName ?? '',
-    vendorId:     d.vendorId,
-    productId:    d.productId,
-    raw:          d,
-  );
 }

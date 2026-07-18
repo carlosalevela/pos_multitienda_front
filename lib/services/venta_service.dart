@@ -88,6 +88,29 @@ class VentaService {
   }
 
 
+  // ── Buscar venta por número de orden (para escáner) ──────
+  Future<List<Map<String, dynamic>>> buscarPorNumeroOrden(
+    String numeroOrden, {
+    int? tiendaId,
+  }) async {
+    try {
+      final response = await ApiClient.instance.get(
+        '/ventas/lista/',
+        queryParameters: {
+          'numero_orden': numeroOrden,
+          if (tiendaId != null) 'tienda_id': tiendaId.toString(),
+        },
+      );
+      final List data = response.data is List
+          ? response.data
+          : response.data['results'] ?? [];
+      return List<Map<String, dynamic>>.from(data);
+    } catch (e) {
+      debugPrint('❌ buscarPorNumeroOrden error: $e');
+      return [];
+    }
+  }
+
   // ── Detalle de venta ───────────────────────────────────
 
   Future<Map<String, dynamic>?> obtenerVenta(int id) async {

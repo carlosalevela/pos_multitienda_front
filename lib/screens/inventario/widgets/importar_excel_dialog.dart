@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart' hide Border, BorderStyle;
 import 'package:google_fonts/google_fonts.dart';
 import '../../../providers/inventario_provider.dart';
+import '../../../utils/file_downloader.dart';
 
 // ── Design tokens (consistentes con inventario_screen) ────
 const _text    = Color(0xFF191C1E);
@@ -626,6 +627,106 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
   }
 
   // ── Vista 1: Seleccionar ───────────────────────────────
+  Future<void> _descargarPlantilla() async {
+    final excel = Excel.createExcel();
+    final sheet = excel['Inventario'];
+
+    // Elimina la hoja por defecto que crea Excel.createExcel()
+    excel.delete('Sheet1');
+
+    // ── Headers ────────────────────────────────────────────
+    const headers = [
+      'nombre',
+      'codigo_barras',
+      'categoria',
+      'precio_venta',
+      'precio_compra',
+      'precio_mayoreo',
+      'stock_actual',
+      'stock_minimo',
+      'descripcion',
+    ];
+
+    const requeridos = {'nombre', 'precio_venta', 'stock_actual'};
+
+    final headerStyle = CellStyle(
+      backgroundColorHex: ExcelColor.fromHexString('FF006C49'),
+      fontColorHex:       ExcelColor.fromHexString('FFFFFFFF'),
+      bold:               true,
+      fontSize:           11,
+    );
+
+    final reqStyle = CellStyle(
+      backgroundColorHex: ExcelColor.fromHexString('FF004030'),
+      fontColorHex:       ExcelColor.fromHexString('FFFFFFFF'),
+      bold:               true,
+      fontSize:           11,
+    );
+
+    for (var i = 0; i < headers.length; i++) {
+      final col  = headers[i];
+      final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
+      cell.value = TextCellValue(
+          requeridos.contains(col) ? '$col *' : col);
+      cell.cellStyle = requeridos.contains(col) ? reqStyle : headerStyle;
+      sheet.setColumnWidth(i, col == 'descripcion' ? 30 : 18);
+    }
+
+    // ── Fila de ejemplo ────────────────────────────────────
+    const ejemplo = [
+      'Camiseta Básica Blanca',
+      '7501234567890',
+      'Ropa',
+      '45000',
+      '22000',
+      '38000',
+      '50',
+      '5',
+      'Talla M, algodón 100%',
+    ];
+
+    final exampleStyle = CellStyle(
+      backgroundColorHex: ExcelColor.fromHexString('FFE8FFF4'),
+      fontColorHex:       ExcelColor.fromHexString('FF333333'),
+      italic:             true,
+    );
+
+    for (var i = 0; i < ejemplo.length; i++) {
+      final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 1));
+      cell.value      = TextCellValue(ejemplo[i]);
+      cell.cellStyle  = exampleStyle;
+    }
+
+    // ── Fila de instrucciones ──────────────────────────────
+    final instrCell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 2));
+    instrCell.value = TextCellValue('← Fila de ejemplo — puedes borrarla y agregar tus productos desde la fila 3');
+    instrCell.cellStyle = CellStyle(
+      fontColorHex: ExcelColor.fromHexString('FF888888'),
+      italic:       true,
+    );
+    sheet.merge(
+      CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 2),
+      CellIndex.indexByColumnRow(columnIndex: headers.length - 1, rowIndex: 2),
+    );
+
+    // Filas vacías para llenar (visual)
+    for (var r = 3; r <= 22; r++) {
+      for (var c = 0; c < headers.length; c++) {
+        final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r));
+        cell.cellStyle = CellStyle(
+          backgroundColorHex: r.isEven
+              ? ExcelColor.fromHexString('FFFFFFFF')
+              : ExcelColor.fromHexString('FFF7F9FB'),
+        );
+      }
+    }
+
+    final bytes = excel.save();
+    if (bytes == null) return;
+
+    await guardarArchivoExcel(bytes, 'plantilla_inventario.xlsx');
+  }
+
   Widget _vistaSeleccionar() => SingleChildScrollView(
     padding: const EdgeInsets.all(24),
     child: Column(children: [
@@ -682,7 +783,50 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
         ),
       ),
 
-      const SizedBox(height: 18),
+      const SizedBox(height: 14),
+
+      // Descargar plantilla
+      GestureDetector(
+        onTap: _descargarPlantilla,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _green.withValues(alpha: 0.4)),
+            ),
+            child: Row(children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: _greenBg,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.download_rounded,
+                    color: _green, size: 16),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Descargar plantilla Excel',
+                      style: _inter(size: 13, weight: FontWeight.w700,
+                          color: _green)),
+                  Text('Plantilla lista para llenar con tus productos',
+                      style: _inter(size: 11, color: _muted2)),
+                ],
+              )),
+              const Icon(Icons.chevron_right_rounded,
+                  size: 18, color: _muted2),
+            ]),
+          ),
+        ),
+      ),
+
+      const SizedBox(height: 14),
 
       // Info columnas
       Container(
@@ -712,10 +856,11 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
           const SizedBox(height: 14),
           Wrap(spacing: 8, runSpacing: 8, children: [
             _colChip('nombre *', required: true),
+            _colChip('precio_venta *', required: true),
+            _colChip('stock_actual *', required: true),
             _colChip('categoría'),
-            _colChip('precio_venta'),
             _colChip('precio_compra'),
-            _colChip('stock_actual'),
+            _colChip('precio_mayoreo'),
             _colChip('stock_minimo'),
             _colChip('codigo_barras'),
             _colChip('descripcion'),

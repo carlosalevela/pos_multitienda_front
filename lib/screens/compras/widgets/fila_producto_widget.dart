@@ -1,10 +1,11 @@
 // lib/screens/compras/widgets/fila_producto_widget.dart
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/proveedores_provider.dart';
-import '../compras_theme.dart';
+import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
+import '../compras_theme.dart'; // solo fmt() y calcularTotal()
 
 class FilaProductoWidget extends StatefulWidget {
   final int                               index;
@@ -94,9 +95,9 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
       margin:  const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color:        const Color(0xFFF4F6FA),
-        borderRadius: BorderRadius.circular(10),
-        border:       Border.all(color: Colors.grey.shade200),
+        color:        AppColors.surfaceContainerLow,
+        borderRadius: AppRadius.xl,
+        border:       Border.all(color: AppColors.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -104,10 +105,7 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
           // ── Toggle modo ─────────────────────────
           Row(children: [
             Text('Producto ${widget.index + 1}',
-              style: GoogleFonts.poppins(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade500)),
+                style: AppTextStyles.labelMd),
             const Spacer(),
             GestureDetector(
               onTap: () => setState(() {
@@ -126,13 +124,13 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
                     horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: _modoLibre
-                      ? Colors.orange.shade50
-                      : Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(20),
+                      ? AppColors.warningContainer
+                      : AppColors.surfaceContainer,
+                  borderRadius: AppRadius.full,
                   border: Border.all(
                     color: _modoLibre
-                        ? Colors.orange.shade300
-                        : Colors.blue.shade300),
+                        ? AppColors.warning.withOpacity(0.45)
+                        : AppColors.outlineVariant),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -143,19 +141,17 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
                           : Icons.search_rounded,
                       size: 12,
                       color: _modoLibre
-                          ? Colors.orange.shade700
-                          : Colors.blue.shade700),
+                          ? AppColors.warning
+                          : AppColors.onSurfaceVariant),
                     const SizedBox(width: 4),
                     Text(
                       _modoLibre
                           ? 'Producto nuevo'
                           : 'Buscar existente',
-                      style: GoogleFonts.poppins(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                      style: AppTextStyles.labelSm.copyWith(
                           color: _modoLibre
-                              ? Colors.orange.shade700
-                              : Colors.blue.shade700)),
+                              ? AppColors.warning
+                              : AppColors.onSurfaceVariant)),
                   ],
                 ),
               ),
@@ -174,10 +170,10 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Campo nombre/búsqueda
                     TextFormField(
                       controller: _searchCtrl,
-                      style: GoogleFonts.poppins(fontSize: 12),
+                      style: AppTextStyles.bodySm
+                          .copyWith(color: AppColors.onSurface),
                       decoration: _inputDeco(
                         _modoLibre
                             ? 'Nombre del producto'
@@ -189,20 +185,21 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
                               : Icons.search_rounded,
                           size: 16,
                           color: _modoLibre
-                              ? Colors.orange.shade400
-                              : Colors.grey),
+                              ? AppColors.warning
+                              : AppColors.outline),
                         suffixIcon: _buscando
                             ? const Padding(
                                 padding: EdgeInsets.all(10),
                                 child: SizedBox(
                                   width: 14, height: 14,
                                   child: CircularProgressIndicator(
-                                      strokeWidth: 2)))
+                                      strokeWidth: 2,
+                                      color: AppColors.secondary)))
                             : widget.fila['producto'] != null
-                                ? Icon(
+                                ? const Icon(
                                     Icons.check_circle_rounded,
                                     size: 16,
-                                    color: Colors.green.shade500)
+                                    color: AppColors.secondary)
                                 : null,
                       ),
                       onChanged: (v) {
@@ -217,10 +214,9 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
                       Container(
                         margin: const EdgeInsets.only(top: 4),
                         decoration: BoxDecoration(
-                          color:        Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                              color: Colors.grey.shade200),
+                          color:        AppColors.surfaceContainerLowest,
+                          borderRadius: AppRadius.lg,
+                          border: Border.all(color: AppColors.outlineVariant),
                           boxShadow: [BoxShadow(
                             color: Colors.black.withOpacity(0.06),
                             blurRadius: 8,
@@ -228,16 +224,13 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
                         ),
                         child: Column(
                           children: _sugerencias.map((p) {
-                            final alerta =
-                                p['alerta_stock'] ?? 'ok';
-                            final stock =
-                                p['stock_actual'] ?? 0;
-                            final alertaColor =
-                                alerta == 'agotado'
-                                    ? Colors.red.shade600
-                                    : alerta == 'bajo'
-                                        ? Colors.orange.shade600
-                                        : Colors.green.shade600;
+                            final alerta = p['alerta_stock'] ?? 'ok';
+                            final stock  = p['stock_actual'] ?? 0;
+                            final alertaColor = alerta == 'agotado'
+                                ? AppColors.error
+                                : alerta == 'bajo'
+                                    ? AppColors.warning
+                                    : AppColors.secondary;
                             return InkWell(
                               onTap: () {
                                 _searchCtrl.text = p['nombre'];
@@ -254,27 +247,18 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
                                 child: Row(children: [
                                   Expanded(child: Text(
                                     p['nombre'],
-                                    style: GoogleFonts.poppins(
-                                        fontSize: 12,
-                                        fontWeight:
-                                            FontWeight.w500))),
+                                    style: AppTextStyles.bodyMd.copyWith(
+                                        fontWeight: FontWeight.w500))),
                                   if (widget.tiendaId != null)
                                     Container(
-                                      padding: const EdgeInsets
-                                          .symmetric(
-                                          horizontal: 8,
-                                          vertical: 2),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 2),
                                       decoration: BoxDecoration(
-                                        color: alertaColor
-                                            .withOpacity(0.1),
-                                        borderRadius:
-                                            BorderRadius.circular(6),
+                                        color: alertaColor.withOpacity(0.1),
+                                        borderRadius: AppRadius.lg,
                                       ),
                                       child: Text('Stock $stock',
-                                        style: GoogleFonts.poppins(
-                                            fontSize: 10,
-                                            fontWeight:
-                                                FontWeight.w600,
+                                        style: AppTextStyles.labelSm.copyWith(
                                             color: alertaColor)),
                                     ),
                                 ]),
@@ -290,8 +274,7 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
                       Autocomplete<String>(
                         initialValue: TextEditingValue(
                             text: widget.fila['categoria_nombre']
-                                    ?.toString() ??
-                                ''),
+                                    ?.toString() ?? ''),
                         optionsBuilder: (tv) {
                           final input = tv.text.toLowerCase();
                           final nombres = cats
@@ -312,32 +295,28 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
                             (ctx, ctrl, focusNode, onSubmit) {
                           WidgetsBinding.instance
                               .addPostFrameCallback((_) {
-                            final val = widget
-                                        .fila['categoria_nombre']
-                                        ?.toString() ??
-                                    '';
+                            final val = widget.fila['categoria_nombre']
+                                        ?.toString() ?? '';
                             if (ctrl.text != val) ctrl.text = val;
                           });
                           return TextFormField(
                             controller: ctrl,
                             focusNode:  focusNode,
-                            style: GoogleFonts.poppins(
-                                fontSize: 12),
+                            style: AppTextStyles.bodySm
+                                .copyWith(color: AppColors.onSurface),
                             onChanged: (v) => widget.onCambio({
                               ...widget.fila,
                               'categoria_nombre': v,
                             }),
-                            decoration: _inputDeco(
-                                    'Categoría (opcional)')
+                            decoration: _inputDeco('Categoría (opcional)')
                                 .copyWith(
                               prefixIcon: Icon(
                                 Icons.category_rounded,
                                 size: 16,
-                                color: Colors.orange.shade400),
+                                color: AppColors.warning),
                               hintText: 'Escribe o selecciona...',
-                              hintStyle: GoogleFonts.poppins(
-                                  fontSize: 11,
-                                  color: Colors.grey.shade400),
+                              hintStyle: AppTextStyles.bodySm
+                                  .copyWith(color: AppColors.outline),
                             ),
                           );
                         },
@@ -346,7 +325,8 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
                           alignment: Alignment.topLeft,
                           child: Material(
                             elevation: 4,
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius:
+                                const BorderRadius.all(Radius.circular(10)),
                             child: ConstrainedBox(
                               constraints: const BoxConstraints(
                                   maxHeight: 180, maxWidth: 260),
@@ -361,10 +341,11 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
                                     leading: Icon(
                                       Icons.category_rounded,
                                       size: 14,
-                                      color: Colors.orange.shade400),
+                                      color: AppColors.warning),
                                     title: Text(opt,
-                                        style: GoogleFonts.poppins(
-                                            fontSize: 12)),
+                                        style: AppTextStyles.bodySm
+                                            .copyWith(
+                                                color: AppColors.onSurface)),
                                     onTap: () => onSelected(opt),
                                   );
                                 },
@@ -384,7 +365,8 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
                 width: 72,
                 child: TextFormField(
                   controller:   _cantCtrl,
-                  style:        GoogleFonts.poppins(fontSize: 12),
+                  style:        AppTextStyles.bodySm
+                      .copyWith(color: AppColors.onSurface),
                   keyboardType: TextInputType.number,
                   decoration:   _inputDeco('Cant.'),
                   onChanged: (_) {
@@ -400,10 +382,11 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
                 width: 100,
                 child: TextFormField(
                   controller:   _precioCtrl,
-                  style:        GoogleFonts.poppins(fontSize: 12),
+                  style:        AppTextStyles.bodySm
+                      .copyWith(color: AppColors.onSurface),
                   keyboardType: const TextInputType
                       .numberWithOptions(decimal: true),
-                  decoration: _inputDeco('Precio unit.'),
+                  decoration:   _inputDeco('Precio unit.'),
                   onChanged: (_) {
                     setState(() {});
                     _notificar();
@@ -418,15 +401,12 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('Subtotal',
-                      style: GoogleFonts.poppins(
-                          fontSize: 10,
-                          color: Colors.grey.shade400)),
+                    Text('Subtotal', style: AppTextStyles.labelSm),
                     Text('\$${ComprasTheme.fmt(_subtotal)}',
-                      style: GoogleFonts.poppins(
-                          fontSize:   13,
+                      style: AppTextStyles.bodyMd.copyWith(
+                          fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          color:      ComprasTheme.dark)),
+                          color: AppColors.onSurface)),
                   ],
                 ),
               ),
@@ -435,15 +415,14 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
               // Eliminar
               IconButton(
                 onPressed: widget.onEliminar,
-                icon:      const Icon(
-                    Icons.delete_outline_rounded),
-                color:     Colors.red.shade400,
+                icon:      const Icon(Icons.delete_outline_rounded),
+                color:     AppColors.error,
                 iconSize:  20,
                 tooltip:   'Eliminar fila',
                 style: IconButton.styleFrom(
-                  backgroundColor: Colors.red.shade50,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
+                  backgroundColor: AppColors.errorContainer,
+                  shape: const RoundedRectangleBorder(
+                      borderRadius: AppRadius.lg),
                 ),
               ),
             ],
@@ -453,24 +432,21 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
     );
   }
 
-  // ── Helper decoration ────────────────────────────────
   InputDecoration _inputDeco(String label) => InputDecoration(
     labelText:  label,
-    labelStyle: GoogleFonts.poppins(fontSize: 11),
+    labelStyle: AppTextStyles.labelSm,
     isDense:    true,
-    contentPadding: const EdgeInsets.symmetric(
-        horizontal: 10, vertical: 9),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
     filled:    true,
-    fillColor: Colors.white,
+    fillColor: AppColors.surfaceContainerLowest,
     border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide:   BorderSide(color: Colors.grey.shade300)),
+      borderRadius: const BorderRadius.all(Radius.circular(8)),
+      borderSide:   const BorderSide(color: AppColors.outlineVariant)),
     enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide:   BorderSide(color: Colors.grey.shade300)),
+      borderRadius: const BorderRadius.all(Radius.circular(8)),
+      borderSide:   const BorderSide(color: AppColors.outlineVariant)),
     focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide:   const BorderSide(
-          color: ComprasTheme.accent, width: 1.5)),
+      borderRadius: const BorderRadius.all(Radius.circular(8)),
+      borderSide:   const BorderSide(color: AppColors.secondary, width: 1.5)),
   );
-} // ← cierre de _FilaProductoWidgetState
+}

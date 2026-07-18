@@ -18,8 +18,7 @@ import '../empleados/empleados_screen.dart';
 import '../contabilidad/contabilidad_screen.dart';
 import '../tiendas/tiendas_screen.dart';
 import '../clientes/clientes_screen.dart';
-import '../proveedores/proveedores_screen.dart';
-import '../compras/compras_screen.dart';
+import '../compras/compras_modulo_screen.dart';
 import '../empresas/empresas_screen.dart';
 import '../devoluciones/devoluciones_screen.dart';
 import '../caja/caja_dashboard_admin.dart';
@@ -81,7 +80,7 @@ final _quickActions = [
   const _QuickAction(title: 'Punto de Venta POS', sub: 'Registra ventas en terminal activa.', screen: 'pos', icon: Icons.shopping_cart_outlined, accent: _C.indigo, bg: _C.indigoLight, border: Color(0xFFD4D4F7)),
   const _QuickAction(title: 'Cortes & Arqueo', sub: 'Consulta arqueo teórico vs físico.', screen: 'cash', icon: Icons.account_balance_outlined, accent: _C.amber, bg: _C.amberLight, border: Color(0xFFFDE68A)),
   const _QuickAction(title: 'Clientes', sub: 'Consulta clientes y movimientos.', screen: 'clientes', icon: Icons.people_outline_rounded, accent: _C.purple, bg: _C.purpleLight, border: Color(0xFFDDD6FE)),
-  const _QuickAction(title: 'Logística', sub: 'Recibe embarques y surte almacenes.', screen: 'suppliers', icon: Icons.local_shipping_outlined, accent: _C.green, bg: _C.greenLight, border: Color(0xFFBBF7D0)),
+  const _QuickAction(title: 'Logística', sub: 'Recibe embarques y surte almacenes.', screen: 'compras', icon: Icons.local_shipping_outlined, accent: _C.green, bg: _C.greenLight, border: Color(0xFFBBF7D0)),
 ];
 
 List<_NavItem> _buildNavItems(String rol) {
@@ -94,7 +93,6 @@ List<_NavItem> _buildNavItems(String rol) {
     const _NavItem(label: 'Reportes', screen: 'reports', icon: Icons.assessment_rounded),
     const _NavItem(label: 'Clientes', screen: 'clientes', icon: Icons.people_alt_rounded),
     const _NavItem(label: 'Separados', screen: 'separados', icon: Icons.bookmark_rounded),
-    const _NavItem(label: 'Proveedores', screen: 'suppliers', icon: Icons.local_shipping_rounded),
     const _NavItem(label: 'Compras', screen: 'compras', icon: Icons.shopping_cart_rounded),
     const _NavItem(label: 'Devoluciones', screen: 'devoluciones', icon: Icons.assignment_return_rounded),
     const _NavItem(label: 'Empleados', screen: 'empleados', icon: Icons.people_rounded),
@@ -137,7 +135,6 @@ List<_NavItem> _buildNavItems(String rol) {
       'empleados',
       'stores',
       'empresas',
-      'suppliers',
       'configuracion',
     ].contains(i.screen)).toList();
   }
@@ -180,8 +177,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
         if (rol == 'cajero') return const SeparadosScreen();
         return ClientesScreen(esAdminOSupervisor: rol == 'admin' || rol == 'supervisor' || rol == 'superadmin');
       case 'separados': return const SeparadosScreen();
-      case 'suppliers': return const ProveedoresScreen();
-      case 'compras': return const ComprasScreen();
+      case 'suppliers': return const ComprasModuloScreen();
+      case 'compras': return const ComprasModuloScreen();
       case 'devoluciones': return const DevolucionesScreen();
       case 'empleados': return const EmpleadosScreen();
       case 'stores': return const TiendasScreen();

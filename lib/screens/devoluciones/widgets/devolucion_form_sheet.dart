@@ -8,7 +8,6 @@ import '../../../models/cliente.dart';
 import '../../../models/devolucion_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/devoluciones_provider.dart';
-import '../../../services/devolucion_print_service.dart';
 import '../../../services/venta_service.dart';
 import '../../../services/inventario_service.dart';
 import '../../../services/cliente_service.dart';
@@ -26,15 +25,28 @@ const _kOrange    = Color(0xFFF59E0B);
 // ─────────────────────────────────────────────────────────────────────────────
 
 class DevolucionFormSheet extends StatefulWidget {
-  final VoidCallback onCreada;
-  const DevolucionFormSheet({super.key, required this.onCreada});
+  final void Function(DevolucionModel?) onCreada;
+  final String? initialNumeroOrden;
 
-  static void show(BuildContext context, {required VoidCallback onCreada}) {
+  const DevolucionFormSheet({
+    super.key,
+    required this.onCreada,
+    this.initialNumeroOrden,
+  });
+
+  static void show(
+    BuildContext context, {
+    required void Function(DevolucionModel?) onCreada,
+    String? initialNumeroOrden,
+  }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => DevolucionFormSheet(onCreada: onCreada),
+      builder: (_) => DevolucionFormSheet(
+        onCreada: onCreada,
+        initialNumeroOrden: initialNumeroOrden,
+      ),
     );
   }
 
@@ -86,6 +98,33 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
   Cliente?      _clienteSel;
 
   // ─────────────────────────────────────────────────────
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialNumeroOrden != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _buscarPorNumeroOrden(widget.initialNumeroOrden!);
+      });
+    }
+  }
+
+  Future<void> _buscarPorNumeroOrden(String numero) async {
+    setState(() => _cargandoVenta = true);
+    final auth     = context.read<AuthProvider>();
+    final tiendaId = auth.tiendaId != 0 ? auth.tiendaId : null;
+    final raw = await _ventaService.buscarPorNumeroOrden(
+      numero, tiendaId: tiendaId,
+    );
+    if (!mounted) return;
+    if (raw.isEmpty) {
+      setState(() => _cargandoVenta = false);
+      _showSnack('No se encontró la factura "$numero"', error: true);
+      return;
+    }
+    final venta = VentaResumenModel.fromJson(raw.first);
+    await _cargarDisponible(venta);
+  }
+
   @override
   void dispose() {
     _obsCtrl.dispose();
@@ -316,7 +355,6 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
     if (!mounted) return;
 
     if (resp['success'] == true) {
-      // Intentar parsear el modelo creado para poder imprimir
       DevolucionModel? devCreada;
       try {
         final rawData = resp['data'];
@@ -326,63 +364,10 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
       } catch (_) {}
 
       Navigator.pop(context);
-      widget.onCreada();
-
-      if (devCreada != null && mounted) {
-        _mostrarDialogoImprimir(devCreada);
-      }
+      widget.onCreada(devCreada);
     } else {
       _showSnack(resp['error']?.toString() ?? 'Error al registrar operación', error: true);
     }
-  }
-
-  void _mostrarDialogoImprimir(DevolucionModel dev) {
-    final scaffoldCtx = context;
-    showDialog(
-      context: scaffoldCtx,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: _kGreen.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(Icons.check_circle_outline_rounded,
-                color: _kGreen, size: 20),
-          ),
-          const SizedBox(width: 10),
-          Text(dev.tipo == 'cambio' ? 'Cambio registrado' : 'Devolución registrada',
-              style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 15)),
-        ]),
-        content: Text('¿Deseas imprimir el comprobante DEV-${dev.id}?',
-            style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF76777D))),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('No, gracias',
-                style: GoogleFonts.inter(color: const Color(0xFF76777D))),
-          ),
-          ElevatedButton.icon(
-            icon: const Icon(Icons.print_rounded, size: 16),
-            label: Text('Imprimir',
-                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-            onPressed: () {
-              Navigator.pop(ctx);
-              DevolucionPrintService.imprimir(scaffoldCtx, dev);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _kGreen,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   void _showSnack(String msg, {bool error = false}) {

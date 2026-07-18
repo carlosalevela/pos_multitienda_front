@@ -7,7 +7,7 @@ import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 
-enum TipoDocumento { venta, separado, abono, cierre, devolucion, reporte, inventario }
+enum TipoDocumento { venta, separado, abono, cierre, devolucion, reporte, inventario, compra, recepcion }
 
 class DocumentoService {
   DocumentoService._();
@@ -16,8 +16,21 @@ class DocumentoService {
   String _tiendaNombre = 'POS';
 
   /// Llamar al hacer login o al cargar la tienda activa.
+  /// Crea la estructura de carpetas inmediatamente si no existe.
   void setTienda(String nombre) {
     _tiendaNombre = _sanitizar(nombre.isEmpty ? 'POS' : nombre);
+    _crearEstructura();
+  }
+
+  Future<void> _crearEstructura() async {
+    try {
+      for (final tipo in TipoDocumento.values) {
+        final dir = await _carpeta(tipo);
+        if (!dir.existsSync()) {
+          await dir.create(recursive: true);
+        }
+      }
+    } catch (_) {}
   }
 
   // ── Guardar ────────────────────────────────────────────
@@ -85,6 +98,24 @@ class DocumentoService {
     nombre: 'inventario_$nombre',
   );
 
+  Future<File> guardarOrdenCompra({
+    required List<int> bytes,
+    required String    numeroOrden,
+  }) => _guardar(
+    bytes:  bytes,
+    tipo:   TipoDocumento.compra,
+    nombre: 'OC_$numeroOrden',
+  );
+
+  Future<File> guardarRecepcion({
+    required List<int> bytes,
+    required String    numeroOrden,
+  }) => _guardar(
+    bytes:  bytes,
+    tipo:   TipoDocumento.recepcion,
+    nombre: 'recepcion_$numeroOrden',
+  );
+
   // ── Listar documentos de un tipo ───────────────────────
 
   Future<List<File>> listar(TipoDocumento tipo) async {
@@ -148,6 +179,8 @@ class DocumentoService {
     TipoDocumento.devolucion => 'devoluciones',
     TipoDocumento.reporte    => 'reportes',
     TipoDocumento.inventario => 'inventarios',
+    TipoDocumento.compra     => 'compras',
+    TipoDocumento.recepcion  => 'recepciones',
   };
 
   /// Reemplaza caracteres inválidos en nombres de archivo/carpeta.

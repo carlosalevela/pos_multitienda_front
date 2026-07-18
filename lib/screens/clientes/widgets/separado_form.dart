@@ -13,8 +13,10 @@ import '../../../models/cliente.dart';
 import '../../../models/separado.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/cliente_provider.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../../services/recibo_pdf_service.dart';
 import '../../../services/thermal_printer_service.dart';
+import '../../../services/windows_printer_service.dart';
 import '../../../models/producto.dart';
 import '../../../services/barcode_service.dart';
 import '../../../services/inventario_service.dart';
@@ -317,14 +319,17 @@ class _SeparadoFormState extends State<SeparadoForm> {
         final dev = await ThermalPrinterService.getAutoDevice();
         if (dev != null) {
           final bytes = await ThermalPrinterService.buildSeparadoRecibo(
-            separado, empresaNombre: nombre);
+              separado, empresaNombre: nombre);
           await ThermalPrinterService.printBytes(dev, bytes);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Recibo impreso')));
-          }
           return;
         }
+      } catch (_) {}
+    } else if (!kIsWeb && await WindowsPrinterService.hasSavedPrinter()) {
+      try {
+        final bytes = await ThermalPrinterService.buildSeparadoRecibo(
+            separado, empresaNombre: nombre);
+        await WindowsPrinterService.printRaw(bytes);
+        return;
       } catch (_) {}
     }
     if (!mounted) return;

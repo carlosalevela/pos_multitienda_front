@@ -1,8 +1,9 @@
-// lib/widgets/compras/modal_precios_recibir.dart
+// lib/screens/compras/widgets/modal_precios_recibir.dart
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 
 // ── Resultado del modal ───────────────────────────────────
 class PreciosRecibir {
@@ -22,7 +23,7 @@ Future<PreciosRecibir?> showModalPreciosRecibir({
   required int                  cantidadM,
 }) {
   return showDialog<PreciosRecibir>(
-    context:           context,
+    context:            context,
     barrierDismissible: false,
     builder: (_) => _ModalPreciosRecibir(
       compra:    compra,
@@ -75,9 +76,8 @@ class _ModalPreciosRecibirState
       final costo = double.tryParse(
               d['precio_unitario']?.toString() ?? '0') ?? 0;
 
-      // Precio venta actual del producto, si existe; sino sugiere +30%
-      final precioActual = double.tryParse(
-              d['precio_venta']?.toString() ?? '0') ?? 0;
+      final precioActual  = double.tryParse(
+              d['precio_venta']?.toString()   ?? '0') ?? 0;
       final precioActualM = double.tryParse(
               d['precio_mayoreo']?.toString() ?? '0') ?? 0;
 
@@ -110,10 +110,10 @@ class _ModalPreciosRecibirState
   }
 
   Color _colorMargen(double m) {
-    if (m < 0)  return Colors.red.shade700;
-    if (m < 10) return Colors.red.shade600;
-    if (m < 20) return Colors.orange.shade600;
-    return Colors.green.shade600;
+    if (m < 0)  return AppColors.error;
+    if (m < 10) return AppColors.error;
+    if (m < 20) return AppColors.warning;
+    return AppColors.secondary;
   }
 
   bool _preciosBajoElCosto() {
@@ -130,7 +130,6 @@ class _ModalPreciosRecibirState
   }
 
   void _confirmar() {
-    // Advertencia si algún precio está bajo el costo
     if (_preciosBajoElCosto()) {
       _mostrarAdvertencia();
       return;
@@ -155,8 +154,7 @@ class _ModalPreciosRecibirState
 
     Navigator.pop(
       context,
-      PreciosRecibir(
-          precios: precios, preciosMayoreo: preciosMayoreo),
+      PreciosRecibir(precios: precios, preciosMayoreo: preciosMayoreo),
     );
   }
 
@@ -164,44 +162,43 @@ class _ModalPreciosRecibirState
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16)),
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(16))),
         title: Row(children: [
-          Icon(Icons.warning_amber_rounded,
-              color: Colors.orange.shade600, size: 22),
+          const Icon(Icons.warning_amber_rounded,
+              color: AppColors.warning, size: 22),
           const SizedBox(width: 10),
           Text('Precio bajo el costo',
-              style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.bold, fontSize: 15)),
+              style: AppTextStyles.headlineSm.copyWith(fontSize: 15)),
         ]),
         content: Text(
           'Uno o más productos tienen precio de venta '
           'menor al costo. ¿Deseas continuar de todas formas?',
-          style: GoogleFonts.poppins(
-              fontSize: 13, color: Colors.grey.shade700),
+          style: AppTextStyles.bodySm,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text('Revisar',
-                style: GoogleFonts.poppins(
-                    color: Colors.grey.shade600)),
+                style: AppTextStyles.bodyMd
+                    .copyWith(color: AppColors.onSurfaceVariant)),
           ),
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(context); // cierra advertencia
+              Navigator.pop(context);
               _enviar();
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange.shade600,
+              backgroundColor: AppColors.warning,
               foregroundColor: Colors.white,
               elevation: 0,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
+              shape: const RoundedRectangleBorder(
+                  borderRadius: AppRadius.xl),
             ),
             child: Text('Continuar',
-                style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w600)),
+                style: AppTextStyles.bodyMd
+                    .copyWith(fontWeight: FontWeight.w600,
+                        color: Colors.white)),
           ),
         ],
       ),
@@ -214,8 +211,8 @@ class _ModalPreciosRecibirState
     final numero   = widget.compra['numero_orden'] ?? '';
 
     return Dialog(
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20)),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(20))),
       insetPadding: const EdgeInsets.symmetric(
           horizontal: 16, vertical: 24),
       child: ConstrainedBox(
@@ -228,34 +225,32 @@ class _ModalPreciosRecibirState
             Container(
               padding: const EdgeInsets.symmetric(
                   horizontal: 20, vertical: 16),
-              decoration: BoxDecoration(
-                color: Colors.green.shade600,
-                borderRadius: const BorderRadius.vertical(
+              decoration: const BoxDecoration(
+                color: AppColors.secondary,
+                borderRadius: BorderRadius.vertical(
                     top: Radius.circular(20)),
               ),
               child: Row(children: [
                 const Icon(Icons.price_change_rounded,
-                    color: Colors.white, size: 22),
+                    color: AppColors.onSecondary, size: 22),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Fijar precios de venta',
-                          style: GoogleFonts.poppins(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white)),
+                          style: AppTextStyles.headlineSm.copyWith(
+                              color: AppColors.onSecondary)),
                       Text('Orden $numero',
-                          style: GoogleFonts.poppins(
-                              fontSize: 11,
-                              color: Colors.white70)),
+                          style: AppTextStyles.bodySm.copyWith(
+                              color: AppColors.onSecondary
+                                  .withOpacity(0.7))),
                     ],
                   ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.close_rounded,
-                      color: Colors.white, size: 20),
+                      color: AppColors.onSecondary, size: 20),
                   onPressed: () => Navigator.pop(context),
                 ),
               ]),
@@ -267,13 +262,14 @@ class _ModalPreciosRecibirState
               padding: const EdgeInsets.symmetric(
                   horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color:  Colors.amber.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.amber.shade200),
+                color:  AppColors.warningContainer,
+                borderRadius: AppRadius.lg,
+                border: Border.all(
+                    color: AppColors.warning.withOpacity(0.35)),
               ),
               child: Row(children: [
-                Icon(Icons.info_outline_rounded,
-                    size: 14, color: Colors.amber.shade700),
+                const Icon(Icons.info_outline_rounded,
+                    size: 14, color: AppColors.warning),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -283,9 +279,9 @@ class _ModalPreciosRecibirState
                           'Sugeridos: 30% y 15% sobre el costo.'
                         : 'Revisa el precio de venta. '
                           'Sugerido: 30% sobre el costo.',
-                    style: GoogleFonts.poppins(
-                        fontSize: 10.5,
-                        color: Colors.amber.shade800),
+                    style: AppTextStyles.labelSm.copyWith(
+                        color: AppColors.warning,
+                        letterSpacing: 0.2),
                   ),
                 ),
               ]),
@@ -303,8 +299,7 @@ class _ModalPreciosRecibirState
                         d['nombre_libre']?.toString() ??
                         'Producto';
                     final costo    = double.tryParse(
-                            d['precio_unitario']?.toString() ??
-                                '0') ?? 0;
+                            d['precio_unitario']?.toString() ?? '0') ?? 0;
                     final cantidad = double.tryParse(
                             d['cantidad']?.toString() ?? '0') ?? 0;
 
@@ -315,10 +310,10 @@ class _ModalPreciosRecibirState
                           margin: const EdgeInsets.only(bottom: 10),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(12),
+                            color: AppColors.surfaceContainerLow,
+                            borderRadius: AppRadius.xl,
                             border: Border.all(
-                                color: Colors.grey.shade200),
+                                color: AppColors.outlineVariant),
                           ),
                           child: Column(
                             crossAxisAlignment:
@@ -328,34 +323,29 @@ class _ModalPreciosRecibirState
                               Row(children: [
                                 Expanded(
                                   child: Text(nombre,
-                                      style: GoogleFonts.poppins(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.black87)),
+                                      style: AppTextStyles.bodyMd
+                                          .copyWith(
+                                              fontWeight:
+                                                  FontWeight.w600)),
                                 ),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.shade50,
-                                    borderRadius:
-                                        BorderRadius.circular(6),
+                                  decoration: const BoxDecoration(
+                                    color: AppColors.surfaceContainer,
+                                    borderRadius: AppRadius.lg,
                                   ),
                                   child: Text(
                                     'x${cantidad.toStringAsFixed(cantidad.truncateToDouble() == cantidad ? 0 : 2)}',
-                                    style: GoogleFonts.poppins(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.blue.shade700),
-                                  ),
+                                    style: AppTextStyles.labelSm
+                                        .copyWith(
+                                            color: AppColors.secondary)),
                                 ),
                               ]),
                               const SizedBox(height: 4),
                               Text(
                                 'Costo: \$${costo.toStringAsFixed(0)}',
-                                style: GoogleFonts.poppins(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade500),
+                                style: AppTextStyles.bodySm,
                               ),
                               const SizedBox(height: 10),
 
@@ -366,7 +356,7 @@ class _ModalPreciosRecibirState
                                     label: 'Precio venta',
                                     controller:
                                         _ctrls[id]!['venta']!,
-                                    color: Colors.green.shade600,
+                                    focusColor: AppColors.secondary,
                                     onChanged: (_) => setS(() {}),
                                   ),
                                 ),
@@ -378,7 +368,7 @@ class _ModalPreciosRecibirState
                                           'Mayoreo (≥${widget.cantidadM})',
                                       controller:
                                           _ctrls[id]!['mayoreo']!,
-                                      color: Colors.purple.shade600,
+                                      focusColor: AppColors.mintDark,
                                       onChanged: (_) => setS(() {}),
                                     ),
                                   ),
@@ -398,24 +388,21 @@ class _ModalPreciosRecibirState
                                 const SizedBox(width: 4),
                                 Text(
                                   'Margen: ${m.toStringAsFixed(1)}%',
-                                  style: GoogleFonts.poppins(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500,
+                                  style: AppTextStyles.labelSm.copyWith(
                                       color: _colorMargen(m)),
                                 ),
                                 if (m < 0) ...[
                                   const SizedBox(width: 6),
-                                  Text('⚠️ Bajo el costo',
-                                      style: GoogleFonts.poppins(
-                                          fontSize: 10,
-                                          color: Colors.red.shade500)),
+                                  Text('Bajo el costo',
+                                      style: AppTextStyles.labelSm
+                                          .copyWith(
+                                              color: AppColors.error)),
                                 ] else if (m < 10 && m >= 0) ...[
                                   const SizedBox(width: 6),
                                   Text('Margen muy bajo',
-                                      style: GoogleFonts.poppins(
-                                          fontSize: 10,
-                                          color:
-                                              Colors.orange.shade400)),
+                                      style: AppTextStyles.labelSm
+                                          .copyWith(
+                                              color: AppColors.warning)),
                                 ],
                               ]),
                             ],
@@ -436,16 +423,16 @@ class _ModalPreciosRecibirState
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.grey.shade600,
-                      side: BorderSide(color: Colors.grey.shade300),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
+                      foregroundColor: AppColors.onSurfaceVariant,
+                      side: const BorderSide(
+                          color: AppColors.outlineVariant),
+                      shape: const RoundedRectangleBorder(
+                          borderRadius: AppRadius.xl),
                       padding: const EdgeInsets.symmetric(
                           vertical: 14),
                     ),
                     child: Text('Cancelar',
-                        style: GoogleFonts.poppins(
-                            fontSize: 14,
+                        style: AppTextStyles.bodyMd.copyWith(
                             fontWeight: FontWeight.w500)),
                   ),
                 ),
@@ -455,10 +442,10 @@ class _ModalPreciosRecibirState
                   child: ElevatedButton(
                     onPressed: _confirmar,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green.shade600,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
+                      backgroundColor: AppColors.secondary,
+                      foregroundColor: AppColors.onSecondary,
+                      shape: const RoundedRectangleBorder(
+                          borderRadius: AppRadius.xl),
                       padding: const EdgeInsets.symmetric(
                           vertical: 14),
                       elevation: 0,
@@ -471,9 +458,9 @@ class _ModalPreciosRecibirState
                             size: 18),
                         const SizedBox(width: 6),
                         Text('Confirmar recepción',
-                            style: GoogleFonts.poppins(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600)),
+                            style: AppTextStyles.bodyMd.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.onSecondary)),
                       ],
                     ),
                   ),
@@ -492,12 +479,12 @@ class _CampoPrecio extends StatelessWidget {
   const _CampoPrecio({
     required this.label,
     required this.controller,
-    required this.color,
+    required this.focusColor,
     required this.onChanged,
   });
   final String                label;
   final TextEditingController controller;
-  final Color                 color;
+  final Color                 focusColor;
   final ValueChanged<String>  onChanged;
 
   @override
@@ -505,11 +492,7 @@ class _CampoPrecio extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: GoogleFonts.poppins(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade600)),
+        Text(label, style: AppTextStyles.labelSm),
         const SizedBox(height: 4),
         TextFormField(
           controller:   controller,
@@ -519,29 +502,27 @@ class _CampoPrecio extends StatelessWidget {
           inputFormatters: [
             FilteringTextInputFormatter.digitsOnly
           ],
-          style: GoogleFonts.poppins(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: Colors.black87),
+          style: AppTextStyles.numericData.copyWith(fontSize: 15),
           decoration: InputDecoration(
             prefixText: '\$ ',
-            prefixStyle: GoogleFonts.poppins(
-                fontSize: 12, color: Colors.grey.shade500),
+            prefixStyle: AppTextStyles.bodySm
+                .copyWith(color: AppColors.outline),
             contentPadding: const EdgeInsets.symmetric(
                 horizontal: 8, vertical: 10),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide:
-                  BorderSide(color: Colors.grey.shade300),
+              borderRadius: const BorderRadius.all(Radius.circular(8)),
+              borderSide: const BorderSide(
+                  color: AppColors.outlineVariant),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: color, width: 2),
+              borderRadius: const BorderRadius.all(Radius.circular(8)),
+              borderSide:
+                  BorderSide(color: focusColor, width: 2),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide:
-                  BorderSide(color: Colors.grey.shade300),
+              borderRadius: const BorderRadius.all(Radius.circular(8)),
+              borderSide: const BorderSide(
+                  color: AppColors.outlineVariant),
             ),
           ),
         ),

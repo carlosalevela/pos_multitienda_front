@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/devolucion_model.dart';
@@ -5,6 +6,7 @@ import '../providers/auth_provider.dart';
 import '../providers/config_provider.dart';
 import 'thermal_printer_service.dart';
 import 'recibo_pdf_service.dart';
+import 'windows_printer_service.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 
 class DevolucionPrintService {
@@ -15,31 +17,27 @@ class DevolucionPrintService {
     final config = context.read<ConfigProvider>();
 
     try {
+      final paperSize = config.tipoPapel == '58mm' ? PaperSize.mm58 : PaperSize.mm80;
+
       if (config.tipoPapel != 'pdf' && ThermalPrinterService.isWebUsbSupported) {
+        // Web: WebUSB ESC/POS
         final device = await ThermalPrinterService.getOrRequestDevice();
         if (device != null) {
-          final paperSize = config.tipoPapel == '58mm' ? PaperSize.mm58 : PaperSize.mm80;
           final bytes = await ThermalPrinterService.buildComprobanteDevolucion(
-            dev:          dev,
-            empresaNombre: auth.empresaNombre,
-            paperSize:    paperSize,
+            dev: dev, empresaNombre: auth.empresaNombre, paperSize: paperSize,
           );
           await ThermalPrinterService.printBytes(device, bytes);
           return;
         }
-        // Impresora no vinculada aún → avisa y cae al PDF
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Sin impresora configurada. Conecta una en Configuración → Impresión.'),
-              backgroundColor: const Color(0xFFB45309),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-          );
-        }
+      } else if (!kIsWeb && await WindowsPrinterService.hasSavedPrinter()) {
+        // Exe: ESC/POS RAW via WritePrinter (cualquier puerto: COM, USB, red)
+        final bytes = await ThermalPrinterService.buildComprobanteDevolucion(
+          dev: dev, empresaNombre: auth.empresaNombre, paperSize: paperSize,
+        );
+        await WindowsPrinterService.printRaw(bytes);
+        return;
       }
-      // Fallback: diálogo PDF del navegador
+      // Fallback: PDF
       await ReciboPdfService.imprimirComprobanteDevolucion(
         dev:          dev,
         empresaNombre: auth.empresaNombre,

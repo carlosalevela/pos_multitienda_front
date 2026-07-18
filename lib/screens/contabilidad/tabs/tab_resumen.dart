@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../../../theme/app_colors.dart';
 
 import '../../../providers/contabilidad_provider.dart';
 import 'tab_resumen_dia.dart';
@@ -33,7 +34,6 @@ class _TabResumenState extends State<TabResumen> {
   int    _mesSel   = DateTime.now().month;
   int    _anioAnual = DateTime.now().year;
 
-  static const _primary = Color(0xFF10B981);
   static const _meses   = [
     'Ene','Feb','Mar','Abr','May','Jun',
     'Jul','Ago','Sep','Oct','Nov','Dic',
@@ -42,15 +42,27 @@ class _TabResumenState extends State<TabResumen> {
   void _switchVista(_Vista v) {
     if (_vista == v) return;
     setState(() => _vista = v);
+    _recargarVista(v);
+  }
+
+  void _recargarVista(_Vista v) {
     switch (v) {
+      case _Vista.hoy:
+        widget.cont.cargarResumenDiario(tiendaId: widget.tiendaId);
       case _Vista.mes:
         widget.cont.cargarResumenMensual(
             tiendaId: widget.tiendaId, anio: _anioMes, mes: _mesSel);
       case _Vista.anio:
         widget.cont.cargarResumenAnual(
             tiendaId: widget.tiendaId, anio: _anioAnual);
-      case _Vista.hoy:
-        break;
+    }
+  }
+
+  @override
+  void didUpdateWidget(TabResumen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tiendaId != widget.tiendaId) {
+      _recargarVista(_vista);
     }
   }
 
@@ -89,7 +101,7 @@ class _TabResumenState extends State<TabResumen> {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: sel ? _primary : Colors.grey.shade100,
+          color: sel ? AppColors.secondary : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -97,7 +109,7 @@ class _TabResumenState extends State<TabResumen> {
               color: sel ? Colors.white : Colors.grey.shade600),
           const SizedBox(width: 6),
           Text(label,
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: sel ? Colors.white : Colors.grey.shade700)),

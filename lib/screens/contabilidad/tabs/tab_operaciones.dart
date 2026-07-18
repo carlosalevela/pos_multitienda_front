@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../../../theme/app_colors.dart';
 
 import '../../../providers/contabilidad_provider.dart';
 import '../../../providers/auth_provider.dart';
@@ -33,7 +34,6 @@ class _TabOperacionesState extends State<TabOperaciones> {
   _Vista _vista    = _Vista.gastos;
   final Key _gastosKey = UniqueKey();
 
-  static const _primary = Color(0xFF10B981);
 
   @override
   Widget build(BuildContext context) {
@@ -65,7 +65,7 @@ class _TabOperacionesState extends State<TabOperaciones> {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: sel ? _primary : Colors.grey.shade100,
+          color: sel ? AppColors.secondary : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -73,7 +73,7 @@ class _TabOperacionesState extends State<TabOperaciones> {
               color: sel ? Colors.white : Colors.grey.shade600),
           const SizedBox(width: 6),
           Text(label,
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: sel ? Colors.white : Colors.grey.shade700)),

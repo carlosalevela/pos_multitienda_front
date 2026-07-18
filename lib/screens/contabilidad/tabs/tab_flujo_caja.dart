@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../../../theme/app_colors.dart';
 
 import '../../../providers/contabilidad_provider.dart';
 import 'export_guard.dart';
@@ -28,12 +29,18 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
   DateTime      _customIni = DateTime.now().subtract(const Duration(days: 30));
   DateTime      _customFin = DateTime.now();
 
-  static const _primary = Color(0xFF10B981);
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _cargar());
+  }
+
+  @override
+  void didUpdateWidget(TabFlujoCaja oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tiendaId != widget.tiendaId) {
+      _cargar();
+    }
   }
 
   (String, String) _rango() {
@@ -115,7 +122,7 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
             decoration: BoxDecoration(
               color: _periodo == _PeriodoFlujo.custom
-                  ? _primary
+                  ? AppColors.secondary
                   : Colors.grey.shade100,
               borderRadius: BorderRadius.circular(20),
             ),
@@ -131,7 +138,7 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
                     ? '${DateFormat('dd/MM/yy').format(_customIni)} – '
                       '${DateFormat('dd/MM/yy').format(_customFin)}'
                     : 'Personalizado',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: _periodo == _PeriodoFlujo.custom
@@ -156,11 +163,11 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: sel ? _primary : Colors.grey.shade100,
+          color: sel ? AppColors.secondary : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(label,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: sel ? Colors.white : Colors.grey.shade700)),
@@ -181,7 +188,7 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
         _kpi('Total salidas',     r.totalSalidas,     Colors.red.shade600,
             Icons.arrow_upward_rounded),
         _kpi('Flujo neto',        r.flujoNeto,
-            r.flujoNeto >= 0 ? const Color(0xFF10B981) : Colors.red.shade600,
+            r.flujoNeto >= 0 ? AppColors.secondary : Colors.red.shade600,
             Icons.account_balance_rounded),
         _kpi('Diferencia cierre', r.totalDiferencias,
             r.totalDiferencias < 0 ? Colors.red.shade600 : Colors.green.shade600,
@@ -219,7 +226,7 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
         const SizedBox(height: 10),
         Text(
           '${valor < 0 ? '-' : ''}\$${widget.fmt.format(valor.abs())}',
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
               fontSize: 16,
               fontWeight: FontWeight.bold,
               color: color),
@@ -227,7 +234,7 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
         const SizedBox(height: 2),
         Text(
           sesiones != null ? '$label  •  $sesiones sesiones' : label,
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
               fontSize: 11, color: Colors.grey.shade500),
         ),
       ]),
@@ -257,21 +264,21 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
           Container(
             padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
-              color: _primary.withValues(alpha: 0.1),
+              color: AppColors.secondary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(Icons.account_balance_wallet_rounded,
-                size: 16, color: _primary),
+                size: 16, color: AppColors.secondary),
           ),
           const SizedBox(width: 10),
           Text('Sesiones de Caja',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   fontWeight: FontWeight.bold,
                   fontSize: 15,
-                  color: const Color(0xFF1A1A2E))),
+                  color: AppColors.onSurface)),
           const Spacer(),
           Text('${sesiones.length} registros',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   fontSize: 11, color: Colors.grey.shade500)),
         ]),
         const SizedBox(height: 14),
@@ -281,7 +288,7 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
             padding: const EdgeInsets.symmetric(vertical: 24),
             child: Center(
               child: Text('Sin sesiones en el período',
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                       color: Colors.grey.shade400)),
             ),
           )
@@ -293,12 +300,12 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
               dataRowMinHeight: 48,
               dataRowMaxHeight: 48,
               columnSpacing: 20,
-              headingTextStyle: GoogleFonts.poppins(
+              headingTextStyle: GoogleFonts.inter(
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
                   color: Colors.grey.shade600),
-              dataTextStyle: GoogleFonts.poppins(
-                  fontSize: 12, color: const Color(0xFF1A1A2E)),
+              dataTextStyle: GoogleFonts.inter(
+                  fontSize: 12, color: AppColors.onSurface),
               columns: const [
                 DataColumn(label: Text('Fecha')),
                 DataColumn(label: Text('Tienda')),
@@ -319,31 +326,31 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
                 return DataRow(cells: [
                   DataCell(Text(s['fecha']?.toString() ?? '')),
                   DataCell(Text(s['tienda_nombre']?.toString() ?? '',
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontWeight: FontWeight.w600))),
                   DataCell(Text(s['empleado']?.toString() ?? '–')),
                   DataCell(Text('\$${widget.fmt.format(entradas)}',
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           color: Colors.green.shade700))),
                   DataCell(Text('\$${widget.fmt.format(salidas)}',
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           color: Colors.red.shade600))),
                   DataCell(Text(
                     '${flujo < 0 ? '-' : ''}\$${widget.fmt.format(flujo.abs())}',
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
                         fontWeight: FontWeight.bold,
                         color: flujo >= 0
-                            ? const Color(0xFF10B981)
+                            ? AppColors.secondary
                             : Colors.red.shade600),
                   )),
                   DataCell(
                     diferencia == null
                         ? Text('–',
-                            style: GoogleFonts.poppins(
+                            style: GoogleFonts.inter(
                                 color: Colors.grey.shade400))
                         : Text(
                             '${diferencia < 0 ? '-' : '+'}\$${widget.fmt.format(diferencia.abs())}',
-                            style: GoogleFonts.poppins(
+                            style: GoogleFonts.inter(
                                 fontWeight: FontWeight.w600,
                                 color: diferencia < 0
                                     ? Colors.red.shade600
@@ -374,7 +381,7 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
       ),
       child: Text(
         cerrada ? 'Cerrada' : 'Abierta',
-        style: GoogleFonts.poppins(
+        style: GoogleFonts.inter(
             fontSize: 10,
             fontWeight: FontWeight.w600,
             color: cerrada
@@ -410,7 +417,7 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
                     strokeWidth: 2, color: Colors.white))
             : const Icon(Icons.download_rounded, size: 18),
         label: Text('Exportar Flujo',
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 fontSize: 13, fontWeight: FontWeight.w600)),
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.teal.shade600,
@@ -434,14 +441,14 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
             size: 56, color: Colors.grey.shade300),
         const SizedBox(height: 12),
         Text('Sin sesiones en el período',
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 color: Colors.grey.shade400, fontSize: 15)),
         const SizedBox(height: 8),
         TextButton(
           onPressed: _cargar,
           child: Text('Reintentar',
-              style: GoogleFonts.poppins(
-                  color: _primary, fontWeight: FontWeight.w600)),
+              style: GoogleFonts.inter(
+                  color: AppColors.secondary, fontWeight: FontWeight.w600)),
         ),
       ]),
     ),
@@ -468,15 +475,15 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: _primary.withValues(alpha: 0.1),
+                    color: AppColors.secondary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(Icons.date_range_rounded,
-                      color: _primary, size: 18),
+                      color: AppColors.secondary, size: 18),
                 ),
                 const SizedBox(width: 10),
                 Text('Rango personalizado',
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
                         fontWeight: FontWeight.bold, fontSize: 15)),
                 const Spacer(),
                 IconButton(
@@ -514,8 +521,8 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
               const SizedBox(height: 8),
               Text(
                 selIni ? '👆 Selecciona inicio' : '👆 Selecciona fin',
-                style: GoogleFonts.poppins(
-                    fontSize: 11, color: _primary),
+                style: GoogleFonts.inter(
+                    fontSize: 11, color: AppColors.secondary),
               ),
               const SizedBox(height: 8),
               SizedBox(
@@ -548,7 +555,7 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
                   child: Text('Cancelar',
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           color: Colors.grey.shade600)),
                 ),
                 const SizedBox(width: 8),
@@ -565,7 +572,7 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
                         }
                       : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _primary,
+                    backgroundColor: AppColors.secondary,
                     foregroundColor: Colors.white,
                     disabledBackgroundColor: Colors.grey.shade200,
                     elevation: 0,
@@ -573,7 +580,7 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
                         borderRadius: BorderRadius.circular(10)),
                   ),
                   child: Text('Aplicar',
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontWeight: FontWeight.w600)),
                 ),
               ]),
@@ -597,11 +604,11 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             color: activo
-                ? _primary.withValues(alpha: 0.08)
+                ? AppColors.secondary.withValues(alpha: 0.08)
                 : Colors.grey.shade50,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: activo ? _primary : Colors.grey.shade200,
+              color: activo ? AppColors.secondary : Colors.grey.shade200,
               width: activo ? 1.5 : 1,
             ),
           ),
@@ -609,14 +616,14 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label,
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
                         fontSize: 10,
-                        color: activo ? _primary : Colors.grey.shade500)),
+                        color: activo ? AppColors.secondary : Colors.grey.shade500)),
                 Text(valor,
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: activo ? _primary : const Color(0xFF1A1A2E))),
+                        color: activo ? AppColors.secondary : AppColors.onSurface)),
               ]),
         ),
       );

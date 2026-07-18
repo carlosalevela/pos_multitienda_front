@@ -6,8 +6,10 @@ import 'package:provider/provider.dart';
 import '../../../models/separado.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/cliente_provider.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../../services/recibo_pdf_service.dart';
 import '../../../services/thermal_printer_service.dart';
+import '../../../services/windows_printer_service.dart';
 
 class AbonarSheet extends StatefulWidget {
   final Separado     separado;
@@ -190,14 +192,21 @@ class _AbonarSheetState extends State<AbonarSheet> {
         final dev = await ThermalPrinterService.getAutoDevice();
         if (dev != null) {
           final bytes = await ThermalPrinterService.buildReciboAbono(
-            separado:     widget.separado,
-            monto:        monto,
-            metodoPago:   metodo,
-            empresaNombre: empresaNombre,
+            separado: widget.separado, monto: monto,
+            metodoPago: metodo, empresaNombre: empresaNombre,
           );
           await ThermalPrinterService.printBytes(dev, bytes);
           return;
         }
+      } catch (_) {}
+    } else if (!kIsWeb && await WindowsPrinterService.hasSavedPrinter()) {
+      try {
+        final bytes = await ThermalPrinterService.buildReciboAbono(
+          separado: widget.separado, monto: monto,
+          metodoPago: metodo, empresaNombre: empresaNombre,
+        );
+        await WindowsPrinterService.printRaw(bytes);
+        return;
       } catch (_) {}
     }
 

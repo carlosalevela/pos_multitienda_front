@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/config_service.dart';
 import '../services/empresa_service.dart';
 
@@ -24,6 +25,13 @@ class ConfigProvider extends ChangeNotifier {
 
   // ── Umbral por tienda ─────────────────────────────────────
   int? _umbralMayoreoTienda;
+
+  // ── Sugerencia de cliente en ventas grandes ───────────────
+  bool   _sugerirCliente       = false;
+  double _umbralSugerirCliente = 150000;
+
+  static const _kSugerirCliente       = 'pos_sugerir_cliente';
+  static const _kUmbralSugerirCliente = 'pos_umbral_sugerir_cliente';
 
   // ── Config Impresión ──────────────────────────────────────
   String _tipoPapel            = '80mm';
@@ -54,6 +62,10 @@ class ConfigProvider extends ChangeNotifier {
   int  get cantidadMayoreo     => _cantidadMayoreo;
   int? get empresaId           => _empresaId;
   int? get umbralMayoreoTienda => _umbralMayoreoTienda;
+
+  // ── Getters sugerencia cliente ────────────────────────────
+  bool   get sugerirCliente       => _sugerirCliente;
+  double get umbralSugerirCliente => _umbralSugerirCliente;
 
   // ── Getters config impresión ──────────────────────────────
   String get tipoPapel         => _tipoPapel;
@@ -124,8 +136,23 @@ class ConfigProvider extends ChangeNotifier {
       _cantidadMayoreo = d['cantidad_mayoreo'] as int? ?? 6;
     }
 
+    final prefs = await SharedPreferences.getInstance();
+    _sugerirCliente       = prefs.getBool(_kSugerirCliente)         ?? false;
+    _umbralSugerirCliente = prefs.getDouble(_kUmbralSugerirCliente) ?? 150000;
+
     _tiendaIdCargada = tiendaId;
     _cargando = false;
+    notifyListeners();
+  }
+
+  // ── Guardar sugerencia de cliente ─────────────────────────
+
+  Future<void> guardarSugerirCliente(bool enabled, double umbral) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kSugerirCliente, enabled);
+    await prefs.setDouble(_kUmbralSugerirCliente, umbral);
+    _sugerirCliente       = enabled;
+    _umbralSugerirCliente = umbral;
     notifyListeners();
   }
 

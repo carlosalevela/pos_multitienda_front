@@ -1,10 +1,14 @@
+import 'dart:async' show unawaited;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../providers/caja_provider.dart';
+import '../../../providers/config_provider.dart';
 import '../../../models/resumen_cierre.dart';
+import '../../../models/sesion_historial.dart';
+import 'pdf/cierre_pdf.dart';
 
 // ── Enterprise palette ─────────────────────────────────────────
 const _cGreen    = Color(0xFF006C49);
@@ -809,11 +813,49 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
               setState(() => _montoIngresado = monto);
               _irAPaso(3);
             } else {
+              // Capturar resumen ANTES de cerrar (el provider lo limpia tras el cierre)
+              final r          = cont.resumenCierre;
+              final obs        = _obsCtrl.text.trim();
+              final montoFinal = _montoIngresado;
+              final tipoPapel  = context.read<ConfigProvider>().tipoPapel;
+
               final ok = await cont.cerrarCaja(
-                montoFinalReal: _montoIngresado,
-                observaciones:  _obsCtrl.text.trim(),
+                montoFinalReal: montoFinal,
+                observaciones:  obs,
               );
-              if (ok && mounted) Navigator.pop(context);
+              if (ok && mounted) {
+                Navigator.pop(context);
+                if (r != null) {
+                  unawaited(exportarCierrePDF(SesionHistorial(
+                    id:                   r.sesionId,
+                    empleadoNombre:       r.empleadoNombre,
+                    tiendaNombre:         r.tiendaNombre,
+                    fechaApertura:        r.fechaApertura,
+                    fechaCierre:          DateTime.now().toIso8601String(),
+                    estado:               'cerrada',
+                    observaciones:        obs,
+                    saldoInicial:         r.montoInicial,
+                    ventasEfectivo:       r.ventas.efectivo,
+                    ventasTarjeta:        r.ventas.tarjeta,
+                    ventasTransferencia:  r.ventas.transferencia,
+                    ventasMixto:          r.ventas.mixto,
+                    ventasTotal:          r.ventas.total,
+                    gastosTotal:          r.gastos.total,
+                    abonosEfectivo:       r.abonos.efectivo,
+                    abonosTarjeta:        r.abonos.tarjeta,
+                    abonosTransferencia:  r.abonos.transferencia,
+                    abonosTotal:          r.abonos.total,
+                    numAbonos:            r.abonos.cantidad,
+                    devolucionesEfectivo: r.devoluciones.netoEfectivo,
+                    numDevoluciones:      r.devoluciones.cantidad,
+                    numCambiosProducto:   r.devoluciones.cambiosProducto,
+                    montoFinalSistema:    r.montoEsperadoCaja,
+                    montoFinalReal:       montoFinal,
+                    diferencia:           montoFinal - r.montoEsperadoCaja,
+                    numTransacciones:     r.ventas.numTransacciones,
+                  ), tipoPapel: tipoPapel));
+                }
+              }
             }
           },
         ),

@@ -1,7 +1,11 @@
 // lib/services/recibo_pdf_service.dart
 
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -9,8 +13,37 @@ import '../models/item_carrito.dart';
 import '../models/devolucion_model.dart';
 import '../models/separado.dart';
 import 'documento_service.dart';
+import 'windows_printer_service.dart';
 
 class ReciboPdfService {
+  // ── Abrir PDF: web → diálogo del navegador / exe → visor predeterminado ──
+  static Future<void> _abrirPdf(List<int> bytes, String nombre) async {
+    if (kIsWeb) {
+      await Printing.layoutPdf(
+        onLayout: (_) async => Uint8List.fromList(bytes),
+        name: nombre,
+      );
+      return;
+    }
+    // Exe nativo: intentar imprimir directo a la impresora configurada
+    final printed = await WindowsPrinterService.printPdf(bytes, nombre);
+    if (printed) return;
+
+    // Sin impresora configurada → abrir con el visor PDF del sistema
+    // (evita el diálogo nativo de Windows que congela el rendering de Flutter)
+    final dir  = await getTemporaryDirectory();
+    final safe = nombre.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final file = File('${dir.path}${Platform.pathSeparator}$safe');
+    await file.writeAsBytes(bytes);
+    if (Platform.isWindows) {
+      await Process.run('cmd', ['/c', 'start', '', file.path]);
+    } else if (Platform.isMacOS) {
+      await Process.run('open', [file.path]);
+    } else {
+      await Process.run('xdg-open', [file.path]);
+    }
+  }
+
   // ── Colores ──────────────────────────────────────────────────
   static const _green    = PdfColor.fromInt(0xFF006C49);
   static const _greenBg  = PdfColor.fromInt(0xFFE8FFF4);
@@ -49,9 +82,10 @@ class ReciboPdfService {
     required double            total,
     required double            montoRecibido,
     required double            vuelto,
-    String                     nit       = '',
-    String                     direccion = '',
-    String                     telefono  = '',
+    String                     nit           = '',
+    String                     direccion     = '',
+    String                     telefono      = '',
+    String                     clienteNombre = '',
   }) async {
     final fontReg  = await PdfGoogleFonts.interRegular();
     final fontBold = await PdfGoogleFonts.interBold();
@@ -81,7 +115,8 @@ class ReciboPdfService {
         _divider(),
 
         // ── 3. Info de la transacción ──────────────────────────
-        _infoTransaccion(fontBold, fontReg, numeroFactura, cajeroNombre, now),
+        _infoTransaccion(fontBold, fontReg, numeroFactura, cajeroNombre, now,
+            clienteNombre: clienteNombre),
         _divider(),
 
         // ── 4. Tabla de productos ──────────────────────────────
@@ -138,10 +173,7 @@ class ReciboPdfService {
     unawaited(DocumentoService.instance.guardarVenta(
       bytes: bytes, numeroFactura: numeroFactura,
     ));
-    await Printing.layoutPdf(
-      onLayout: (_) async => bytes,
-      name: 'Recibo_$numeroFactura.pdf',
-    );
+    await _abrirPdf(bytes, 'Recibo_$numeroFactura.pdf');
   }
 
 
@@ -197,8 +229,9 @@ class ReciboPdfService {
 
   static pw.Widget _infoTransaccion(
     pw.Font fontBold, pw.Font fontReg,
-    String factura, String cajero, DateTime now,
-  ) {
+    String factura, String cajero, DateTime now, {
+    String clienteNombre = '',
+  }) {
     final fecha  = DateFormat('dd/MM/yyyy').format(now);
     final hora   = DateFormat('HH:mm:ss').format(now);
 
@@ -207,6 +240,8 @@ class ReciboPdfService {
       _filaInfo(fontBold, fontReg, 'Fecha:',      fecha),
       _filaInfo(fontBold, fontReg, 'Hora:',       hora),
       _filaInfo(fontBold, fontReg, 'Cajero:',     cajero),
+      if (clienteNombre.isNotEmpty)
+        _filaInfo(fontBold, fontReg, 'Cliente:',  clienteNombre),
     ]);
   }
 
@@ -539,10 +574,7 @@ class ReciboPdfService {
     unawaited(DocumentoService.instance.guardarDevolucion(
       bytes: bytes, referencia: devId,
     ));
-    await Printing.layoutPdf(
-      onLayout: (_) async => bytes,
-      name: 'Comprobante_$devId.pdf',
-    );
+    await _abrirPdf(bytes, 'Comprobante_$devId.pdf');
   }
 
   static pw.Widget _detalleRow(
@@ -809,10 +841,7 @@ class ReciboPdfService {
     unawaited(DocumentoService.instance.guardarSeparado(
       bytes: bytes, numeroSeparado: sepId,
     ));
-    await Printing.layoutPdf(
-      onLayout: (_) async => bytes,
-      name: 'Separado_$sepId.pdf',
-    );
+    await _abrirPdf(bytes, 'Separado_$sepId.pdf');
   }
 
 
@@ -957,10 +986,7 @@ class ReciboPdfService {
     unawaited(DocumentoService.instance.guardarAbono(
       bytes: bytes, referencia: '${sepId}_${DateTime.now().millisecondsSinceEpoch}',
     ));
-    await Printing.layoutPdf(
-      onLayout: (_) async => bytes,
-      name: 'Abono_$sepId.pdf',
-    );
+    await _abrirPdf(bytes, 'Abono_$sepId.pdf');
   }
 
 

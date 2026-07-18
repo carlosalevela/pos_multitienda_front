@@ -6,6 +6,8 @@ import '../../providers/reportes_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/contabilidad_provider.dart';
 import '../../providers/caja_provider.dart';
+import '../../models/sesion_caja.dart';
+import '../../services/caja_service.dart';
 import '../../services/venta_service.dart';
 import 'widgets/reporte_detalle_dialog.dart';
 import 'widgets/reporte_turno_card.dart';
@@ -36,6 +38,8 @@ class ReportesScreen extends StatefulWidget {
 class _ReportesScreenState extends State<ReportesScreen> {
   DateTime _fecha = DateTime.now();
   final _ventaService = VentaService();
+  final _cajaService  = CajaService();
+  SesionCaja? _sesionHistorial;
   Timer? _refreshTimer;
 
   @override
@@ -67,13 +71,30 @@ class _ReportesScreenState extends State<ReportesScreen> {
       tiendaId: auth.tiendaId,
       fecha: _fechaStr,
     );
-    // Refresca la sesión activa para que ventasTotal/gastosTotal/montoEsperado
-    // estén actualizados, luego carga los gastos de sesión detallados.
+    // Para hoy: refresca la sesión activa y carga gastos en vivo.
+    // Para fechas pasadas: carga la sesión cerrada de ese día desde historial.
     if (auth.rol == 'cajero') {
-      await caja.verificarSesion(auth.tiendaId);
-      if (!mounted) return;
-      if (caja.sesionActiva != null) {
-        caja.cargarGastosSesion(caja.sesionActiva!.id);
+      if (_esHoy) {
+        _sesionHistorial = null;
+        await caja.verificarSesion(auth.tiendaId);
+        if (!mounted) return;
+        if (caja.sesionActiva != null) {
+          caja.cargarGastosSesion(caja.sesionActiva!.id);
+        }
+      } else {
+        final lista = await _cajaService.getHistorialSesiones(
+          tiendaId:    auth.tiendaId,
+          fecha:       _fechaStr,
+          estado:      'cerrada',
+          misSesiones: true,
+        );
+        if (mounted) {
+          setState(() {
+            _sesionHistorial = lista.isNotEmpty
+                ? SesionCaja.fromJson(lista.first)
+                : null;
+          });
+        }
       }
     }
   }
@@ -133,6 +154,11 @@ class _ReportesScreenState extends State<ReportesScreen> {
     final caja     = context.watch<CajaProvider>();
     final contab   = context.watch<ContabilidadProvider>();
     final esCajero = auth.rol == 'cajero';
+    final sesionCard = esCajero
+        ? (_esHoy
+            ? (caja.sesionActiva ?? caja.ultimaSesionCerrada)
+            : _sesionHistorial)
+        : null;
 
     final totalGastos =
         contab.gastos.fold(0.0, (s, g) => s + g.monto);
@@ -153,21 +179,15 @@ class _ReportesScreenState extends State<ReportesScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (esCajero) ...[
-                            // Muestra la tarjeta si hay sesión activa o si
-                            // se cerró una sesión en esta misma sesión de app.
-                            if (caja.sesionActiva != null ||
-                                caja.ultimaSesionCerrada != null) ...[
-                              ReporteTurnoCard(
-                                sesion: caja.sesionActiva ??
-                                    caja.ultimaSesionCerrada!,
-                                fecha:         _fechaStr,
-                                tiendaNombre:  auth.tiendaNombre,
-                                empresaNombre: auth.empresaNombre,
-                                cajaAbierta:   caja.sesionActiva != null,
-                              ),
-                              const SizedBox(height: 24),
-                            ],
+                          if (sesionCard != null) ...[
+                            ReporteTurnoCard(
+                              sesion:        sesionCard,
+                              fecha:         _fechaStr,
+                              tiendaNombre:  auth.tiendaNombre,
+                              empresaNombre: auth.empresaNombre,
+                              cajaAbierta:   _esHoy && caja.sesionActiva != null,
+                            ),
+                            const SizedBox(height: 24),
                           ],
                           _buildKPIRow(rep, totalGastos, caja),
                           const SizedBox(height: 10),
@@ -303,14 +323,11 @@ class _ReportesScreenState extends State<ReportesScreen> {
 
   Widget _buildKPIRow(
       ReportesProvider rep, double totalGastos, CajaProvider caja) {
-    final sesion = caja.sesionActiva;
-
-    // sesion.* viene de verificarSesion() que se llama en cada _cargar() → datos frescos.
-    // sesion.ventasTotal es solo las ventas de esta sesión (no del día completo).
-    // sesion.montoEsperado lo calcula el backend correctamente:
-    //   solo cuenta efectivo+mixto, abonos efectivo, gastos efectivo, devoluciones efectivo.
-    final ventas   = sesion != null ? sesion.ventasTotal  : rep.totalDia;
-    final gastos   = sesion != null ? caja.gastosTotalSesion : totalGastos;
+    // Para hoy usamos datos de la sesión activa (datos frescos del turno).
+    // Para fechas pasadas usamos los totales del provider (correctos para ese día).
+    final sesion = _esHoy ? caja.sesionActiva : null;
+    final ventas   = sesion != null ? sesion.ventasTotal      : rep.totalDia;
+    final gastos   = sesion != null ? caja.gastosTotalSesion  : totalGastos;
     final esperado = sesion?.montoEsperado ?? 0.0;
 
     return Row(

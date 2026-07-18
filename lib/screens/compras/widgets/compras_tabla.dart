@@ -1,15 +1,15 @@
 // lib/screens/compras/widgets/compras_tabla.dart
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import '../../../providers/proveedores_provider.dart';
 import '../../../providers/auth_provider.dart';
+import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
 import '../compras_theme.dart';
 
 class ComprasTabla extends StatelessWidget {
-  final ProveedoresProvider                 prov;
+  final List<Map<String, dynamic>>          compras;
   final AuthProvider                        auth;
-  final String?                             filtroEstado;
+  final bool                                hayFiltro;
   final VoidCallback                        onNuevaOrden;
   final void Function(int id)               onVerDetalle;
   final void Function(Map<String, dynamic>) onRecibir;
@@ -17,9 +17,9 @@ class ComprasTabla extends StatelessWidget {
 
   const ComprasTabla({
     super.key,
-    required this.prov,
+    required this.compras,
     required this.auth,
-    required this.filtroEstado,
+    required this.hayFiltro,
     required this.onNuevaOrden,
     required this.onVerDetalle,
     required this.onRecibir,
@@ -28,24 +28,22 @@ class ComprasTabla extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (prov.compras.isEmpty) {
+    if (compras.isEmpty) {
       return _EmptyState(
-        filtroEstado: filtroEstado,
+        hayFiltro:   hayFiltro,
         onNuevaOrden: onNuevaOrden,
       );
     }
 
     return Container(
       decoration: BoxDecoration(
-        color:        Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color:      Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset:     const Offset(0, 2),
-          ),
-        ],
+        color:        AppColors.surfaceContainerLowest,
+        borderRadius: AppRadius.lg,
+        boxShadow: [BoxShadow(
+          color:      Colors.black.withValues(alpha: 0.04),
+          blurRadius: 10,
+          offset:     const Offset(0, 2),
+        )],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -54,35 +52,33 @@ class ComprasTabla extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
             child: Row(children: [
               const Icon(Icons.list_alt_rounded,
-                  size: 16, color: ComprasTheme.dark),
+                  size: 16, color: AppColors.onSurface),
               const SizedBox(width: 7),
               Text('Órdenes de compra',
-                style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w600,
-                    fontSize:   14,
-                    color:      ComprasTheme.dark)),
+                  style: AppTextStyles.bodyMd
+                      .copyWith(fontWeight: FontWeight.w600)),
               const Spacer(),
-              Text('${prov.compras.length} registros',
-                style: GoogleFonts.poppins(
-                    fontSize: 12, color: Colors.grey.shade400)),
+              Text('${compras.length} registro(s)',
+                  style: AppTextStyles.bodySm),
             ]),
           ),
           const SizedBox(height: 8),
           ClipRRect(
             borderRadius: const BorderRadius.only(
-              bottomLeft:  Radius.circular(14),
-              bottomRight: Radius.circular(14),
+              bottomLeft:  Radius.circular(8),
+              bottomRight: Radius.circular(8),
             ),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
                 showCheckboxColumn: false,
-                headingRowColor: WidgetStateProperty.all(ComprasTheme.dark),
-                headingTextStyle: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize:   12),
-                dataTextStyle:    GoogleFonts.poppins(fontSize: 12),
+                headingRowColor: WidgetStateProperty.all(
+                    AppColors.primaryContainer),
+                headingTextStyle: AppTextStyles.labelMd
+                    .copyWith(color: AppColors.onSecondary,
+                        letterSpacing: 0.4),
+                dataTextStyle: AppTextStyles.bodyMd
+                    .copyWith(fontSize: 13),
                 columnSpacing:    20,
                 dataRowMinHeight: 52,
                 dataRowMaxHeight: 52,
@@ -96,7 +92,7 @@ class ComprasTabla extends StatelessWidget {
                   DataColumn(label: Text('Estado')),
                   DataColumn(label: Text('Acciones')),
                 ],
-                rows: prov.compras.map(_buildRow).toList(),
+                rows: compras.map(_buildRow).toList(),
               ),
             ),
           ),
@@ -114,49 +110,63 @@ class ComprasTabla extends StatelessWidget {
 
     return DataRow(
       color: WidgetStateProperty.resolveWith((states) {
-        if (c['estado'] == 'cancelada') return Colors.red.shade50;
-        if (c['estado'] == 'recibida')  return Colors.green.shade50;
+        if (c['estado'] == 'cancelada') return AppColors.errorContainer;
+        if (c['estado'] == 'recibida')  return AppColors.mintLight;
         if (states.contains(WidgetState.hovered)) {
-          return const Color(0xFFF0F4FF);
+          return AppColors.surfaceContainerLow;
         }
-        return Colors.white;
+        return AppColors.surfaceContainerLowest;
       }),
       cells: [
+        // Número de orden
         DataCell(Text(c['numero_orden'] ?? '',
-          style: GoogleFonts.poppins(
-              fontWeight: FontWeight.w600,
-              color:      ComprasTheme.accent,
-              fontSize:   12))),
+            style: AppTextStyles.bodyMd.copyWith(
+                fontWeight: FontWeight.w700,
+                color:      AppColors.secondary,
+                fontSize:   13))),
+
+        // Proveedor con avatar
         DataCell(Row(children: [
           Container(
             width: 28, height: 28,
             decoration: BoxDecoration(
-              color:        Colors.purple.shade50,
-              borderRadius: BorderRadius.circular(6),
+              color:        AppColors.secondaryContainer,
+              borderRadius: AppRadius.md,
             ),
-            child: Center(child: Text(
-              ((c['proveedor_nombre'] ?? 'P') as String)
-                  .substring(0, 1).toUpperCase(),
-              style: GoogleFonts.poppins(
-                  fontSize:   11,
-                  fontWeight: FontWeight.bold,
-                  color:      Colors.purple.shade600),
-            )),
+            child: Center(
+              child: Text(
+                ((c['proveedor_nombre'] ?? 'P') as String)
+                    .substring(0, 1).toUpperCase(),
+                style: AppTextStyles.labelSm.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.onSecondaryContainer),
+              ),
+            ),
           ),
           const SizedBox(width: 8),
           Text(c['proveedor_nombre'] ?? '',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
+              style: AppTextStyles.bodyMd.copyWith(
+                  fontSize: 13, fontWeight: FontWeight.w500)),
         ])),
-        DataCell(Text(c['empleado_nombre'] ?? '—')),
-        DataCell(Text(fecha)),
+
+        DataCell(Text(c['empleado_nombre'] ?? '—',
+            style: AppTextStyles.bodyMd.copyWith(fontSize: 13))),
+        DataCell(Text(fecha,
+            style: AppTextStyles.bodyMd.copyWith(fontSize: 13))),
+
+        // Total
         DataCell(Text(
           '\$${ComprasTheme.fmt(double.tryParse(c['total'].toString()) ?? 0)}',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600))),
+          style: AppTextStyles.bodyMd.copyWith(
+              fontSize: 13, fontWeight: FontWeight.w600))),
+
         DataCell(EstadoBadge(estado: c['estado'] ?? '')),
+
+        // Acciones
         DataCell(Row(children: [
           _AccionBtn(
             icon:    Icons.visibility_rounded,
-            color:   Colors.blue.shade600,
+            color:   AppColors.secondary,
             tooltip: 'Ver detalle',
             onTap:   () => onVerDetalle(c['id']),
           ),
@@ -164,7 +174,7 @@ class ComprasTabla extends StatelessWidget {
             const SizedBox(width: 6),
             _AccionBtn(
               icon:    Icons.move_to_inbox_rounded,
-              color:   Colors.green.shade600,
+              color:   AppColors.mintDark,
               tooltip: 'Recibir orden',
               onTap:   () => onRecibir(c),
             ),
@@ -173,7 +183,7 @@ class ComprasTabla extends StatelessWidget {
             const SizedBox(width: 6),
             _AccionBtn(
               icon:    Icons.cancel_rounded,
-              color:   Colors.red.shade600,
+              color:   AppColors.error,
               tooltip: 'Cancelar orden',
               onTap:   () => onCancelar(c),
             ),
@@ -187,11 +197,11 @@ class ComprasTabla extends StatelessWidget {
 // ── Estado vacío ──────────────────────────────────────────────
 
 class _EmptyState extends StatelessWidget {
-  final String?      filtroEstado;
+  final bool         hayFiltro;
   final VoidCallback onNuevaOrden;
 
   const _EmptyState({
-    required this.filtroEstado,
+    required this.hayFiltro,
     required this.onNuevaOrden,
   });
 
@@ -199,36 +209,37 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(48),
-      decoration: BoxDecoration(
-        color:        Colors.white,
-        borderRadius: BorderRadius.circular(14),
+      decoration: const BoxDecoration(
+        color:        AppColors.surfaceContainerLowest,
+        borderRadius: AppRadius.lg,
       ),
       child: Center(
         child: Column(children: [
-          Icon(Icons.shopping_cart_outlined,
-              size: 52, color: Colors.grey.shade200),
+          const Icon(Icons.shopping_cart_outlined,
+              size: 52, color: AppColors.outlineVariant),
           const SizedBox(height: 12),
           Text(
-            filtroEstado != null
-                ? 'Sin órdenes con estado "${ComprasTheme.labelEstado(filtroEstado!)}"'
+            hayFiltro
+                ? 'No hay órdenes que coincidan con el filtro'
                 : 'No hay órdenes de compra registradas',
-            style: GoogleFonts.poppins(
-                color: Colors.grey.shade400, fontSize: 14),
+            style: AppTextStyles.bodySm,
           ),
           const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: onNuevaOrden,
-            icon:  const Icon(Icons.add_rounded, size: 16),
-            label: Text('Crear primera orden',
-                style: GoogleFonts.poppins()),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: ComprasTheme.accent,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
+          if (!hayFiltro)
+            ElevatedButton.icon(
+              onPressed: onNuevaOrden,
+              icon:  const Icon(Icons.add_rounded, size: 16),
+              label: Text('Crear primera orden',
+                  style: AppTextStyles.bodyMd
+                      .copyWith(fontWeight: FontWeight.w600)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.secondary,
+                foregroundColor: AppColors.onSecondary,
+                elevation: 0,
+                shape: const RoundedRectangleBorder(
+                    borderRadius: AppRadius.xl),
+              ),
             ),
-          ),
         ]),
       ),
     );
@@ -247,18 +258,19 @@ class EstadoBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color:        color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border:       Border.all(color: color.withOpacity(0.3)),
+        color:        color.withValues(alpha: 0.12),
+        borderRadius: AppRadius.full,
+        border:       Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(ComprasTheme.iconEstado(estado), size: 11, color: color),
         const SizedBox(width: 4),
         Text(ComprasTheme.labelEstado(estado),
-          style: GoogleFonts.poppins(
-              fontSize:   11,
-              fontWeight: FontWeight.w600,
-              color:      color)),
+            style: AppTextStyles.labelSm.copyWith(
+                fontSize:   11,
+                fontWeight: FontWeight.w700,
+                color:      color,
+                letterSpacing: 0)),
       ]),
     );
   }
@@ -285,12 +297,12 @@ class _AccionBtn extends StatelessWidget {
       message: tooltip,
       child: InkWell(
         onTap:        onTap,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: AppRadius.md,
         child: Container(
           padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
-            color:        color.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(8),
+            color:        color.withValues(alpha: 0.10),
+            borderRadius: AppRadius.md,
           ),
           child: Icon(icon, size: 16, color: color),
         ),

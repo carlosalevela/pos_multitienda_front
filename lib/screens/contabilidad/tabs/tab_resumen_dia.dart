@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../../../theme/app_colors.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../models/contabilidad_models.dart';
 import '../../../providers/contabilidad_provider.dart';
@@ -24,20 +25,9 @@ class TabResumenDia extends StatefulWidget {
 class _TabResumenDiaState extends State<TabResumenDia> {
   DateTime _fecha = DateTime.now();
 
-  // ── Design tokens (light, emerald accent) ──────────────────
-  static const _primary     = Color(0xFF10B981);
-  static const _primaryBg   = Color(0xFFECFDF5);
-  static const _secondary   = Color(0xFF3B82F6);
-  static const _secondaryBg = Color(0xFFEFF6FF);
-  static const _surface     = Colors.white;
-  static const _bg          = Color(0xFFF3F4F6);
-  static const _border      = Color(0xFFE5E7EB);
-  static const _onSurface   = Color(0xFF111827);
-  static const _onSurfVar   = Color(0xFF6B7280);
-  static const _danger      = Color(0xFFEF4444);
-  static const _dangerBg    = Color(0xFFFEF2F2);
-  static const _warning     = Color(0xFFF59E0B);
-  static const _warningBg   = Color(0xFFFFFBEB);
+  // Azul para método de pago "transferencia" (sin token en AppColors)
+  static const _transferBlue   = Color(0xFF3B82F6);
+  static const _transferBlueBg = Color(0xFFEFF6FF);
 
   bool get _esHoy {
     final h = DateTime.now();
@@ -88,7 +78,7 @@ class _TabResumenDiaState extends State<TabResumenDia> {
       builder:     (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
           colorScheme: const ColorScheme.light(
-            primary:   _primary,
+            primary:   AppColors.secondary,
             onPrimary: Colors.white,
           ),
         ),
@@ -114,9 +104,9 @@ class _TabResumenDiaState extends State<TabResumenDia> {
       Expanded(
         child: cont.cargando && r == null
             ? const Center(
-                child: CircularProgressIndicator(color: _primary))
+                child: CircularProgressIndicator(color: AppColors.secondary))
             : RefreshIndicator(
-                color: _primary,
+                color: AppColors.secondary,
                 onRefresh: () async => _cargar(),
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
@@ -156,9 +146,9 @@ class _TabResumenDiaState extends State<TabResumenDia> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             decoration: BoxDecoration(
-              color: _surface,
+              color: AppColors.surfaceContainerLowest,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: _border),
+              border: Border.all(color: AppColors.outlineVariant),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.04),
@@ -168,30 +158,30 @@ class _TabResumenDiaState extends State<TabResumenDia> {
               ],
             ),
             child: Row(children: [
-              const Icon(Icons.calendar_today_rounded, size: 16, color: _primary),
+              const Icon(Icons.calendar_today_rounded, size: 16, color: AppColors.secondary),
               const SizedBox(width: 10),
               Text(_labelFecha,
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
-                      color: _onSurface)),
+                      color: AppColors.onSurface)),
               const Spacer(),
               if (!_esHoy)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: _warningBg,
+                    color: AppColors.warningContainer,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _warning.withValues(alpha: 0.4)),
+                    border: Border.all(color: AppColors.warning.withValues(alpha: 0.4)),
                   ),
                   child: Text('Histórico',
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontSize: 9,
                           fontWeight: FontWeight.w600,
-                          color: _warning)),
+                          color: AppColors.warning)),
                 ),
               const SizedBox(width: 4),
-              const Icon(Icons.arrow_drop_down_rounded, color: _onSurfVar),
+              const Icon(Icons.arrow_drop_down_rounded, color: AppColors.onSurfaceVariant),
             ]),
           ),
         ),
@@ -203,9 +193,9 @@ class _TabResumenDiaState extends State<TabResumenDia> {
         child: Container(
           padding: const EdgeInsets.all(11),
           decoration: BoxDecoration(
-            color: _surface,
+            color: AppColors.surfaceContainerLowest,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: _border),
+            border: Border.all(color: AppColors.outlineVariant),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.04),
@@ -218,8 +208,8 @@ class _TabResumenDiaState extends State<TabResumenDia> {
               ? const SizedBox(
                   width: 20, height: 20,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: _primary))
-              : const Icon(Icons.refresh_rounded, size: 20, color: _onSurfVar),
+                      strokeWidth: 2, color: AppColors.secondary))
+              : const Icon(Icons.refresh_rounded, size: 20, color: AppColors.onSurfaceVariant),
         ),
       ),
     ]);
@@ -237,9 +227,9 @@ class _TabResumenDiaState extends State<TabResumenDia> {
         value:       '\$${widget.fmt.format(r.totalVentas)}',
         sub:         '${r.numVentas} transacciones',
         icon:        Icons.trending_up_rounded,
-        iconBg:      _primaryBg,
-        iconColor:   _primary,
-        subColor:    _primary,
+        iconBg:      AppColors.mintLight,
+        iconColor:   AppColors.secondary,
+        subColor:    AppColors.secondary,
         subIcon:     Icons.arrow_upward_rounded,
       )),
       const SizedBox(width: 12),
@@ -248,9 +238,9 @@ class _TabResumenDiaState extends State<TabResumenDia> {
         value:       '\$${widget.fmt.format(r.totalGastos)}',
         sub:         'Del día',
         icon:        Icons.receipt_long_rounded,
-        iconBg:      _dangerBg,
-        iconColor:   _danger,
-        subColor:    _danger,
+        iconBg:      AppColors.errorContainer,
+        iconColor:   AppColors.error,
+        subColor:    AppColors.error,
         subIcon:     Icons.arrow_downward_rounded,
       )),
       const SizedBox(width: 12),
@@ -261,9 +251,9 @@ class _TabResumenDiaState extends State<TabResumenDia> {
         icon:        util >= 0
             ? Icons.show_chart_rounded
             : Icons.trending_down_rounded,
-        iconBg:      util >= 0 ? _primaryBg : _dangerBg,
-        iconColor:   util >= 0 ? _primary   : _danger,
-        subColor:    util >= 0 ? _primary   : _danger,
+        iconBg:      util >= 0 ? AppColors.mintLight : AppColors.errorContainer,
+        iconColor:   util >= 0 ? AppColors.secondary   : AppColors.error,
+        subColor:    util >= 0 ? AppColors.secondary   : AppColors.error,
         subIcon:     util >= 0
             ? Icons.arrow_upward_rounded
             : Icons.arrow_downward_rounded,
@@ -274,9 +264,9 @@ class _TabResumenDiaState extends State<TabResumenDia> {
         value:       '\$${widget.fmt.format(r.totalDevoluciones)}',
         sub:         '${r.numDevoluciones} devol.',
         icon:        Icons.assignment_return_rounded,
-        iconBg:      _warningBg,
-        iconColor:   _warning,
-        subColor:    _onSurfVar,
+        iconBg:      AppColors.warningContainer,
+        iconColor:   AppColors.warning,
+        subColor:    AppColors.onSurfaceVariant,
         subIcon:     Icons.speed_rounded,
       )),
     ]);
@@ -295,9 +285,9 @@ class _TabResumenDiaState extends State<TabResumenDia> {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: _surface,
+        color: AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _border),
+        border: Border.all(color: AppColors.outlineVariant),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -310,10 +300,10 @@ class _TabResumenDiaState extends State<TabResumenDia> {
         Row(children: [
           Expanded(
             child: Text(label,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
-                    color: _onSurfVar)),
+                    color: AppColors.onSurfaceVariant)),
           ),
           Container(
             padding: const EdgeInsets.all(7),
@@ -326,10 +316,10 @@ class _TabResumenDiaState extends State<TabResumenDia> {
         ]),
         const SizedBox(height: 10),
         Text(value,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: _onSurface)),
+                color: AppColors.onSurface)),
         const SizedBox(height: 6),
         Row(children: [
           Icon(subIcon, size: 12, color: subColor),
@@ -337,7 +327,7 @@ class _TabResumenDiaState extends State<TabResumenDia> {
           Expanded(
             child: Text(sub,
                 overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 11, color: subColor)),
           ),
         ]),
@@ -380,21 +370,21 @@ class _TabResumenDiaState extends State<TabResumenDia> {
         Row(children: [
           Expanded(
             child: Text('Ventas por Método',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    color: _onSurface)),
+                    color: AppColors.onSurface)),
           ),
           Row(children: [
             Container(
               width: 8, height: 8,
               decoration: const BoxDecoration(
-                  color: _primary, shape: BoxShape.circle),
+                  color: AppColors.secondary, shape: BoxShape.circle),
             ),
             const SizedBox(width: 6),
             Text('Ventas del día',
-                style: GoogleFonts.poppins(
-                    fontSize: 11, color: _onSurfVar)),
+                style: GoogleFonts.inter(
+                    fontSize: 11, color: AppColors.onSurfaceVariant)),
           ]),
         ]),
         const SizedBox(height: 20),
@@ -424,7 +414,7 @@ class _TabResumenDiaState extends State<TabResumenDia> {
                       backDrawRodData: BackgroundBarChartRodData(
                         show: true,
                         toY: maxVal > 0 ? maxVal * 1.3 : 100,
-                        color: _bg,
+                        color: AppColors.surfaceContainerLow,
                       ),
                     ),
                   ],
@@ -443,8 +433,8 @@ class _TabResumenDiaState extends State<TabResumenDia> {
                       return Padding(
                         padding: const EdgeInsets.only(top: 8),
                         child: Text(label,
-                            style: GoogleFonts.poppins(
-                                fontSize: 10, color: _onSurfVar)),
+                            style: GoogleFonts.inter(
+                                fontSize: 10, color: AppColors.onSurfaceVariant)),
                       );
                     },
                   ),
@@ -456,8 +446,8 @@ class _TabResumenDiaState extends State<TabResumenDia> {
                     getTitlesWidget: (value, _) {
                       if (value == 0) return const SizedBox();
                       return Text('\$${_shortNum(value)}',
-                          style: GoogleFonts.poppins(
-                              fontSize: 10, color: _onSurfVar));
+                          style: GoogleFonts.inter(
+                              fontSize: 10, color: AppColors.onSurfaceVariant));
                     },
                   ),
                 ),
@@ -470,7 +460,7 @@ class _TabResumenDiaState extends State<TabResumenDia> {
                 show: true,
                 drawVerticalLine: false,
                 getDrawingHorizontalLine: (_) => FlLine(
-                  color: _border,
+                  color: AppColors.outlineVariant,
                   strokeWidth: 1,
                   dashArray: [4, 4],
                 ),
@@ -478,7 +468,7 @@ class _TabResumenDiaState extends State<TabResumenDia> {
               borderData: FlBorderData(show: false),
               barTouchData: BarTouchData(
                 touchTooltipData: BarTouchTooltipData(
-                  getTooltipColor: (_) => _onSurface,
+                  getTooltipColor: (_) => AppColors.onSurface,
                   getTooltipItem: (group, groupIndex, rod, rodIndex) {
                     final m     = metodos[group.x];
                     final label = _metodoPagoLabel(
@@ -487,12 +477,12 @@ class _TabResumenDiaState extends State<TabResumenDia> {
                         m['metodo']?.toString() ?? '');
                     return BarTooltipItem(
                       '$label\n',
-                      GoogleFonts.poppins(
+                      GoogleFonts.inter(
                           color: Colors.white, fontSize: 12),
                       children: [
                         TextSpan(
                           text: '\$${widget.fmt.format(rod.toY)}',
-                          style: GoogleFonts.poppins(
+                          style: GoogleFonts.inter(
                               color: color,
                               fontWeight: FontWeight.bold,
                               fontSize: 13),
@@ -515,10 +505,10 @@ class _TabResumenDiaState extends State<TabResumenDia> {
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('Distribución de Pagos',
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
-                color: _onSurface)),
+                color: AppColors.onSurface)),
         const SizedBox(height: 16),
         SizedBox(
           height: 160,
@@ -534,7 +524,7 @@ class _TabResumenDiaState extends State<TabResumenDia> {
                   color: col,
                   radius: 55,
                   title:  '${pct.toStringAsFixed(0)}%',
-                  titleStyle: GoogleFonts.poppins(
+                  titleStyle: GoogleFonts.inter(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                       color: Colors.white),
@@ -562,8 +552,8 @@ class _TabResumenDiaState extends State<TabResumenDia> {
               ),
               const SizedBox(width: 6),
               Text('$label ($cant)',
-                  style: GoogleFonts.poppins(
-                      fontSize: 11, color: _onSurfVar)),
+                  style: GoogleFonts.inter(
+                      fontSize: 11, color: AppColors.onSurfaceVariant)),
             ]);
           }).toList(),
         ),
@@ -580,20 +570,20 @@ class _TabResumenDiaState extends State<TabResumenDia> {
           Container(
             padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
-              color: _primaryBg,
+              color: AppColors.mintLight,
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(Icons.savings_rounded,
-                size: 16, color: _primary),
+                size: 16, color: AppColors.secondary),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               'Abonos ${_esHoy ? "de hoy" : _labelFecha}',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
-                  color: _onSurface),
+                  color: AppColors.onSurface),
             ),
           ),
           if (cont.abonosDia.isNotEmpty)
@@ -601,14 +591,14 @@ class _TabResumenDiaState extends State<TabResumenDia> {
               padding: const EdgeInsets.symmetric(
                   horizontal: 10, vertical: 3),
               decoration: BoxDecoration(
-                color: _primaryBg,
+                color: AppColors.mintLight,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text('${cont.abonosDia.length}',
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: _primary)),
+                      color: AppColors.secondary)),
             ),
         ]),
         const SizedBox(height: 16),
@@ -619,7 +609,7 @@ class _TabResumenDiaState extends State<TabResumenDia> {
             padding: const EdgeInsets.symmetric(
                 horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: _bg,
+              color: AppColors.surfaceContainerLow,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(children: [
@@ -643,30 +633,30 @@ class _TabResumenDiaState extends State<TabResumenDia> {
                   horizontal: 12, vertical: 12),
               decoration: BoxDecoration(
                 border: Border(
-                    bottom: BorderSide(color: _border)),
+                    bottom: BorderSide(color: AppColors.outlineVariant)),
               ),
               child: Row(children: [
                 Expanded(
                   flex: 1,
                   child: Text(hora,
-                      style: GoogleFonts.poppins(
-                          fontSize: 12, color: _onSurfVar)),
+                      style: GoogleFonts.inter(
+                          fontSize: 12, color: AppColors.onSurfaceVariant)),
                 ),
                 Expanded(
                   flex: 3,
                   child: Text(cliente,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: _onSurface)),
+                          color: AppColors.onSurface)),
                 ),
                 Expanded(
                   flex: 3,
                   child: Text(empleado,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.poppins(
-                          fontSize: 12, color: _onSurfVar)),
+                      style: GoogleFonts.inter(
+                          fontSize: 12, color: AppColors.onSurfaceVariant)),
                 ),
                 Expanded(
                   flex: 2,
@@ -679,7 +669,7 @@ class _TabResumenDiaState extends State<TabResumenDia> {
                     ),
                     child: Text(
                       _metodoPagoLabel(metodo),
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
                           color: colorMet),
@@ -691,10 +681,10 @@ class _TabResumenDiaState extends State<TabResumenDia> {
                   child: Text(
                     '+\$${widget.fmt.format(monto)}',
                     textAlign: TextAlign.right,
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
-                        color: _primary),
+                        color: AppColors.secondary),
                   ),
                 ),
               ]),
@@ -714,20 +704,20 @@ class _TabResumenDiaState extends State<TabResumenDia> {
           Container(
             padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
-              color: _secondaryBg,
+              color: _transferBlueBg,
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(Icons.inventory_2_rounded,
-                size: 16, color: _secondary),
+                size: 16, color: _transferBlue),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               'Separados ${_esHoy ? "de hoy" : _labelFecha}',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
-                  color: _onSurface),
+                  color: AppColors.onSurface),
             ),
           ),
           if (cont.separadosDia.isNotEmpty)
@@ -735,14 +725,14 @@ class _TabResumenDiaState extends State<TabResumenDia> {
               padding: const EdgeInsets.symmetric(
                   horizontal: 10, vertical: 3),
               decoration: BoxDecoration(
-                color: _secondaryBg,
+                color: _transferBlueBg,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text('${cont.separadosDia.length}',
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: _secondary)),
+                      color: _transferBlue)),
             ),
         ]),
         const SizedBox(height: 16),
@@ -770,9 +760,9 @@ class _TabResumenDiaState extends State<TabResumenDia> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: _bg,
+        color: AppColors.surfaceContainerLow,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _border),
+        border: Border.all(color: AppColors.outlineVariant),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
@@ -782,14 +772,14 @@ class _TabResumenDiaState extends State<TabResumenDia> {
                 children: [
               Text(cliente,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                       fontWeight: FontWeight.w600,
                       fontSize: 13,
-                      color: _onSurface)),
+                      color: AppColors.onSurface)),
               Text(empleado,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.poppins(
-                      fontSize: 11, color: _onSurfVar)),
+                  style: GoogleFonts.inter(
+                      fontSize: 11, color: AppColors.onSurfaceVariant)),
             ]),
           ),
           Container(
@@ -800,7 +790,7 @@ class _TabResumenDiaState extends State<TabResumenDia> {
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(_estadoLabel(estado),
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
                     color: colorE)),
@@ -812,20 +802,20 @@ class _TabResumenDiaState extends State<TabResumenDia> {
           child: LinearProgressIndicator(
             value: pct,
             minHeight: 5,
-            backgroundColor: _border,
-            valueColor: AlwaysStoppedAnimation<Color>(_primary),
+            backgroundColor: AppColors.outlineVariant,
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.secondary),
           ),
         ),
         const SizedBox(height: 8),
         Row(children: [
-          _miniStat('Abonado', '\$${widget.fmt.format(abonado)}', _primary),
+          _miniStat('Abonado', '\$${widget.fmt.format(abonado)}', AppColors.secondary),
           const SizedBox(width: 16),
-          _miniStat('Saldo', '\$${widget.fmt.format(saldo)}', _danger),
+          _miniStat('Saldo', '\$${widget.fmt.format(saldo)}', AppColors.error),
           const Spacer(),
-          _miniStat('Total', '\$${widget.fmt.format(total)}', _onSurfVar),
+          _miniStat('Total', '\$${widget.fmt.format(total)}', AppColors.onSurfaceVariant),
         ]),
         if (detalles.isNotEmpty) ...[
-          Divider(height: 20, color: _border),
+          Divider(height: 20, color: AppColors.outlineVariant),
           ...detalles.take(3).map((d) => Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Row(children: [
@@ -833,30 +823,30 @@ class _TabResumenDiaState extends State<TabResumenDia> {
                     width: 4, height: 4,
                     margin: const EdgeInsets.only(right: 8),
                     decoration: BoxDecoration(
-                        color: _onSurfVar.withValues(alpha: 0.4),
+                        color: AppColors.onSurfaceVariant.withValues(alpha: 0.4),
                         shape: BoxShape.circle),
                   ),
                   Expanded(
                     child: Text(
                       d['producto_nombre']?.toString() ?? '',
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.poppins(
-                          fontSize: 11, color: _onSurfVar),
+                      style: GoogleFonts.inter(
+                          fontSize: 11, color: AppColors.onSurfaceVariant),
                     ),
                   ),
                   Text(
                     'x${d['cantidad']}  \$${widget.fmt.format(_d(d, 'subtotal'))}',
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
                         fontSize: 11,
-                        color: _onSurfVar.withValues(alpha: 0.7)),
+                        color: AppColors.onSurfaceVariant.withValues(alpha: 0.7)),
                   ),
                 ]),
               )),
           if (detalles.length > 3)
             Text('+ ${detalles.length - 3} más',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 10,
-                    color: _onSurfVar.withValues(alpha: 0.6))),
+                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.6))),
         ],
       ]),
     );
@@ -880,8 +870,8 @@ class _TabResumenDiaState extends State<TabResumenDia> {
           Expanded(
             child: Text(
               'Top Clientes ${_esHoy ? "de hoy" : _labelFecha}',
-              style: GoogleFonts.poppins(
-                  fontSize: 15, fontWeight: FontWeight.bold, color: _onSurface),
+              style: GoogleFonts.inter(
+                  fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.onSurface),
             ),
           ),
           if (cont.topClientes.isNotEmpty)
@@ -892,7 +882,7 @@ class _TabResumenDiaState extends State<TabResumenDia> {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text('${cont.topClientes.length}',
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                       fontSize: 11, fontWeight: FontWeight.bold,
                       color: const Color(0xFF7C3AED))),
             ),
@@ -922,9 +912,9 @@ class _TabResumenDiaState extends State<TabResumenDia> {
         SizedBox(
           width: 20,
           child: Text('${index + 1}',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   fontSize: 11, fontWeight: FontWeight.bold,
-                  color: _onSurfVar)),
+                  color: AppColors.onSurfaceVariant)),
         ),
         const SizedBox(width: 6),
         // Avatar
@@ -936,7 +926,7 @@ class _TabResumenDiaState extends State<TabResumenDia> {
           ),
           child: Center(
             child: Text(iniciales,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 12, fontWeight: FontWeight.bold,
                     color: avatarColor)),
           ),
@@ -947,15 +937,15 @@ class _TabResumenDiaState extends State<TabResumenDia> {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(c.nombre,
                 overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 13, fontWeight: FontWeight.w600,
-                    color: _onSurface)),
+                    color: AppColors.onSurface)),
             if (c.tierNombre != null && tierColor != null)
               Row(mainAxisSize: MainAxisSize.min, children: [
                 Icon(Icons.star_rounded, size: 10, color: tierColor),
                 const SizedBox(width: 3),
                 Text(c.tierNombre!,
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
                         fontSize: 10, fontWeight: FontWeight.w600,
                         color: tierColor)),
               ]),
@@ -964,12 +954,12 @@ class _TabResumenDiaState extends State<TabResumenDia> {
         // Stats
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Text('\$${widget.fmt.format(c.totalPeriodo)}',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   fontSize: 13, fontWeight: FontWeight.bold,
-                  color: _primary)),
+                  color: AppColors.secondary)),
           Text('${c.numCompras} compra${c.numCompras != 1 ? 's' : ''}',
-              style: GoogleFonts.poppins(
-                  fontSize: 10, color: _onSurfVar)),
+              style: GoogleFonts.inter(
+                  fontSize: 10, color: AppColors.onSurfaceVariant)),
         ]),
       ]),
     );
@@ -990,9 +980,9 @@ class _TabResumenDiaState extends State<TabResumenDia> {
         padding: const EdgeInsets.all(20),
         margin: const EdgeInsets.only(bottom: 4),
         decoration: BoxDecoration(
-          color: _surface,
+          color: AppColors.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: _border),
+          border: Border.all(color: AppColors.outlineVariant),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.04),
@@ -1008,20 +998,20 @@ class _TabResumenDiaState extends State<TabResumenDia> {
         flex: flex,
         child: Text(label,
             textAlign: right ? TextAlign.right : TextAlign.left,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
-                color: _onSurfVar)),
+                color: AppColors.onSurfaceVariant)),
       );
 
   Widget _miniStat(String label, String value, Color color) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label,
-              style: GoogleFonts.poppins(
-                  fontSize: 9, color: _onSurfVar.withValues(alpha: 0.7))),
+              style: GoogleFonts.inter(
+                  fontSize: 9, color: AppColors.onSurfaceVariant.withValues(alpha: 0.7))),
           Text(value,
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   fontSize: 12, fontWeight: FontWeight.bold, color: color)),
         ],
       );
@@ -1031,12 +1021,12 @@ class _TabResumenDiaState extends State<TabResumenDia> {
         child: Center(
           child: Column(children: [
             Icon(icon, size: 36,
-                color: _onSurfVar.withValues(alpha: 0.3)),
+                color: AppColors.onSurfaceVariant.withValues(alpha: 0.3)),
             const SizedBox(height: 8),
             Text(msg,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 12,
-                    color: _onSurfVar.withValues(alpha: 0.5))),
+                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.5))),
           ]),
         ),
       );
@@ -1048,20 +1038,20 @@ class _TabResumenDiaState extends State<TabResumenDia> {
             child: Column(children: [
               Icon(Icons.bar_chart_rounded,
                   size: 52,
-                  color: _onSurfVar.withValues(alpha: 0.2)),
+                  color: AppColors.onSurfaceVariant.withValues(alpha: 0.2)),
               const SizedBox(height: 12),
               Text('Sin datos para $_labelFecha',
-                  style: GoogleFonts.poppins(
-                      fontSize: 14, color: _onSurfVar)),
+                  style: GoogleFonts.inter(
+                      fontSize: 14, color: AppColors.onSurfaceVariant)),
               const SizedBox(height: 16),
               TextButton.icon(
                 onPressed: _cargar,
                 icon: const Icon(Icons.refresh_rounded,
-                    size: 16, color: _primary),
+                    size: 16, color: AppColors.secondary),
                 label: Text('Reintentar',
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
                         fontWeight: FontWeight.w600,
-                        color: _primary)),
+                        color: AppColors.secondary)),
               ),
             ]),
           ),
@@ -1090,9 +1080,9 @@ class _TabResumenDiaState extends State<TabResumenDia> {
 
   Color _metodoPagoColor(String m) {
     switch (m) {
-      case 'transferencia': return _secondary;
-      case 'tarjeta':       return _warning;
-      default:              return _primary;
+      case 'transferencia': return _transferBlue;
+      case 'tarjeta':       return AppColors.warning;
+      default:              return AppColors.secondary;
     }
   }
 
@@ -1106,17 +1096,17 @@ class _TabResumenDiaState extends State<TabResumenDia> {
 
   Color _colorEstado(String e) {
     switch (e) {
-      case 'completado': return _primary;
-      case 'cancelado':  return _danger;
-      default:           return _warning;
+      case 'completado': return AppColors.secondary;
+      case 'cancelado':  return AppColors.error;
+      default:           return AppColors.warning;
     }
   }
 
   Color _bgEstado(String e) {
     switch (e) {
-      case 'completado': return _primaryBg;
-      case 'cancelado':  return _dangerBg;
-      default:           return _warningBg;
+      case 'completado': return AppColors.mintLight;
+      case 'cancelado':  return AppColors.errorContainer;
+      default:           return AppColors.warningContainer;
     }
   }
 }

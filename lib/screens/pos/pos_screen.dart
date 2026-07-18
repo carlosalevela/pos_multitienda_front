@@ -19,9 +19,12 @@ import '../clientes/widgets/separado_form.dart';
 import '../../providers/notificaciones_provider.dart';
 import '../../services/recibo_pdf_service.dart';
 import '../../services/thermal_printer_service.dart';
+import '../../services/windows_printer_service.dart';
 import '../../providers/config_provider.dart';
 import '../../services/barcode_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import '../devoluciones/widgets/devolucion_form_sheet.dart';
 
 // ── Design system (Material You / Enterprise POS) ─────────
 const _kGreen          = Color(0xFF61DDAA);   // mint — igual que dashboard _C.green
@@ -79,6 +82,10 @@ class _PosScreenState extends State<PosScreen> {
   Timer? _debounceSearch;
   StreamSubscription<String>? _barcodeSub;
 
+  // Barcode scanner pulse indicator
+  bool   _scanActivo      = false;
+  Timer? _scanPulseTimer;
+
   @override
   void initState() {
     super.initState();
@@ -95,6 +102,7 @@ class _PosScreenState extends State<PosScreen> {
   @override
   void dispose() {
     _barcodeSub?.cancel();
+    _scanPulseTimer?.cancel();
     _notifProv?.detenerPolling();
     _searchCtrl.dispose();
     _montoCtrl.dispose();
@@ -181,10 +189,19 @@ class _PosScreenState extends State<PosScreen> {
 
   // ── Lector de código de barras ───────────────────────────
 
+  void _pulsarEscaner() {
+    setState(() => _scanActivo = true);
+    _scanPulseTimer?.cancel();
+    _scanPulseTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted) setState(() => _scanActivo = false);
+    });
+  }
+
   Future<void> _onBarcode(String codigo) async {
     if (!mounted) return;
     // Ignorar si hay un modal/diálogo encima (ej: buscador, separado form)
     if (ModalRoute.of(context)?.isCurrent == false) return;
+    _pulsarEscaner();
 
     final auth    = context.read<AuthProvider>();
     final tiendaId = auth.tiendaId > 0 ? auth.tiendaId : null;
@@ -518,6 +535,37 @@ class _PosScreenState extends State<PosScreen> {
           final ok = pos.parquearTicket();
           if (!ok) _showSnack('El carrito está vacío', _kAmber);
         },
+      ),
+
+      const SizedBox(width: 8),
+
+      // Indicador lector de código de barras
+      AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color:        _scanActivo ? _kGreenLight : _kSurfaceLow,
+          borderRadius: BorderRadius.circular(10),
+          border:       Border.all(
+            color: _scanActivo ? _kGreen : _kBorder,
+          ),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(
+            Icons.qr_code_scanner_rounded,
+            size: 16,
+            color: _scanActivo ? _kGreenDark : _kTextMuted,
+          ),
+          if (_scanActivo) ...[
+            const SizedBox(width: 5),
+            Text('OK',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: _kGreenDark,
+                )),
+          ],
+        ]),
       ),
 
       const SizedBox(width: 8),
@@ -966,68 +1014,86 @@ class _PosScreenState extends State<PosScreen> {
       // Items del carrito
       Expanded(child: _buildCartItems(pos)),
 
-      // Totales + acciones
+      // Zona 4 — Resumen financiero
       if (pos.carrito.isNotEmpty)
-        _buildTotalesSection(pos, auth),
+        _buildZonaResumen(pos),
+
+      // Zona 5 — Configuración de pago
+      if (pos.carrito.isNotEmpty)
+        _buildZonaPago(pos),
+
+      // Zona 6 — Acciones
+      if (pos.carrito.isNotEmpty)
+        _buildZonaAcciones(pos, auth),
     ]),
   );
 
   // ── Header del panel ─────────────────────────────────────
 
-  Widget _buildPanelHeader(PosProvider pos) => Container(
-    padding: const EdgeInsets.fromLTRB(18, 14, 14, 12),
-    decoration: const BoxDecoration(
-      border: Border(bottom: BorderSide(color: _kBorder)),
-    ),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        Expanded(
-          child: Text('Ticket Actual',
-              style: GoogleFonts.inter(
-                  fontSize: 17, fontWeight: FontWeight.w700, color: _kText)),
-        ),
-        TextButton.icon(
-          onPressed: _mostrarAsociarCliente,
-          icon: const Icon(Icons.person_add_rounded, size: 14),
-          label: const Text('Asociar Cliente'),
-          style: TextButton.styleFrom(
-            foregroundColor: _kGreenDark,
-            textStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+  Widget _buildPanelHeader(PosProvider pos) {
+    final totalItems = pos.carrito.fold(0, (s, i) => s + i.cantidad);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 13, 12, 11),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: _kBorder)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+          // Título + contador
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Ticket Actual',
+                  style: GoogleFonts.inter(
+                      fontSize: 16, fontWeight: FontWeight.w700, color: _kText)),
+              if (totalItems > 0)
+                Text('$totalItems artículo${totalItems != 1 ? "s" : ""}',
+                    style: GoogleFonts.inter(fontSize: 10, color: _kTextMuted)),
+            ]),
           ),
-        ),
-      ]),
+          // Asociar cliente — link de texto
+          GestureDetector(
+            onTap: _mostrarAsociarCliente,
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.person_add_rounded, size: 15, color: _kGreenDark),
+              const SizedBox(width: 4),
+              Text('Asociar Cliente',
+                  style: GoogleFonts.inter(
+                      fontSize: 12, fontWeight: FontWeight.w600, color: _kGreenDark)),
+            ]),
+          ),
+        ]),
 
-      // Tabs de tickets parkados
-      if (pos.hayTicketsParkados) ...[
-        const SizedBox(height: 8),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(children: [
-            _ticketTab(
-              label: pos.numeroActual != null ? '#${pos.numeroActual}' : 'Nuevo',
-              total: pos.total,
-              items: pos.carrito.fold(0, (s, i) => s + i.cantidad),
-              isActive: true,
-            ),
-            ...pos.ticketsParkados.asMap().entries.map((e) =>
-              Padding(
-                padding: const EdgeInsets.only(left: 6),
-                child: _ticketTab(
-                  label: '#${e.value.numero}',
-                  total: e.value.total,
-                  items: e.value.items,
-                  isActive: false,
-                  onTap: () => pos.restaurarTicket(e.key),
-                  onClose: () => _confirmarDescartarTicket(pos, e.key),
+        // Tabs de tickets parkados
+        if (pos.hayTicketsParkados) ...[
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              _ticketTab(
+                label: pos.numeroActual != null ? '#${pos.numeroActual}' : 'Nuevo',
+                total: pos.total,
+                items: pos.carrito.fold(0, (s, i) => s + i.cantidad),
+                isActive: true,
+              ),
+              ...pos.ticketsParkados.asMap().entries.map((e) =>
+                Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: _ticketTab(
+                    label: '#${e.value.numero}',
+                    total: e.value.total,
+                    items: e.value.items,
+                    isActive: false,
+                    onTap: () => pos.restaurarTicket(e.key),
+                    onClose: () => _confirmarDescartarTicket(pos, e.key),
+                  ),
                 ),
               ),
-            ),
-          ]),
-        ),
-      ],
-    ]),
-  );
+            ]),
+          ),
+        ],
+      ]),
+    );
+  }
 
   Widget _ticketTab({
     required String label,
@@ -1070,87 +1136,82 @@ class _PosScreenState extends State<PosScreen> {
 
   Widget _buildClienteCard() {
     if (_clienteSeleccionado == null) return const SizedBox.shrink();
-    final tier = _clienteSeleccionado!.tierInfo;
-    final tierColor = tier != null ? _hexFromString(tier.colorHex) : _kGreen;
+
+    final tier      = _clienteSeleccionado!.tierInfo;
+    final tierColor = tier != null ? _hexFromString(tier.colorHex) : _kGreenDark;
+    final inicial   = _clienteSeleccionado!.nombre.isNotEmpty
+        ? _clienteSeleccionado!.nombre[0].toUpperCase()
+        : '?';
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
-        color: _kSurfaceLow,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: tier != null ? tierColor.withValues(alpha: 0.4) : _kBorder),
+        color: _kGreenLight,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _kGreenDark.withValues(alpha: 0.22)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            Container(
-              width: 38, height: 38,
-              decoration: BoxDecoration(
-                color: (tier != null ? tierColor : _kGreen).withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.account_circle_rounded,
-                  color: tier != null ? tierColor : _kGreenDark, size: 22),
-            ),
-            const SizedBox(width: 10),
-            Expanded(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_clienteSeleccionado!.nombreCompleto,
-                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: _kText),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text(
-                  'ID: ${_clienteSeleccionado!.cedulaNit ?? '–'}',
-                  style: GoogleFonts.inter(fontSize: 11, color: _kTextSub),
-                ),
-              ],
-            )),
-            IconButton(
-              onPressed: () {
-                setState(() {
-                  _clienteSeleccionado = null;
-                  _separadosCliente    = 0;
-                });
-                context.read<PosProvider>().setDescuento(0);
-                _descuentoCtrl.clear();
-              },
-              icon: const Icon(Icons.close_rounded, size: 16, color: _kTextMuted),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-            ),
-          ]),
-
-          // Badge del tier
-          if (tier != null) ...[
-            const SizedBox(height: 8),
-            Row(children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: tierColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: tierColor.withValues(alpha: 0.3)),
-                ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.star_rounded, size: 11, color: tierColor),
+      child: Row(children: [
+        // Avatar con inicial
+        Container(
+          width: 30, height: 30,
+          decoration: BoxDecoration(
+            color: tierColor.withValues(alpha: 0.14),
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(inicial,
+                style: GoogleFonts.inter(
+                    color: tierColor, fontSize: 13, fontWeight: FontWeight.w800)),
+          ),
+        ),
+        const SizedBox(width: 10),
+        // Nombre + tier
+        Expanded(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_clienteSeleccionado!.nombreCompleto,
+                style: GoogleFonts.inter(
+                    fontSize: 12, fontWeight: FontWeight.w700, color: _kText),
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+            if (tier != null)
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.star_rounded, size: 10, color: tierColor),
+                const SizedBox(width: 3),
+                Text(tier.nombre,
+                    style: GoogleFonts.inter(
+                        fontSize: 10, color: tierColor, fontWeight: FontWeight.w600)),
+                if (tier.descuentoPct > 0) ...[
                   const SizedBox(width: 4),
-                  Text(tier.nombre,
-                      style: GoogleFonts.inter(
-                          fontSize: 11, fontWeight: FontWeight.w700, color: tierColor)),
-                ]),
-              ),
-              const SizedBox(width: 6),
-              if (tier.descuentoPct > 0)
-                Text(
-                  '${tier.descuentoPct.toStringAsFixed(tier.descuentoPct % 1 == 0 ? 0 : 1)}% desc. aplicado',
-                  style: GoogleFonts.inter(fontSize: 11, color: _kTextSub),
-                ),
-            ]),
+                  Text(
+                    '· ${tier.descuentoPct.toStringAsFixed(tier.descuentoPct % 1 == 0 ? 0 : 1)}% desc.',
+                    style: GoogleFonts.inter(fontSize: 10, color: _kTextMuted),
+                  ),
+                ],
+              ])
+            else if (_clienteSeleccionado!.cedulaNit != null &&
+                     _clienteSeleccionado!.cedulaNit!.isNotEmpty)
+              Text(_clienteSeleccionado!.cedulaNit!,
+                  style: GoogleFonts.inter(fontSize: 10, color: _kTextMuted)),
           ],
-        ],
-      ),
+        )),
+        // Quitar cliente
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _clienteSeleccionado = null;
+              _separadosCliente    = 0;
+            });
+            context.read<PosProvider>().setDescuento(0);
+            _descuentoCtrl.clear();
+          },
+          child: const Padding(
+            padding: EdgeInsets.all(4),
+            child: Icon(Icons.close_rounded, size: 15, color: _kTextMuted),
+          ),
+        ),
+      ]),
     );
   }
 
@@ -1164,23 +1225,17 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Widget _buildSeparadosBadge() => Container(
-    margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-    decoration: BoxDecoration(
-      color: const Color(0xFFD5E3FD),
-      borderRadius: BorderRadius.circular(8),
-    ),
+    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+    color: const Color(0xFFD5E3FD),
     child: Row(children: [
-      const Icon(Icons.bookmark_rounded, size: 14, color: _kGreenDark),
+      const Icon(Icons.bookmark_rounded, size: 14, color: Color(0xFF3A485C)),
       const SizedBox(width: 8),
-      Expanded(
-        child: Text(
-          'ESTE CLIENTE TIENE $_separadosCliente '
-          'APARTADO${_separadosCliente > 1 ? 'S' : ''} PENDIENTE${_separadosCliente > 1 ? 'S' : ''}',
-          style: GoogleFonts.inter(
-              fontSize: 10, fontWeight: FontWeight.w700,
-              color: _kGreenDark, letterSpacing: 0.3),
-        ),
+      Text(
+        'Este cliente tiene $_separadosCliente '
+        'apartado${_separadosCliente > 1 ? 's' : ''} pendiente${_separadosCliente > 1 ? 's' : ''}',
+        style: GoogleFonts.inter(
+            fontSize: 11, fontWeight: FontWeight.w600,
+            color: const Color(0xFF3A485C)),
       ),
     ]),
   );
@@ -1204,255 +1259,337 @@ class _PosScreenState extends State<PosScreen> {
       ]));
     }
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       itemCount: pos.carrito.length,
-      separatorBuilder: (_, sep) => const Divider(height: 16, color: _kBorder),
+      separatorBuilder: (_, sep) => const Divider(height: 1, color: _kBorder),
       itemBuilder: (_, i) => _buildCartItem(pos, i),
     );
   }
 
   Widget _buildCartItem(PosProvider pos, int i) {
     final item = pos.carrito[i];
-    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-      // Thumbnail
-      Container(
-        width: 50, height: 60,
-        decoration: BoxDecoration(
-          color: _kSurfaceLow,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: _kBorder),
+        // Thumbnail
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: SizedBox(
+            width: 56, height: 68,
+            child: item.producto.imagen != null && item.producto.imagen!.isNotEmpty
+                ? Image.network(item.producto.imagen!, fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _iconProducto(false, item.producto.categoria))
+                : _iconProducto(false, item.producto.categoria),
+          ),
         ),
-        clipBehavior: Clip.antiAlias,
-        child: item.producto.imagen != null && item.producto.imagen!.isNotEmpty
-            ? Image.network(item.producto.imagen!, fit: BoxFit.cover,
-                errorBuilder: (_, err, st) =>
-                    const Icon(Icons.inventory_2_rounded, color: _kBorder, size: 20))
-            : const Icon(Icons.inventory_2_rounded, color: _kBorder, size: 20),
-      ),
-      const SizedBox(width: 10),
+        const SizedBox(width: 12),
 
-      Expanded(child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            Expanded(
-              child: Text(item.producto.nombre,
-                  style: GoogleFonts.inter(
-                      fontSize: 12, fontWeight: FontWeight.w700, color: _kText),
-                  maxLines: 2, overflow: TextOverflow.ellipsis),
-            ),
-            GestureDetector(
-              onTap: () => pos.eliminarItem(i),
-              child: const Padding(
-                padding: EdgeInsets.only(left: 4),
-                child: Icon(Icons.delete_outline_rounded, size: 16, color: _kTextMuted),
+        // Info
+        Expanded(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(
+                child: Text(item.producto.nombre,
+                    style: GoogleFonts.inter(
+                        fontSize: 12, fontWeight: FontWeight.w700, color: _kText),
+                    maxLines: 2, overflow: TextOverflow.ellipsis),
               ),
-            ),
-          ]),
-          const SizedBox(height: 3),
-          Row(children: [
-            Expanded(
-              child: Text(
-                item.producto.referencia.isNotEmpty ? item.producto.referencia : 'Sin ref.',
-                style: GoogleFonts.inter(fontSize: 10, color: _kTextMuted),
+              GestureDetector(
+                onTap: () => pos.eliminarItem(i),
+                child: const Padding(
+                  padding: EdgeInsets.only(left: 6),
+                  child: Icon(Icons.delete_outline_rounded, size: 16, color: _kBorder),
+                ),
               ),
-            ),
-            if (item.aplicaMayoreo)
+            ]),
+            const SizedBox(height: 3),
+            Row(children: [
+              Flexible(
+                child: Text(
+                  item.producto.referencia.isNotEmpty
+                      ? item.producto.referencia : 'Sin ref.',
+                  style: GoogleFonts.inter(fontSize: 10, color: _kTextMuted),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (item.aplicaMayoreo) ...[
+                const SizedBox(width: 5),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: _kGreenDark,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.local_offer_rounded, size: 8, color: Colors.white),
+                    const SizedBox(width: 2),
+                    Text('Mayoreo',
+                        style: GoogleFonts.inter(
+                            fontSize: 9, fontWeight: FontWeight.w700, color: Colors.white)),
+                  ]),
+                ),
+              ],
+            ]),
+            const SizedBox(height: 8),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              // Stepper
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0B7A53),
-                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: _kBorder),
+                  borderRadius: BorderRadius.circular(6),
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.local_offer_rounded,
-                      size: 9, color: Colors.white),
-                  const SizedBox(width: 3),
-                  Text('Mayoreo',
-                      style: GoogleFonts.inter(
-                          fontSize: 9, fontWeight: FontWeight.w700,
-                          color: Colors.white)),
+                  _qtyBtn(Icons.remove_rounded, () => pos.decrementar(i)),
+                  SizedBox(
+                    width: 28,
+                    child: Text('${item.cantidad}',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.inter(
+                            fontSize: 12, fontWeight: FontWeight.w700, color: _kText)),
+                  ),
+                  _qtyBtn(Icons.add_rounded, () => pos.incrementar(i)),
                 ]),
               ),
-          ]),
-          const SizedBox(height: 6),
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            // Stepper
-            Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: _kBorder),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                _qtyBtn(Icons.remove_rounded, () => pos.decrementar(i)),
-                SizedBox(
-                  width: 30,
-                  child: Text('${item.cantidad}',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.inter(
-                          fontSize: 13, fontWeight: FontWeight.w700, color: _kText)),
-                ),
-                _qtyBtn(Icons.add_rounded, () => pos.incrementar(i)),
-              ]),
-            ),
-            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text('\$${item.subtotal.toStringAsFixed(0)}',
-                  style: GoogleFonts.inter(
-                      fontSize: 14, fontWeight: FontWeight.w800,
-                      color: item.aplicaMayoreo
-                          ? const Color(0xFF0B7A53)
-                          : _kText)),
-              if (item.aplicaMayoreo)
-                Text('\$${item.precioUnitario.toStringAsFixed(0)} c/u',
+              // Precio
+              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Text('\$${item.subtotal.toStringAsFixed(0)}',
                     style: GoogleFonts.inter(
-                        fontSize: 9, color: const Color(0xFF0B7A53))),
+                        fontSize: 13, fontWeight: FontWeight.w700,
+                        color: item.aplicaMayoreo ? _kGreenDark : _kText)),
+                if (item.cantidad > 1)
+                  Text('\$${item.precioUnitario.toStringAsFixed(0)} c/u',
+                      style: GoogleFonts.inter(fontSize: 9, color: _kTextMuted)),
+              ]),
             ]),
-          ]),
-        ],
-      )),
-    ]);
+          ],
+        )),
+      ]),
+    );
   }
 
   // ══════════════════════════════════════════════════════════
-  // TOTALES + ACCIONES
+  // ZONA 4 — RESUMEN FINANCIERO (solo lectura, sin inputs)
   // ══════════════════════════════════════════════════════════
 
-  Widget _buildTotalesSection(PosProvider pos, AuthProvider auth) => Container(
-    padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+  Widget _buildZonaResumen(PosProvider pos) => Container(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
     decoration: const BoxDecoration(
       color: _kCard,
       border: Border(top: BorderSide(color: _kBorder)),
     ),
-    child: Column(children: [
-
-      // Totals
-      _totalRow('Subtotal', '\$${pos.total.toStringAsFixed(0)}', small: true),
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
       if (pos.descuento > 0) ...[
-        const SizedBox(height: 4),
-        _totalRow('Descuento', '-\$${pos.descuento.toStringAsFixed(0)}',
-            small: true, color: _kGreenDark),
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text('Subtotal',
+              style: GoogleFonts.inter(fontSize: 12, color: _kTextMuted)),
+          Text('\$${pos.total.toStringAsFixed(0)}',
+              style: GoogleFonts.inter(fontSize: 12, color: _kTextMuted)),
+        ]),
+        const SizedBox(height: 3),
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text('Descuento',
+              style: GoogleFonts.inter(fontSize: 12, color: _kGreenDark)),
+          Text('−\$${pos.descuento.toStringAsFixed(0)}',
+              style: GoogleFonts.inter(
+                  fontSize: 12, fontWeight: FontWeight.w600, color: _kGreenDark)),
+        ]),
+        const SizedBox(height: 8),
+        const Divider(height: 1, color: _kBorder),
+        const SizedBox(height: 8),
       ],
-      const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: Divider(color: _kBorder, height: 1),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          Text('Total',
+              style: GoogleFonts.inter(
+                  fontSize: 13, fontWeight: FontWeight.w600, color: _kTextSub)),
+          Text('\$${pos.totalConDescuento.toStringAsFixed(0)}',
+              style: GoogleFonts.inter(
+                  fontSize: 26, fontWeight: FontWeight.w800, color: _kText)),
+        ],
       ),
-      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text('Total',
-            style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w700, color: _kText)),
-        Text('\$${pos.totalConDescuento.toStringAsFixed(0)}',
-            style: GoogleFonts.inter(fontSize: 26, fontWeight: FontWeight.w800, color: _kText)),
-      ]),
+    ]),
+  );
 
-      const SizedBox(height: 12),
+  // ══════════════════════════════════════════════════════════
+  // ZONA 5 — CONFIGURACIÓN DE PAGO (inputs, método, efectivo)
+  // ══════════════════════════════════════════════════════════
 
-      // Descuento + atajos %
+  Widget _buildZonaPago(PosProvider pos) => Container(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+    decoration: const BoxDecoration(
+      color: _kSurfaceLow,
+      border: Border.symmetric(horizontal: BorderSide(color: _kBorder)),
+    ),
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
       _buildDescuentoField(pos),
       const SizedBox(height: 10),
-
-      // Métodos de pago
       _buildMetodosPago(pos),
-      const SizedBox(height: 10),
-
-      // Efectivo
       if (pos.metodoPago == 'efectivo') ...[
-        _buildEfectivoSection(pos),
         const SizedBox(height: 10),
+        _buildEfectivoSection(pos),
+      ],
+    ]),
+  );
+
+  // ══════════════════════════════════════════════════════════
+  // ZONA 6 — ACCIONES (cobrar, imprimir, separar)
+  // ══════════════════════════════════════════════════════════
+
+  Widget _buildZonaAcciones(PosProvider pos, AuthProvider auth) => Container(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+    color: _kCard,
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      if (pos.errorMsg.isNotEmpty) ...[
+        _msgBanner(pos.errorMsg, isError: true),
+        const SizedBox(height: 8),
+      ],
+      if (pos.successMsg.isNotEmpty) ...[
+        _msgBanner(pos.successMsg, isError: false),
+        const SizedBox(height: 8),
       ],
 
-      // Mensajes
-      if (pos.errorMsg.isNotEmpty) _msgBanner(pos.errorMsg, isError: true),
-      if (pos.successMsg.isNotEmpty) _msgBanner(pos.successMsg, isError: false),
+      // Banner sugerencia cliente
+      Builder(builder: (_) {
+        final config = context.read<ConfigProvider>();
+        final mostrar = config.sugerirCliente
+            && _clienteSeleccionado == null
+            && pos.totalConDescuento >= config.umbralSugerirCliente;
+        if (!mostrar) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFECFDF5),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _kGreenDark.withValues(alpha: 0.3)),
+            ),
+            child: Row(children: [
+              const Icon(Icons.person_add_rounded, size: 16, color: _kGreenDark),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '¿Registrar cliente para acumular puntos?',
+                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600,
+                      color: _kGreenDark),
+                ),
+              ),
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: _mostrarAsociarCliente,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: _kGreenDark,
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                  child: Text('Asociar',
+                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700,
+                          color: Colors.white)),
+                ),
+              ),
+            ]),
+          ),
+        );
+      }),
 
-      // Botones principales
+      // Separar | Cobrar — 2 columnas iguales
       Row(children: [
-        // Separar pedido
+        // Separar
         Expanded(
-          flex: 5,
-          child: OutlinedButton.icon(
-            onPressed: pos.carrito.isEmpty ? null : () => _abrirSeparado(pos, auth),
-            icon: const Icon(Icons.bookmark_add_rounded, size: 15),
-            label: const Text('Separar'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: _kText,
-              side: const BorderSide(color: _kBorder),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              padding: const EdgeInsets.symmetric(vertical: 13),
-              textStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+          child: GestureDetector(
+            onTap: pos.carrito.isEmpty ? null : () => _abrirSeparado(pos, auth),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: _kSurfaceLow,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _kBorder),
+              ),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.bookmark_add_rounded, size: 20, color: _kTextSub),
+                const SizedBox(height: 4),
+                Text('Separar Pedido',
+                    style: GoogleFonts.inter(
+                        fontSize: 11, fontWeight: FontWeight.w600, color: _kTextSub)),
+              ]),
             ),
           ),
         ),
         const SizedBox(width: 8),
-        // Opciones de cobro apiladas
+        // Cobrar
         Expanded(
-          flex: 6,
-          child: Column(children: [
-            // Cobrar sin imprimir
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: pos.procesando ? null : () {
-                  _montoCtrl.clear();
-                  _descuentoCtrl.clear();
-                  pos.cobrar(auth.tiendaId);
-                },
-                icon: pos.procesando
-                    ? const SizedBox(width: 14, height: 14,
+          child: GestureDetector(
+            onTap: pos.procesando ? null : () {
+              _montoCtrl.clear();
+              _descuentoCtrl.clear();
+              pos.cobrar(auth.tiendaId, clienteId: _clienteSeleccionado?.id);
+              setState(() => _clienteSeleccionado = null);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: _kGreenDark,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                pos.procesando
+                    ? const SizedBox(width: 20, height: 20,
                         child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Icon(Icons.check_rounded, size: 15),
-                label: Text(pos.procesando ? 'Procesando…' : 'Cobrar'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _kGreen,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(vertical: 11),
-                  textStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
-                ),
-              ),
+                    : const Icon(Icons.shopping_cart_checkout_rounded,
+                        size: 20, color: Colors.white),
+                const SizedBox(height: 4),
+                Text(pos.procesando ? 'Procesando…' : 'Completar Venta',
+                    style: GoogleFonts.inter(
+                        fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white)),
+              ]),
             ),
-            const SizedBox(height: 5),
-            // Cobrar e imprimir recibo
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: pos.procesando ? null : () => _cobrarEImprimir(pos, auth),
-                icon: const Icon(Icons.print_rounded, size: 15),
-                label: const Text('Cobrar e Imprimir'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _kGreenDark,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(vertical: 11),
-                  textStyle: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700),
-                ),
-              ),
-            ),
-          ]),
+          ),
         ),
       ]),
 
       const SizedBox(height: 8),
 
-      // Quick actions
+      // Quick actions — 4 íconos
       Row(children: [
-        Expanded(child: _quickAction(
-            Icons.percent_rounded, 'Desc.', color: _kGreenDark, onTap: () {})),
+        _quickIcon(Icons.percent_rounded,
+            onTap: () => _mostrarDialogPorcentaje(pos)),
         const SizedBox(width: 6),
-        Expanded(child: _quickAction(
-            Icons.sticky_note_2_outlined, 'Nota', color: _kGreenDark, onTap: () {})),
+        _quickIcon(Icons.print_rounded,
+            onTap: () => _cobrarEImprimir(pos, auth)),
         const SizedBox(width: 6),
-        Expanded(child: _quickAction(
-            Icons.replay_rounded, 'Dev.', color: _kGreenDark, onTap: () {})),
+        _quickIcon(Icons.replay_rounded,
+            onTap: () => DevolucionFormSheet.show(context, onCreada: (_) {})),
         const SizedBox(width: 6),
-        Expanded(child: _quickAction(
-            Icons.delete_sweep_rounded, 'Vaciar',
+        _quickIcon(Icons.delete_sweep_rounded,
             color: _kError, bg: _kErrorBg,
-            onTap: () => _confirmarLimpiar(pos))),
+            onTap: () => _confirmarLimpiar(pos)),
       ]),
     ]),
   );
+
+  Widget _quickIcon(IconData icon,
+      {required VoidCallback onTap,
+      Color color = _kTextSub,
+      Color bg = _kSurfaceLow}) =>
+    Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 9),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 18, color: color),
+        ),
+      ),
+    );
 
   Widget _totalRow(String label, String value,
       {bool small = false, Color? color}) =>
@@ -1463,24 +1600,6 @@ class _PosScreenState extends State<PosScreen> {
           fontSize: small ? 13 : 16, fontWeight: FontWeight.w700,
           color: color ?? _kText)),
     ]);
-
-  Widget _quickAction(IconData icon, String label,
-      {required Color color, Color? bg, required VoidCallback onTap}) =>
-    GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: bg ?? _kSurfaceLow,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(height: 2),
-          Text(label, style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.w600)),
-        ]),
-      ),
-    );
 
   // ── Campo descuento ──────────────────────────────────────
 
@@ -1507,12 +1626,30 @@ class _PosScreenState extends State<PosScreen> {
               borderRadius: BorderRadius.circular(10),
               borderSide: const BorderSide(color: _kGreen, width: 2)),
           suffixIcon: pos.descuento > 0
-              ? IconButton(
-                  icon: const Icon(Icons.close_rounded, size: 14, color: _kTextMuted),
-                  onPressed: () {
-                    _descuentoCtrl.clear();
-                    pos.setDescuento(0);
-                  })
+              ? Row(mainAxisSize: MainAxisSize.min, children: [
+                  if (pos.total > 0)
+                    Container(
+                      margin: const EdgeInsets.only(right: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: _kGreenLight,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: _kGreenDark.withValues(alpha: 0.25)),
+                      ),
+                      child: Text(
+                        '${(pos.descuento / pos.total * 100).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}%',
+                        style: GoogleFonts.inter(
+                            fontSize: 11, fontWeight: FontWeight.w700,
+                            color: _kGreenDark),
+                      ),
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 14, color: _kTextMuted),
+                    onPressed: () {
+                      _descuentoCtrl.clear();
+                      pos.setDescuento(0);
+                    }),
+                ])
               : null,
         ),
         onChanged: (v) => pos.setDescuento(double.tryParse(v) ?? 0),
@@ -1676,137 +1813,279 @@ class _PosScreenState extends State<PosScreen> {
     showDialog(
       context: context,
       builder: (ctx) {
-        final localCtrl = TextEditingController();
-        bool buscando   = false;
+        final buscarCtrl   = TextEditingController();
+        final nombreCtrl   = TextEditingController();
+        final apellidoCtrl = TextEditingController();
+        final telefonoCtrl = TextEditingController();
+        final cedulaCtrl   = TextEditingController();
+        bool buscando  = false;
+        bool creando   = false;
+        bool guardando = false;
+        String? errorCrear;
 
-        return StatefulBuilder(
-          builder: (ctx, setS) => AlertDialog(
+        return StatefulBuilder(builder: (ctx, setS) {
+
+          // ── Modo búsqueda ─────────────────────────────────
+          if (!creando) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(children: [
+                const Icon(Icons.person_search_rounded, color: _kGreenDark, size: 20),
+                const SizedBox(width: 8),
+                Text('Asociar Cliente',
+                    style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700, color: _kText)),
+              ]),
+              content: SizedBox(
+                width: 380, height: 320,
+                child: Column(children: [
+                  TextField(
+                    controller: buscarCtrl,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      hintText: 'Buscar por nombre o cédula…',
+                      hintStyle: GoogleFonts.inter(color: _kTextMuted, fontSize: 13),
+                      prefixIcon: const Icon(Icons.search_rounded, size: 18, color: _kGreenDark),
+                      suffixIcon: buscando
+                          ? const Padding(padding: EdgeInsets.all(12),
+                              child: SizedBox(width: 16, height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: _kGreenDark)))
+                          : null,
+                      filled: true, fillColor: _kSurfaceLow,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: _kBorder)),
+                      enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: _kBorder)),
+                      focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: _kGreen, width: 2)),
+                    ),
+                    onChanged: (v) async {
+                      if (v.length < 2) return;
+                      setS(() => buscando = true);
+                      await clienteProv.cargarClientesSimple(q: v);
+                      if (ctx.mounted) setS(() => buscando = false);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: Consumer<ClienteProvider>(
+                      builder: (_, cp, __) => cp.clientesSimple.isEmpty
+                          ? Center(
+                              child: Text('Escribe al menos 2 caracteres para buscar',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.inter(color: _kTextMuted, fontSize: 13)))
+                          : ListView.builder(
+                              itemCount: cp.clientesSimple.length,
+                              itemBuilder: (_, i) {
+                                final c      = cp.clientesSimple[i];
+                                final tierC  = c.tierInfo;
+                                final tColor = tierC != null ? _hexFromString(tierC.colorHex) : _kGreen;
+                                return ListTile(
+                                  dense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                                  leading: Container(
+                                    width: 36, height: 36,
+                                    decoration: BoxDecoration(
+                                      color: tColor.withValues(alpha: 0.12),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Center(child: Text(
+                                      c.nombre.isNotEmpty ? c.nombre[0].toUpperCase() : '?',
+                                      style: GoogleFonts.inter(
+                                          color: tColor, fontSize: 14, fontWeight: FontWeight.w800),
+                                    )),
+                                  ),
+                                  title: Row(children: [
+                                    Expanded(
+                                      child: Text(c.nombreCompleto,
+                                          style: GoogleFonts.inter(
+                                              fontSize: 13, fontWeight: FontWeight.w600, color: _kText),
+                                          overflow: TextOverflow.ellipsis),
+                                    ),
+                                    if (tierC != null) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: tColor.withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                          Icon(Icons.star_rounded, size: 9, color: tColor),
+                                          const SizedBox(width: 2),
+                                          Text(tierC.nombre,
+                                              style: GoogleFonts.inter(
+                                                  fontSize: 10, fontWeight: FontWeight.w700,
+                                                  color: tColor)),
+                                        ]),
+                                      ),
+                                    ],
+                                  ]),
+                                  subtitle: (c.cedulaNit != null && c.cedulaNit!.isNotEmpty)
+                                      ? Text(c.cedulaNit!,
+                                          style: GoogleFonts.inter(fontSize: 11, color: _kTextMuted))
+                                      : null,
+                                  onTap: () async {
+                                    Navigator.pop(ctx);
+                                    setState(() => _clienteSeleccionado = c);
+                                    await _cargarClienteResumen(c.id);
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ),
+                ]),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text('Cancelar', style: GoogleFonts.inter(color: _kTextMuted)),
+                ),
+                TextButton.icon(
+                  onPressed: () => setS(() => creando = true),
+                  icon: const Icon(Icons.person_add_alt_1_rounded, size: 16, color: _kGreenDark),
+                  label: Text('Nuevo cliente',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: _kGreenDark)),
+                ),
+              ],
+            );
+          }
+
+          // ── Modo creación rápida ──────────────────────────
+          return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             title: Row(children: [
-              const Icon(Icons.person_search_rounded, color: _kGreenDark, size: 20),
-              const SizedBox(width: 8),
-              Text('Asociar Cliente',
+              GestureDetector(
+                onTap: guardando ? null : () => setS(() { creando = false; errorCrear = null; }),
+                child: const Icon(Icons.arrow_back_rounded, size: 20, color: _kTextSub),
+              ),
+              const SizedBox(width: 10),
+              Text('Nuevo Cliente',
                   style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700, color: _kText)),
             ]),
             content: SizedBox(
-              width: 380, height: 320,
-              child: Column(children: [
-                TextField(
-                  controller: localCtrl,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: 'Buscar por nombre o cédula…',
-                    hintStyle: GoogleFonts.inter(color: _kTextMuted, fontSize: 13),
-                    prefixIcon: const Icon(Icons.search_rounded, size: 18, color: _kGreenDark),
-                    suffixIcon: buscando
-                        ? const Padding(padding: EdgeInsets.all(12),
-                            child: SizedBox(width: 16, height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: _kGreenDark)))
-                        : null,
-                    filled: true, fillColor: _kSurfaceLow,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: _kBorder)),
-                    enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: _kBorder)),
-                    focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: _kGreen, width: 2)),
+              width: 380,
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                if (errorCrear != null) ...[
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: _kErrorBg,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _kError.withValues(alpha: 0.3)),
+                    ),
+                    child: Text(errorCrear!,
+                        style: GoogleFonts.inter(fontSize: 12, color: _kError)),
                   ),
-                  onChanged: (v) async {
-                    if (v.length < 2) return;
-                    setS(() => buscando = true);
-                    await clienteProv.cargarClientesSimple(q: v);
-                    if (ctx.mounted) setS(() => buscando = false);
-                  },
-                ),
+                ],
+                Row(children: [
+                  Expanded(child: _inputCrear(nombreCtrl,   'Nombre *',  Icons.person_rounded)),
+                  const SizedBox(width: 8),
+                  Expanded(child: _inputCrear(apellidoCtrl, 'Apellido',  null)),
+                ]),
                 const SizedBox(height: 10),
-                Expanded(
-                  child: Consumer<ClienteProvider>(
-                    builder: (_, cp, w) => cp.clientesSimple.isEmpty
-                        ? Center(
-                            child: Text('Escribe al menos 2 caracteres para buscar',
-                                textAlign: TextAlign.center,
-                                style: GoogleFonts.inter(color: _kTextMuted, fontSize: 13)))
-                        : ListView.builder(
-                            itemCount: cp.clientesSimple.length,
-                            itemBuilder: (_, i) {
-                              final c = cp.clientesSimple[i];
-                              final tierC = c.tierInfo;
-                              final tColor = tierC != null
-                                  ? _hexFromString(tierC.colorHex)
-                                  : _kGreen;
-                              return ListTile(
-                                dense: true,
-                                contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 2),
-                                leading: Container(
-                                  width: 36, height: 36,
-                                  decoration: BoxDecoration(
-                                    color: tColor.withValues(alpha: 0.12),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Center(child: Text(
-                                    c.nombre.isNotEmpty ? c.nombre[0].toUpperCase() : '?',
-                                    style: GoogleFonts.inter(
-                                        color: tColor, fontSize: 14, fontWeight: FontWeight.w800),
-                                  )),
-                                ),
-                                title: Row(children: [
-                                  Expanded(
-                                    child: Text(c.nombreCompleto,
-                                        style: GoogleFonts.inter(
-                                            fontSize: 13, fontWeight: FontWeight.w600, color: _kText),
-                                        overflow: TextOverflow.ellipsis),
-                                  ),
-                                  if (tierC != null) ...[
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: tColor.withValues(alpha: 0.12),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                        Icon(Icons.star_rounded, size: 9, color: tColor),
-                                        const SizedBox(width: 2),
-                                        Text(tierC.nombre,
-                                            style: GoogleFonts.inter(
-                                                fontSize: 10, fontWeight: FontWeight.w700,
-                                                color: tColor)),
-                                      ]),
-                                    ),
-                                  ],
-                                ]),
-                                subtitle: (c.cedulaNit != null && c.cedulaNit!.isNotEmpty)
-                                    ? Text(c.cedulaNit!,
-                                        style: GoogleFonts.inter(fontSize: 11, color: _kTextMuted))
-                                    : null,
-                                onTap: () async {
-                                  Navigator.pop(ctx);
-                                  setState(() => _clienteSeleccionado = c);
-                                  await _cargarClienteResumen(c.id);
-                                },
-                              );
-                            },
-                          ),
-                  ),
+                _inputCrear(telefonoCtrl, 'Teléfono *', Icons.phone_rounded,
+                    tipo: TextInputType.phone),
+                const SizedBox(height: 10),
+                _inputCrear(cedulaCtrl, 'Cédula / NIT (opcional)', Icons.badge_rounded,
+                    tipo: TextInputType.number),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('* Campos requeridos',
+                      style: GoogleFonts.inter(fontSize: 10, color: _kTextMuted)),
                 ),
               ]),
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text('Cancelar', style: GoogleFonts.inter(color: _kTextMuted)),
+                onPressed: guardando ? null : () => setS(() { creando = false; errorCrear = null; }),
+                child: Text('Volver', style: GoogleFonts.inter(color: _kTextMuted)),
+              ),
+              ElevatedButton(
+                onPressed: guardando ? null : () async {
+                  final nombre = nombreCtrl.text.trim();
+                  final tel    = telefonoCtrl.text.trim();
+                  if (nombre.isEmpty || tel.isEmpty) {
+                    setS(() => errorCrear = 'Nombre y teléfono son requeridos');
+                    return;
+                  }
+                  setS(() { guardando = true; errorCrear = null; });
+                  final res = await ClienteService().crearCliente({
+                    'nombre':    nombre,
+                    'apellido':  apellidoCtrl.text.trim(),
+                    'telefono':  tel,
+                    if (cedulaCtrl.text.trim().isNotEmpty)
+                      'cedula_nit': cedulaCtrl.text.trim(),
+                    'email':     '',
+                    'direccion': '',
+                    'activo':    true,
+                  });
+                  if (!ctx.mounted) return;
+                  if (res['success'] == true) {
+                    final nuevo = res['data'] as Cliente;
+                    Navigator.pop(ctx);
+                    setState(() => _clienteSeleccionado = nuevo);
+                    await _cargarClienteResumen(nuevo.id);
+                  } else {
+                    setS(() {
+                      guardando  = false;
+                      errorCrear = res['error']?.toString() ?? 'Error al crear cliente';
+                    });
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _kGreenDark,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                child: guardando
+                    ? const SizedBox(width: 16, height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : Text('Crear y asociar',
+                        style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
               ),
             ],
-          ),
-        );
+          );
+        });
       },
     );
   }
+
+  Widget _inputCrear(
+    TextEditingController ctrl,
+    String hint,
+    IconData? icon, {
+    TextInputType tipo = TextInputType.text,
+  }) =>
+    TextField(
+      controller: ctrl,
+      keyboardType: tipo,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: GoogleFonts.inter(color: _kTextMuted, fontSize: 13),
+        prefixIcon: icon != null ? Icon(icon, size: 17, color: _kTextSub) : null,
+        filled: true,
+        fillColor: _kSurfaceLow,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: _kBorder)),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: _kBorder)),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: _kGreen, width: 2)),
+      ),
+    );
 
   void _confirmarDescartarTicket(PosProvider pos, int index) {
     showDialog(
@@ -1839,12 +2118,19 @@ class _PosScreenState extends State<PosScreen> {
     final montoRecibido = pos.montoRecibido;
     final vuelto        = pos.vuelto;
     final metodoPago    = pos.metodoPago;
+    final clienteNombre  = _clienteSeleccionado?.nombre ?? '';
+    final clienteId      = _clienteSeleccionado?.id;
+    final tierAnteriorNombre = _clienteSeleccionado?.tierInfo?.nombre;
 
     _montoCtrl.clear();
     _descuentoCtrl.clear();
 
-    final ok = await pos.cobrar(auth.tiendaId);
+    final ok = await pos.cobrar(auth.tiendaId, clienteId: clienteId);
+    if (mounted) setState(() => _clienteSeleccionado = null);
     if (!ok || !mounted) return;
+
+    // Feedback de fidelización (no bloqueante — no afecta el flujo de impresión)
+    if (clienteId != null) _mostrarTierFeedback(clienteId, tierAnteriorNombre, clienteNombre);
 
     final factura    = pos.ultimaVenta?['numero_factura']?.toString() ?? '-';
     final config     = context.read<ConfigProvider>();
@@ -1852,43 +2138,53 @@ class _PosScreenState extends State<PosScreen> {
     final esCash     = metodoPago == 'efectivo' || metodoPago == 'mixto';
 
     try {
+      final paperSize = tipoPapel == '58mm' ? PaperSize.mm58 : PaperSize.mm80;
+
       if (tipoPapel != 'pdf' && ThermalPrinterService.isWebUsbSupported) {
+        // Web: WebUSB ESC/POS
         final device = await ThermalPrinterService.getOrRequestDevice();
         if (device != null) {
-          final paperSize = tipoPapel == '58mm' ? PaperSize.mm58 : PaperSize.mm80;
           final bytes = await ThermalPrinterService.buildRecibo(
-            items:         items,
-            numeroFactura: factura,
-            tiendaNombre:  auth.tiendaNombre,
-            empresaNombre: auth.empresaNombre,
-            cajeroNombre:  auth.nombre,
-            metodoPago:    metodoPago,
-            descuento:     descuento,
-            total:         total,
-            montoRecibido: montoRecibido,
-            vuelto:        vuelto,
-            paperSize:     paperSize,
+            items: items, numeroFactura: factura,
+            tiendaNombre: auth.tiendaNombre, empresaNombre: auth.empresaNombre,
+            cajeroNombre: auth.nombre, metodoPago: metodoPago,
+            descuento: descuento, total: total,
+            montoRecibido: montoRecibido, vuelto: vuelto, paperSize: paperSize,
+            clienteNombre: clienteNombre,
           );
           await ThermalPrinterService.printBytes(device, bytes);
-          // Abrir caja si el pago es en efectivo y la caja está conectada
           if (esCash && await ThermalPrinterService.hasCashDrawer()) {
             await ThermalPrinterService.kickDrawer(device);
           }
           return;
         }
+      } else if (tipoPapel != 'pdf' && !kIsWeb &&
+                 await WindowsPrinterService.hasSavedPrinter()) {
+        // Exe: ESC/POS RAW via WritePrinter (COM, USB, red — cualquier puerto)
+        final bytes = await ThermalPrinterService.buildRecibo(
+          items: items, numeroFactura: factura,
+          tiendaNombre: auth.tiendaNombre, empresaNombre: auth.empresaNombre,
+          cajeroNombre: auth.nombre, metodoPago: metodoPago,
+          descuento: descuento, total: total,
+          montoRecibido: montoRecibido, vuelto: vuelto, paperSize: paperSize,
+          clienteNombre: clienteNombre,
+        );
+        await WindowsPrinterService.printRaw(bytes);
+        return;
       }
-      // Fallback: diálogo PDF del navegador
+      // Fallback: PDF (abre en Edge o visor del sistema)
       await ReciboPdfService.imprimirRecibo(
-        items:         items,
-        numeroFactura: factura,
-        tiendaNombre:  auth.tiendaNombre,
-        empresaNombre: auth.empresaNombre,
-        cajeroNombre:  auth.nombre,
-        metodoPago:    metodoPago,
-        descuento:     descuento,
-        total:         total,
-        montoRecibido: montoRecibido,
-        vuelto:        vuelto,
+        items:          items,
+        numeroFactura:  factura,
+        tiendaNombre:   auth.tiendaNombre,
+        empresaNombre:  auth.empresaNombre,
+        cajeroNombre:   auth.nombre,
+        metodoPago:     metodoPago,
+        descuento:      descuento,
+        total:          total,
+        montoRecibido:  montoRecibido,
+        vuelto:         vuelto,
+        clienteNombre:  clienteNombre,
       );
     } catch (e) {
       if (!mounted) return;
@@ -1899,6 +2195,165 @@ class _PosScreenState extends State<PosScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ));
     }
+  }
+
+  Future<void> _mostrarTierFeedback(
+      int clienteId, String? tierAnterior, String clienteNombre) async {
+    try {
+      final cliente = await ClienteService().getCliente(clienteId);
+      if (!mounted || cliente == null) return;
+
+      final fmt         = NumberFormat('#,##0', 'es_CO');
+      final tierActual  = cliente.tierInfo;
+      final totalAcum   = cliente.totalAcumulado;
+      final subioTier   = tierActual != null && tierActual.nombre != tierAnterior;
+
+      Color bgColor;
+      String mensaje;
+      IconData icono;
+
+      if (subioTier) {
+        bgColor = const Color(0xFF7C3AED);
+        icono   = Icons.emoji_events_rounded;
+        mensaje = '¡$clienteNombre subió a ${tierActual!.nombre}! · Acumulado: \$${fmt.format(totalAcum)}';
+      } else if (tierActual != null) {
+        // Parsear color del tier
+        final hex = tierActual.colorHex.replaceAll('#', '');
+        bgColor   = Color(int.parse('FF$hex', radix: 16));
+        icono     = Icons.star_rounded;
+        mensaje   = '${tierActual.nombre} · $clienteNombre · Acumulado: \$${fmt.format(totalAcum)}';
+      } else {
+        bgColor = const Color(0xFF0F766E);
+        icono   = Icons.person_rounded;
+        mensaje = '$clienteNombre · Acumulado: \$${fmt.format(totalAcum)}';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Row(children: [
+          Icon(icono, color: Colors.white, size: 18),
+          const SizedBox(width: 10),
+          Expanded(child: Text(mensaje,
+              style: GoogleFonts.inter(fontSize: 13,
+                  fontWeight: FontWeight.w600, color: Colors.white))),
+        ]),
+        backgroundColor:   bgColor,
+        duration:          const Duration(seconds: 4),
+        behavior:          SnackBarBehavior.floating,
+        shape:             RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10)),
+        margin:            const EdgeInsets.all(16),
+      ));
+    } catch (_) {
+      // silencioso — no interrumpir el flujo de cobro si falla
+    }
+  }
+
+  void _mostrarDialogPorcentaje(PosProvider pos) {
+    final ctrl = TextEditingController();
+    const presets = [5, 10, 15, 20, 25, 30];
+    int? selPreset;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+          title: Row(children: [
+            const Icon(Icons.percent_rounded, size: 20, color: _kGreenDark),
+            const SizedBox(width: 8),
+            Text('Descuento rápido',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w700,
+                    fontSize: 16, color: _kText)),
+          ]),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            // Chips de preset
+            Wrap(spacing: 6, runSpacing: 6, children: presets.map((p) {
+              final sel = selPreset == p;
+              return GestureDetector(
+                onTap: () => setS(() {
+                  selPreset = p;
+                  ctrl.text = '$p';
+                }),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 130),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  decoration: BoxDecoration(
+                    color:   sel ? _kGreenDark : _kSurfaceLow,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                        color: sel ? _kGreenDark : _kBorder),
+                  ),
+                  child: Text('$p%',
+                      style: GoogleFonts.inter(
+                          fontSize: 13, fontWeight: FontWeight.w600,
+                          color: sel ? Colors.white : _kTextSub)),
+                ),
+              );
+            }).toList()),
+            const SizedBox(height: 14),
+            // Campo personalizado
+            TextField(
+              controller: ctrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,1}')),
+              ],
+              autofocus: true,
+              style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600,
+                  color: _kText),
+              decoration: InputDecoration(
+                hintText: 'Porcentaje personalizado',
+                hintStyle: GoogleFonts.inter(fontSize: 13, color: _kTextMuted),
+                suffixText: '%',
+                suffixStyle: GoogleFonts.inter(
+                    fontSize: 15, fontWeight: FontWeight.w700, color: _kGreenDark),
+                filled: true, fillColor: _kSurfaceLow,
+                isDense: true,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: _kBorder)),
+                enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: _kBorder)),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: _kGreenDark, width: 2)),
+              ),
+              onChanged: (_) => setS(() => selPreset = null),
+            ),
+          ]),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('Cancelar',
+                  style: GoogleFonts.inter(color: _kTextMuted, fontSize: 13)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _kGreenDark,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                final pct = double.tryParse(ctrl.text) ?? 0;
+                if (pct > 0) {
+                  pos.setDescuentoPorcentaje(pct.round());
+                  _descuentoCtrl.text = pos.descuento.toStringAsFixed(0);
+                }
+                Navigator.pop(ctx);
+              },
+              child: Text('Aplicar',
+                  style: GoogleFonts.inter(
+                      fontSize: 13, fontWeight: FontWeight.w600,
+                      color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _confirmarLimpiar(PosProvider pos) {

@@ -1,5 +1,6 @@
 // lib/services/compra_service.dart
 
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../core/api_client.dart';
@@ -119,6 +120,32 @@ class CompraService {
               'error': _extractError(e, 'Error al cancelar la compra')};
     } catch (e) {
       return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
+
+  // ── Parsear factura PDF de proveedor ───────────────────
+  /// Sube el PDF al backend y retorna la lista de productos parseados.
+  /// Retorna [] si falla.
+  Future<List<Map<String, dynamic>>> parsearFactura(File archivo) async {
+    try {
+      final formData = FormData.fromMap({
+        'archivo': await MultipartFile.fromFile(
+          archivo.path,
+          filename: archivo.path.split(Platform.pathSeparator).last,
+        ),
+      });
+      final res = await ApiClient.instance.post(
+        '/proveedores/compras/parsear-factura/',
+        data: formData,
+      );
+      final lista = res.data['productos'];
+      if (lista is List) {
+        return lista.cast<Map<String, dynamic>>();
+      }
+      return [];
+    } catch (e) {
+      debugPrint('❌ parsearFactura error: $e');
+      return [];
     }
   }
 }

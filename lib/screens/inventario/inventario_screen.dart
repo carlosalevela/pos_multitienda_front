@@ -12,6 +12,7 @@ import '../../models/producto.dart';
 import '../../models/separado.dart';
 import '../../services/empleado_service.dart';
 import '../../services/inventario_service.dart';
+import '../../core/api_client.dart';
 import '../../services/cliente_service.dart';
 import 'widgets/producto_form_dialog.dart';
 import 'widgets/importar_excel_dialog.dart';
@@ -38,8 +39,10 @@ class _InventarioScreenState extends State<InventarioScreen>
 
   // Insights panel data
   Map<String, dynamic>?      _dashboard;
-  List<Map<String, dynamic>> _topProductos = [];
-  List<Map<String, dynamic>> _movimientos  = [];
+  List<Map<String, dynamic>> _topProductos     = [];
+  List<Map<String, dynamic>> _movimientos      = [];
+  List<Map<String, dynamic>> _alertasAgotado   = [];
+  List<Map<String, dynamic>> _alertasBajo      = [];
   bool                       _cargandoInsights = false;
 
   // Cajero panel data
@@ -168,13 +171,19 @@ class _InventarioScreenState extends State<InventarioScreen>
         _service.getDashboard(tiendaId: _tiendaActiva, empresaId: _empresaActiva),
         _service.getTopProductos(tiendaId: _tiendaActiva, limite: 5),
         _service.getMovimientosRecientes(tiendaId: _tiendaActiva, limite: 8),
+        _service.getInventario(tiendaId: _tiendaActiva, alerta: 'agotado'),
+        _service.getInventario(tiendaId: _tiendaActiva, alerta: 'bajo'),
       ]);
       if (!mounted) return;
       setState(() {
-        _dashboard    = results[0]['data'] as Map<String, dynamic>?;
-        _topProductos = (results[1]['data'] as List?)
+        _dashboard      = results[0]['data'] as Map<String, dynamic>?;
+        _topProductos   = (results[1]['data'] as List?)
                 ?.cast<Map<String, dynamic>>() ?? [];
-        _movimientos  = (results[2]['data'] as List?)
+        _movimientos    = (results[2]['data'] as List?)
+                ?.cast<Map<String, dynamic>>() ?? [];
+        _alertasAgotado = (results[3]['data'] as List?)
+                ?.cast<Map<String, dynamic>>() ?? [];
+        _alertasBajo    = (results[4]['data'] as List?)
                 ?.cast<Map<String, dynamic>>() ?? [];
         _cargandoInsights = false;
       });
@@ -843,6 +852,55 @@ class _InventarioScreenState extends State<InventarioScreen>
   // ══════════════════════════════════════════════════════
   // TABLA PLANA
   // ══════════════════════════════════════════════════════
+  void _abrirTransferencia(Producto p) {
+    final tiendaId = _tiendaActiva;
+    if (tiendaId == null || _tiendas.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+            _tiendas.length < 2
+                ? 'Se necesitan al menos 2 tiendas para transferir.'
+                : 'Selecciona una tienda específica de origen.',
+            style: _t(size: 13, color: Colors.white)),
+        backgroundColor: _warning,
+      ));
+      return;
+    }
+    showModalBottomSheet(
+      context:            context,
+      isScrollControlled: true,
+      backgroundColor:    Colors.transparent,
+      builder: (_) => _TransferenciaSheet(
+        producto:         p,
+        tiendaOrigenId:   tiendaId,
+        tiendas:          _tiendas,
+        onTransferida: () => context.read<InventarioProvider>()
+            .cargarProductos(tiendaId: _tiendaFiltro, activo: _activoFiltro),
+      ),
+    );
+  }
+
+  void _abrirKardex(Producto p) {
+    final tiendaId = _tiendaActiva;
+    if (tiendaId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Selecciona una tienda específica para ver el kardex.',
+            style: _t(size: 13, color: Colors.white)),
+        backgroundColor: _warning,
+      ));
+      return;
+    }
+    showModalBottomSheet(
+      context:            context,
+      isScrollControlled: true,
+      backgroundColor:    Colors.transparent,
+      builder: (_) => _KardexSheet(
+        producto:  p,
+        tiendaId:  tiendaId,
+        service:   _service,
+      ),
+    );
+  }
+
   Widget _buildTabla(List<Producto> productos, bool esCajero,
       bool esAdmin, InventarioProvider inv) {
     return Container(
@@ -1098,6 +1156,12 @@ class _InventarioScreenState extends State<InventarioScreen>
                               if (v == 'edit') {
                                 _abrirFormulario(context, inv, producto: p);
                               }
+                              if (v == 'kardex') {
+                                _abrirKardex(p);
+                              }
+                              if (v == 'transfer') {
+                                _abrirTransferencia(p);
+                              }
                               if (v == 'del') {
                                 _confirmarEliminar(context, inv, p);
                               }
@@ -1112,6 +1176,25 @@ class _InventarioScreenState extends State<InventarioScreen>
                                   Text('Editar', style: _t(size: 13)),
                                 ]),
                               ),
+                              PopupMenuItem(
+                                value: 'kardex',
+                                child: Row(children: [
+                                  Icon(Icons.timeline_rounded,
+                                      size: 16, color: _muted),
+                                  const SizedBox(width: 10),
+                                  Text('Kardex', style: _t(size: 13)),
+                                ]),
+                              ),
+                              if (_tiendas.length >= 2)
+                                PopupMenuItem(
+                                  value: 'transfer',
+                                  child: Row(children: [
+                                    Icon(Icons.swap_horiz_rounded,
+                                        size: 16, color: _muted),
+                                    const SizedBox(width: 10),
+                                    Text('Transferir', style: _t(size: 13)),
+                                  ]),
+                                ),
                               PopupMenuItem(
                                 value: 'del',
                                 child: Row(children: [
@@ -1139,11 +1222,98 @@ class _InventarioScreenState extends State<InventarioScreen>
   // PANEL INSIGHTS (Top Sellers + Movimientos)
   // ══════════════════════════════════════════════════════
   Widget _buildInsightsPanel() {
+    final hayAlertas = _alertasAgotado.isNotEmpty || _alertasBajo.isNotEmpty;
     return SingleChildScrollView(
       child: Column(children: [
+        if (hayAlertas || _cargandoInsights) ...[
+          _alertasStockCard(),
+          const SizedBox(height: 14),
+        ],
         _topSellersCard(),
         const SizedBox(height: 14),
         _movimientosCard(),
+      ]),
+    );
+  }
+
+  Widget _alertasStockCard() {
+    final total = _alertasAgotado.length + _alertasBajo.length;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _alertasAgotado.isNotEmpty
+            ? _dangerBg.withValues(alpha: 0.5)
+            : const Color(0xFFFEF9EC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: _alertasAgotado.isNotEmpty
+              ? _danger.withValues(alpha: 0.25)
+              : _warning.withValues(alpha: 0.35),
+        ),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 10, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            width: 34, height: 34,
+            decoration: BoxDecoration(
+              color: _alertasAgotado.isNotEmpty ? _dangerBg : const Color(0xFFFEF3C7),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Icon(
+              Icons.notifications_active_rounded,
+              size: 16,
+              color: _alertasAgotado.isNotEmpty ? _danger : _warning,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Alertas de stock',
+                  style: _t(size: 13, weight: FontWeight.w700)),
+              Text(
+                '$total producto${total != 1 ? 's' : ''} requiere${total == 1 ? '' : 'n'} atención',
+                style: _t(size: 10, color: _muted2),
+              ),
+            ],
+          )),
+          if (_cargandoInsights)
+            const SizedBox(width: 16, height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2,
+                    color: Color(0xFF006C49))),
+        ]),
+        const SizedBox(height: 14),
+        const Divider(height: 1, color: Color(0xFFF0F0F2)),
+        const SizedBox(height: 12),
+        if (_alertasAgotado.isNotEmpty) ...[
+          _seccionLabel('AGOTADOS', _danger),
+          ..._alertasAgotado.take(4).map((item) {
+            final nombre = item['producto_nombre'] as String? ?? '—';
+            final cat    = item['categoria_nombre'] as String? ?? '';
+            return _stockRow(nombre, cat, 'Agotado', _danger, _dangerBg);
+          }),
+          if (_alertasAgotado.length > 4)
+            _verMasTxt('+${_alertasAgotado.length - 4} más agotados', _danger),
+          if (_alertasBajo.isNotEmpty) const SizedBox(height: 8),
+        ],
+        if (_alertasBajo.isNotEmpty) ...[
+          _seccionLabel('STOCK BAJO', _warning),
+          ..._alertasBajo.take(5).map((item) {
+            final nombre  = item['producto_nombre'] as String? ?? '—';
+            final cat     = item['categoria_nombre'] as String? ?? '';
+            final actual  = _toInt(item['stock_actual']);
+            final minimo  = _toInt(item['stock_minimo']);
+            final label   = minimo > 0 ? '$actual / $minimo uds' : '$actual uds';
+            return _stockRow(nombre, cat, label, _warning,
+                const Color(0xFFFEF3C7));
+          }),
+          if (_alertasBajo.length > 5)
+            _verMasTxt('+${_alertasBajo.length - 5} más con stock bajo', _warning),
+        ],
       ]),
     );
   }
@@ -1827,4 +1997,585 @@ class _InventarioScreenState extends State<InventarioScreen>
           ),
         ),
       );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// KARDEX SHEET
+// ═══════════════════════════════════════════════════════════════
+class _KardexSheet extends StatefulWidget {
+  final Producto          producto;
+  final int               tiendaId;
+  final InventarioService service;
+
+  const _KardexSheet({
+    required this.producto,
+    required this.tiendaId,
+    required this.service,
+  });
+
+  @override
+  State<_KardexSheet> createState() => _KardexSheetState();
+}
+
+class _KardexSheetState extends State<_KardexSheet> {
+  List<Map<String, dynamic>> _movimientos = [];
+  bool   _cargando = true;
+  String _error    = '';
+
+  static const _bg      = Color(0xFFF7F9FB);
+  static const _surface = Colors.white;
+  static const _border  = Color(0xFFE2E8F0);
+  static const _text    = Color(0xFF1E293B);
+  static const _muted   = Color(0xFF64748B);
+  static const _muted2  = Color(0xFF94A3B8);
+  static const _green   = Color(0xFF006C49);
+  static const _greenBg = Color(0xFFDCFCE7);
+  static const _danger  = Color(0xFFBA1A1A);
+  static const _amber   = Color(0xFFF59E0B);
+  static const _blue    = Color(0xFF0284C7);
+  static const _blueBg  = Color(0xFFE0F2FE);
+
+  static final _fmt     = NumberFormat('#,##0.##', 'es_CO');
+  static final _fmtDate = DateFormat('d MMM yyyy · HH:mm', 'es');
+
+  TextStyle _t({
+    double size = 14,
+    FontWeight weight = FontWeight.w400,
+    Color? color,
+  }) =>
+      GoogleFonts.inter(fontSize: size, fontWeight: weight,
+          color: color ?? _text);
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  Future<void> _cargar() async {
+    setState(() { _cargando = true; _error = ''; });
+    final res = await widget.service.getMovimientosProducto(
+      productoId: widget.producto.id,
+      tiendaId:   widget.tiendaId,
+    );
+    if (!mounted) return;
+    if (res['success'] == true) {
+      setState(() {
+        _movimientos = (res['data'] as List).cast<Map<String, dynamic>>();
+        _cargando    = false;
+      });
+    } else {
+      setState(() {
+        _error    = res['error'] ?? 'Error al cargar movimientos';
+        _cargando = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final h = MediaQuery.of(context).size.height * 0.80;
+
+    return Container(
+      height:      h,
+      decoration:  const BoxDecoration(
+        color:        Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(children: [
+        // Handle
+        Center(
+          child: Container(
+            width: 36, height: 4,
+            margin: const EdgeInsets.only(top: 12, bottom: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE2E8F0),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ),
+
+        // Header
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+          child: Row(children: [
+            Container(
+              width: 42, height: 42,
+              decoration: BoxDecoration(
+                color: const Color(0xFF131B2E),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.timeline_rounded,
+                  color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Kardex',
+                    style: _t(size: 16, weight: FontWeight.w700)),
+                Text(widget.producto.nombre,
+                    overflow: TextOverflow.ellipsis,
+                    style: _t(size: 12, color: _muted)),
+              ],
+            )),
+            GestureDetector(
+              onTap: _cargar,
+              child: Container(
+                width: 34, height: 34,
+                decoration: BoxDecoration(
+                  color: _bg,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _border),
+                ),
+                child: const Icon(Icons.refresh_rounded,
+                    size: 16, color: _muted),
+              ),
+            ),
+          ]),
+        ),
+
+        const Divider(height: 1, color: Color(0xFFEBEFF3)),
+
+        // Contenido
+        Expanded(child: _body()),
+      ]),
+    );
+  }
+
+  Widget _body() {
+    if (_cargando) {
+      return const Center(child: CircularProgressIndicator(
+          color: Color(0xFF006C49), strokeWidth: 2));
+    }
+    if (_error.isNotEmpty) {
+      return Center(child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.error_outline, color: _danger, size: 32),
+          const SizedBox(height: 12),
+          Text(_error, style: _t(size: 13, color: _muted),
+              textAlign: TextAlign.center),
+          const SizedBox(height: 16),
+          TextButton(onPressed: _cargar,
+              child: Text('Reintentar', style: _t(size: 13, color: _green))),
+        ]),
+      ));
+    }
+    if (_movimientos.isEmpty) {
+      return Center(child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 64, height: 64,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: _border),
+            ),
+            child: const Icon(Icons.timeline_rounded,
+                size: 28, color: _muted2),
+          ),
+          const SizedBox(height: 16),
+          Text('Sin movimientos registrados',
+              style: _t(size: 14, weight: FontWeight.w600, color: _muted)),
+          const SizedBox(height: 6),
+          Text('Los movimientos de este producto\naparecerán aquí.',
+              textAlign: TextAlign.center,
+              style: _t(size: 12, color: _muted2)),
+        ],
+      ));
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      itemCount:      _movimientos.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder:   (_, i) => _movCard(_movimientos[i]),
+    );
+  }
+
+  Widget _movCard(Map<String, dynamic> m) {
+    final tipo       = m['tipo'] as String? ?? '';
+    final cantidad   = _toDouble(m['cantidad']);
+    final empleado   = m['empleado_nombre'] as String?;
+    final refTipo    = m['referencia_tipo'] as String?;
+    final obs        = m['observacion'] as String?;
+    final createdAt  = m['created_at'] as String?;
+    DateTime? dt;
+    try { dt = createdAt != null ? DateTime.parse(createdAt).toLocal() : null; } catch (_) {}
+
+    final (icon, color, bg, label, signo) = _tipoConfig(tipo);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color:        _surface,
+        borderRadius: BorderRadius.circular(12),
+        border:       Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 6, offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Row(children: [
+        Container(
+          width: 38, height: 38,
+          decoration: BoxDecoration(color: bg,
+              borderRadius: BorderRadius.circular(10)),
+          child: Icon(icon, size: 18, color: color),
+        ),
+        const SizedBox(width: 12),
+        Expanded(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(label,
+                    style: _t(size: 9, weight: FontWeight.w800,
+                        color: color)),
+              ),
+              const Spacer(),
+              Text('$signo${_fmt.format(cantidad)} uds',
+                  style: _t(size: 14, weight: FontWeight.w800, color: color)),
+            ]),
+            if (dt != null) ...[
+              const SizedBox(height: 4),
+              Text(_fmtDate.format(dt),
+                  style: _t(size: 11, color: _muted2)),
+            ],
+            if (empleado != null || refTipo != null) ...[
+              const SizedBox(height: 4),
+              Row(children: [
+                if (empleado != null) ...[
+                  const Icon(Icons.person_outline_rounded,
+                      size: 11, color: _muted2),
+                  const SizedBox(width: 4),
+                  Flexible(child: Text(empleado,
+                      overflow: TextOverflow.ellipsis,
+                      style: _t(size: 11, color: _muted))),
+                ],
+                if (refTipo != null) ...[
+                  if (empleado != null) const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(_labelRef(refTipo),
+                        style: _t(size: 9, color: _muted2,
+                            weight: FontWeight.w600)),
+                  ),
+                ],
+              ]),
+            ],
+            if (obs != null && obs.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(obs,
+                  maxLines: 2, overflow: TextOverflow.ellipsis,
+                  style: _t(size: 11, color: _muted2,
+                      weight: FontWeight.w400)),
+            ],
+          ],
+        )),
+      ]),
+    );
+  }
+
+  static double _toDouble(dynamic v) {
+    if (v == null) return 0.0;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString()) ?? 0.0;
+  }
+
+  (IconData, Color, Color, String, String) _tipoConfig(String tipo) {
+    return switch (tipo) {
+      'entrada'       => (Icons.add_circle_rounded,     _green,  _greenBg,
+                          'ENTRADA',     '+'),
+      'salida'        => (Icons.remove_circle_rounded,  _danger,
+                          const Color(0xFFFFDAD6),      'SALIDA',      '-'),
+      'ajuste'        => (Icons.tune_rounded,           _amber,
+                          const Color(0xFFFEF3C7),      'AJUSTE',      ''),
+      'transferencia' => (Icons.swap_horiz_rounded,     _blue,   _blueBg,
+                          'TRANSFERENCIA', ''),
+      'daño'          => (Icons.broken_image_rounded,   _danger,
+                          const Color(0xFFFFDAD6),      'DAÑO',        '-'),
+      _               => (Icons.circle_outlined,        _muted,
+                          const Color(0xFFF1F5F9),      tipo.toUpperCase(), ''),
+    };
+  }
+
+  String _labelRef(String ref) {
+    return switch (ref) {
+      'venta'           => 'Venta',
+      'compra'          => 'Compra',
+      'devolucion'      => 'Devolución',
+      'ajuste_manual'   => 'Ajuste',
+      'transferencia'   => 'Transferencia',
+      'separado'        => 'Separado',
+      _                 => ref,
+    };
+  }
+}
+
+
+// ── Modal de Transferencia ─────────────────────────────────────
+class _TransferenciaSheet extends StatefulWidget {
+  final Producto               producto;
+  final int                    tiendaOrigenId;
+  final List<Map<String, dynamic>> tiendas;
+  final VoidCallback           onTransferida;
+
+  const _TransferenciaSheet({
+    required this.producto,
+    required this.tiendaOrigenId,
+    required this.tiendas,
+    required this.onTransferida,
+  });
+
+  @override
+  State<_TransferenciaSheet> createState() => _TransferenciaSheetState();
+}
+
+class _TransferenciaSheetState extends State<_TransferenciaSheet> {
+  final _cantCtrl = TextEditingController();
+  final _obsCtrl  = TextEditingController();
+  int?   _tiendaDestinoId;
+  bool   _enviando = false;
+  String _error    = '';
+
+  static const _green    = Color(0xFF16A34A);
+  static const _greenDk  = Color(0xFF15803D);
+  static const _surface  = Color(0xFFF8FAFC);
+  static const _border   = Color(0xFFE2E8F0);
+  static const _text     = Color(0xFF1E293B);
+  static const _muted    = Color(0xFF64748B);
+  static const _red      = Color(0xFFDC2626);
+
+  @override
+  void dispose() {
+    _cantCtrl.dispose();
+    _obsCtrl.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, dynamic>> get _tiendasDestino =>
+      widget.tiendas.where((t) => t['id'] != widget.tiendaOrigenId).toList();
+
+  String _nombreTienda(int id) =>
+      widget.tiendas.firstWhere(
+          (t) => t['id'] == id,
+          orElse: () => {'nombre': 'Tienda $id'})['nombre'] as String;
+
+  Future<void> _enviar() async {
+    final cant = double.tryParse(_cantCtrl.text) ?? 0;
+    if (cant <= 0) {
+      setState(() => _error = 'Ingresa una cantidad mayor a cero.');
+      return;
+    }
+    if (_tiendaDestinoId == null) {
+      setState(() => _error = 'Selecciona la tienda de destino.');
+      return;
+    }
+    setState(() { _enviando = true; _error = ''; });
+    try {
+      await ApiClient.instance.post('/productos/transferencias/', data: {
+        'producto_id':       widget.producto.id,
+        'tienda_origen_id':  widget.tiendaOrigenId,
+        'tienda_destino_id': _tiendaDestinoId,
+        'cantidad':          cant,
+        'observacion':       _obsCtrl.text.trim(),
+      });
+      widget.onTransferida();
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+            '${cant.toStringAsFixed(cant % 1 == 0 ? 0 : 1)} u. de "${widget.producto.nombre}" '
+            'transferidas a ${_nombreTienda(_tiendaDestinoId!)}.',
+          ),
+          backgroundColor: _green,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10)),
+          margin: const EdgeInsets.all(16),
+        ));
+      }
+    } catch (e) {
+      final msg = (e is Exception) ? e.toString() : 'Error al transferir.';
+      setState(() {
+        _error    = msg.replaceAll('Exception: ', '');
+        _enviando = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final destinos = _tiendasDestino;
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+          20, 20, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        // Handle
+        Center(child: Container(
+          width: 36, height: 4,
+          decoration: BoxDecoration(
+            color: _border, borderRadius: BorderRadius.circular(2)),
+        )),
+        const SizedBox(height: 16),
+
+        // Título
+        Row(children: [
+          const Icon(Icons.swap_horiz_rounded, color: _green, size: 22),
+          const SizedBox(width: 8),
+          Expanded(child: Text(
+            'Transferir ${widget.producto.nombre}',
+            style: GoogleFonts.inter(
+                fontSize: 16, fontWeight: FontWeight.w700, color: _text),
+            overflow: TextOverflow.ellipsis,
+          )),
+        ]),
+        const SizedBox(height: 4),
+        Text(
+          'Origen: ${_nombreTienda(widget.tiendaOrigenId)}',
+          style: GoogleFonts.inter(fontSize: 12, color: _muted),
+        ),
+        const SizedBox(height: 16),
+
+        // Tienda destino
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            border: Border.all(color: _border),
+            borderRadius: BorderRadius.circular(10),
+            color: _surface,
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<int>(
+              value: _tiendaDestinoId,
+              isExpanded: true,
+              hint: Text('Tienda de destino',
+                  style: GoogleFonts.inter(fontSize: 13, color: _muted)),
+              items: destinos.map((t) => DropdownMenuItem<int>(
+                value: t['id'] as int,
+                child: Text(t['nombre'] as String,
+                    style: GoogleFonts.inter(fontSize: 13, color: _text)),
+              )).toList(),
+              onChanged: (v) => setState(() => _tiendaDestinoId = v),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Cantidad
+        TextField(
+          controller: _cantCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          style: GoogleFonts.inter(fontSize: 14, color: _text),
+          decoration: InputDecoration(
+            labelText: 'Cantidad a transferir',
+            labelStyle: GoogleFonts.inter(fontSize: 13, color: _muted),
+            filled: true, fillColor: _surface,
+            contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: _border)),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: _border)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: _green, width: 2)),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Observación
+        TextField(
+          controller: _obsCtrl,
+          style: GoogleFonts.inter(fontSize: 13, color: _text),
+          decoration: InputDecoration(
+            labelText: 'Observación (opcional)',
+            labelStyle: GoogleFonts.inter(fontSize: 12, color: _muted),
+            filled: true, fillColor: _surface,
+            contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: _border)),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: _border)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: _green, width: 2)),
+          ),
+        ),
+
+        if (_error.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEE2E2),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _red.withAlpha(80)),
+            ),
+            child: Text(_error,
+                style: GoogleFonts.inter(fontSize: 12, color: _red)),
+          ),
+        ],
+        const SizedBox(height: 16),
+
+        // Botones
+        Row(children: [
+          Expanded(child: OutlinedButton(
+            onPressed: _enviando ? null : () => Navigator.pop(context),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: _border),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+            child: Text('Cancelar',
+                style: GoogleFonts.inter(fontSize: 13, color: _muted)),
+          )),
+          const SizedBox(width: 12),
+          Expanded(child: ElevatedButton(
+            onPressed: _enviando ? null : _enviar,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _greenDk,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+            child: _enviando
+                ? const SizedBox(width: 18, height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white))
+                : Text('Transferir',
+                    style: GoogleFonts.inter(
+                        fontSize: 13, fontWeight: FontWeight.w700,
+                        color: Colors.white)),
+          )),
+        ]),
+      ]),
+    );
+  }
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -7,6 +8,7 @@ import '../../models/devolucion_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/devoluciones_provider.dart';
 import '../../services/devolucion_print_service.dart';
+import '../../services/barcode_service.dart';
 import 'widgets/devolucion_card.dart';
 import 'widgets/devolucion_detalle_sheet.dart';
 import 'widgets/devolucion_form_sheet.dart';
@@ -39,12 +41,87 @@ class _DevolucionesScreenState extends State<DevolucionesScreen> {
   String?          _estadoActual;
   DevolucionModel? _selectedDev;   // panel derecho (desktop)
 
+  // Barcode scanner
+  StreamSubscription<String>? _barcodeSub;
+  bool   _scanActivo    = false;
+  Timer? _scanPulseTimer;
+
   @override
   void initState() {
     super.initState();
+    _barcodeSub = BarcodeService.instance.onBarcode.listen(_onBarcode);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _cargar(fecha: _strFecha(DateTime.now()));
     });
+  }
+
+  @override
+  void dispose() {
+    _barcodeSub?.cancel();
+    _scanPulseTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onBarcode(String codigo) {
+    if (!mounted) return;
+    if (ModalRoute.of(context)?.isCurrent == false) return;
+    // Pulso visual
+    setState(() => _scanActivo = true);
+    _scanPulseTimer?.cancel();
+    _scanPulseTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted) setState(() => _scanActivo = false);
+    });
+    // Abrir formulario de devolución con la venta pre-buscada
+    _abrirFormularioConBarcode(codigo);
+  }
+
+  void _abrirFormularioConBarcode(String numeroOrden) {
+    final isWide = MediaQuery.of(context).size.width > 700;
+    if (!isWide) {
+      DevolucionFormSheet.show(
+        context,
+        initialNumeroOrden: numeroOrden,
+        onCreada: (dev) {
+          _recargar();
+          if (dev != null && mounted) {
+            WidgetsBinding.instance.addPostFrameCallback(
+                (_) { if (mounted) _mostrarDialogoImprimir(dev); });
+          }
+        },
+      );
+      return;
+    }
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.3),
+      builder: (ctx) => Align(
+        alignment: Alignment.centerRight,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            width: 440,
+            height: double.infinity,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.horizontal(left: Radius.circular(20)),
+              boxShadow: [
+                BoxShadow(color: Colors.black26, blurRadius: 24, offset: Offset(-4, 0)),
+              ],
+            ),
+            child: DevolucionFormSheet(
+              initialNumeroOrden: numeroOrden,
+              onCreada: (dev) {
+                _recargar();
+                if (dev != null && mounted) {
+                  WidgetsBinding.instance.addPostFrameCallback(
+                      (_) { if (mounted) _mostrarDialogoImprimir(dev); });
+                }
+              },
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   String _strFecha(DateTime d) =>
@@ -77,7 +154,13 @@ class _DevolucionesScreenState extends State<DevolucionesScreen> {
   void _abrirFormulario() {
     final isWide = MediaQuery.of(context).size.width > 700;
     if (!isWide) {
-      DevolucionFormSheet.show(context, onCreada: _recargar);
+      DevolucionFormSheet.show(context, onCreada: (dev) {
+        _recargar();
+        if (dev != null && mounted) {
+          WidgetsBinding.instance.addPostFrameCallback(
+              (_) { if (mounted) _mostrarDialogoImprimir(dev); });
+        }
+      });
       return;
     }
     showDialog(
@@ -98,13 +181,66 @@ class _DevolucionesScreenState extends State<DevolucionesScreen> {
               ],
             ),
             child: DevolucionFormSheet(
-              onCreada: () {
-                Navigator.pop(ctx);
+              onCreada: (dev) {
+                // El sheet ya hizo Navigator.pop(context) y cerró el diálogo.
+                // Solo refrescar y mostrar el diálogo de impresión desde el screen padre.
                 _recargar();
+                if (dev != null && mounted) {
+                  WidgetsBinding.instance.addPostFrameCallback(
+                      (_) { if (mounted) _mostrarDialogoImprimir(dev); });
+                }
               },
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _mostrarDialogoImprimir(DevolucionModel dev) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: _kGreen.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.check_circle_outline_rounded,
+                color: _kGreen, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Text(dev.tipo == 'cambio' ? 'Cambio registrado' : 'Devolución registrada',
+              style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 15)),
+        ]),
+        content: Text('¿Deseas imprimir el comprobante DEV-${dev.id}?',
+            style: GoogleFonts.inter(fontSize: 13, color: _kTextMuted)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('No, gracias',
+                style: GoogleFonts.inter(color: _kTextMuted)),
+          ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.print_rounded, size: 16),
+            label: Text('Imprimir',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+            onPressed: () {
+              Navigator.pop(ctx);
+              DevolucionPrintService.imprimir(context, dev);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _kGreen,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -435,7 +571,31 @@ class _DevolucionesScreenState extends State<DevolucionesScreen> {
             ],
           ),
         ),
-        if (showButton)
+        // Indicador escáner de barras
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color:   _scanActivo ? _kMintLight : const Color(0xFFF2F4F6),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: _scanActivo ? _kGreen : const Color(0xFFE0E3E5),
+            ),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.qr_code_scanner_rounded,
+                size: 15,
+                color: _scanActivo ? _kGreen : _kTextMuted),
+            if (_scanActivo) ...[
+              const SizedBox(width: 5),
+              Text('OK', style: GoogleFonts.inter(
+                  fontSize: 11, fontWeight: FontWeight.w700, color: _kGreen)),
+            ],
+          ]),
+        ),
+
+        if (showButton) ...[
+          const SizedBox(width: 8),
           ElevatedButton.icon(
             icon: const Icon(Icons.add_rounded, size: 16),
             label: Text('Nueva',
@@ -449,6 +609,7 @@ class _DevolucionesScreenState extends State<DevolucionesScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
           ),
+        ],
       ]),
     );
   }

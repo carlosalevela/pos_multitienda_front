@@ -1,5 +1,6 @@
 // lib/screens/configuracion/configuracion_screen.dart
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -14,6 +15,7 @@ import '../../providers/tienda_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/thermal_printer_service.dart';
 import '../../services/tier_service.dart';
+import '../../services/windows_printer_service.dart';
 
 class ConfiguracionScreen extends StatefulWidget {
   const ConfiguracionScreen({super.key});
@@ -1156,6 +1158,11 @@ class _TabFidelizacionState extends State<_TabFidelizacion> {
   bool            _cargando = false;
   String?         _error;
 
+  // ── Sugerencia de cliente ──────────────────────────────────
+  bool   _sugerirCliente    = false;
+  final  _umbralSugerirCtrl = TextEditingController(text: '150000');
+  bool   _guardandoSugerir  = false;
+
   static const _coloresPreset = [
     '#CD7F32', // Bronce
     '#A8A9AD', // Plata
@@ -1171,6 +1178,27 @@ class _TabFidelizacionState extends State<_TabFidelizacion> {
   void initState() {
     super.initState();
     _cargar();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final cfg = context.read<ConfigProvider>();
+      setState(() {
+        _sugerirCliente        = cfg.sugerirCliente;
+        _umbralSugerirCtrl.text = cfg.umbralSugerirCliente.toStringAsFixed(0);
+      });
+    });
+  }
+
+  Future<void> _guardarSugerir() async {
+    final umbral = double.tryParse(_umbralSugerirCtrl.text.trim()) ?? 150000;
+    setState(() => _guardandoSugerir = true);
+    await context.read<ConfigProvider>().guardarSugerirCliente(_sugerirCliente, umbral);
+    if (!mounted) return;
+    setState(() => _guardandoSugerir = false);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Configuración guardada'),
+      backgroundColor: Color(0xFF0B7A53),
+      behavior: SnackBarBehavior.floating,
+    ));
   }
 
   Future<void> _cargar() async {
@@ -1395,6 +1423,119 @@ class _TabFidelizacionState extends State<_TabFidelizacion> {
               ),
             ),
           ),
+
+        // ── Card sugerencia de cliente ─────────────────────────
+        const SizedBox(height: 8),
+        _card(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.person_add_rounded, size: 16, color: Color(0xFF0B7A53)),
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Sugerir registrar cliente',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700,
+                          color: Color(0xFF111827))),
+                  Text('Muestra un aviso en el POS cuando la venta supera el monto configurado.',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+                ]),
+              ),
+            ]),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: _sugerirCliente
+                    ? const Color(0xFFE8FFF4)
+                    : const Color(0xFFF9FAFB),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: _sugerirCliente
+                      ? const Color(0xFF61DDAA)
+                      : const Color(0xFFE5E7EB),
+                ),
+              ),
+              child: Row(children: [
+                Icon(
+                  _sugerirCliente
+                      ? Icons.notifications_active_rounded
+                      : Icons.notifications_off_outlined,
+                  color: _sugerirCliente
+                      ? const Color(0xFF0B7A53)
+                      : const Color(0xFF9CA3AF),
+                  size: 22,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _sugerirCliente
+                        ? 'Se mostrará sugerencia en ventas grandes'
+                        : 'Sugerencia desactivada',
+                    style: TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600,
+                      color: _sugerirCliente
+                          ? const Color(0xFF0B7A53)
+                          : const Color(0xFF374151),
+                    ),
+                  ),
+                ),
+                Switch(
+                  value:    _sugerirCliente,
+                  onChanged: widget.puedeEditar
+                      ? (v) => setState(() => _sugerirCliente = v)
+                      : null,
+                  activeThumbColor: const Color(0xFF0B7A53),
+                  activeTrackColor: const Color(0xFF61DDAA),
+                ),
+              ]),
+            ),
+            if (_sugerirCliente) ...[
+              const SizedBox(height: 14),
+              _label('Monto mínimo para mostrar el aviso (\$)'),
+              _field(
+                _umbralSugerirCtrl,
+                hint: '150000',
+                keyboardType: TextInputType.number,
+                enabled: widget.puedeEditar,
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Si el total de la venta supera este monto y no hay cliente asociado, '
+                'el POS sugerirá registrarlo.',
+                style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+              ),
+            ],
+            if (widget.puedeEditar) ...[
+              const SizedBox(height: 14),
+              Align(
+                alignment: Alignment.centerRight,
+                child: ElevatedButton.icon(
+                  onPressed: _guardandoSugerir ? null : _guardarSugerir,
+                  icon: _guardandoSugerir
+                      ? const SizedBox(width: 14, height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.save_outlined, size: 15),
+                  label: Text(_guardandoSugerir ? 'Guardando…' : 'Guardar'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0B7A53),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        )),
       ],
     );
   }
@@ -1668,10 +1809,16 @@ class _ConexionImpresoraCard extends StatefulWidget {
 }
 
 class _ConexionImpresoraCardState extends State<_ConexionImpresoraCard> {
+  // WebUSB (Chrome/Edge web)
   ThermalDevice? _device;
   bool           _cargando   = false;
+  // Windows exe
+  List<Printer>  _winPrinters   = [];
+  Printer?       _winPrinter;
+  bool           _cargandoWin   = false;
+  // Compartido
   bool           _trabajando = false;
-  bool           _tieneCaja  = false;   // toggle persistente
+  bool           _tieneCaja  = false;
   String?        _error;
 
   static const _indigo = Color(0xFF3730A3);
@@ -1688,21 +1835,86 @@ class _ConexionImpresoraCardState extends State<_ConexionImpresoraCard> {
   }
 
   Future<void> _inicializar() async {
-    // Cargar preferencia de caja
     final prefs = await SharedPreferences.getInstance();
     final hasCaja = prefs.getBool(_kHasCaja) ?? false;
     if (!mounted) return;
     setState(() => _tieneCaja = hasCaja);
 
-    if (!ThermalPrinterService.isWebUsbSupported) return;
-    setState(() { _cargando = true; _error = null; });
+    if (ThermalPrinterService.isWebUsbSupported) {
+      // Chrome/Edge web — WebUSB
+      setState(() { _cargando = true; _error = null; });
+      try {
+        final dev = await ThermalPrinterService.getAutoDevice();
+        if (!mounted) return;
+        setState(() { _device = dev; _cargando = false; });
+      } catch (e) {
+        if (!mounted) return;
+        setState(() { _error = e.toString(); _cargando = false; });
+      }
+    } else if (!kIsWeb) {
+      // Exe nativo — impresoras del sistema
+      await _cargarWinPrinters();
+    }
+  }
+
+  Future<void> _cargarWinPrinters() async {
+    setState(() => _cargandoWin = true);
     try {
-      final dev = await ThermalPrinterService.getAutoDevice();
+      final printers  = await WindowsPrinterService.listPrinters();
+      final savedName = await WindowsPrinterService.getSavedName();
+      Printer? saved;
+      if (savedName != null) {
+        try { saved = printers.firstWhere((p) => p.name == savedName); }
+        catch (_) {} // impresora desconectada
+      }
       if (!mounted) return;
-      setState(() { _device = dev; _cargando = false; });
+      setState(() {
+        _winPrinters  = printers;
+        _winPrinter   = saved;
+        _cargandoWin  = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _cargandoWin = false);
+    }
+  }
+
+  Future<void> _seleccionarWinPrinter(Printer p) async {
+    await WindowsPrinterService.savePrinter(p);
+    if (!mounted) return;
+    setState(() => _winPrinter = p);
+  }
+
+  Future<void> _desvincularWin() async {
+    await WindowsPrinterService.clearSaved();
+    if (!mounted) return;
+    setState(() => _winPrinter = null);
+  }
+
+  Future<void> _imprimirPruebaWin() async {
+    if (_winPrinter == null) return;
+    setState(() => _trabajando = true);
+    try {
+      bool ok;
+      if (await WindowsPrinterService.hasSavedPrinter()) {
+        // ESC/POS RAW via WritePrinter (COM, USB, red — cualquier puerto)
+        final bytes = await ThermalPrinterService.buildTestPage();
+        ok = await WindowsPrinterService.printRaw(bytes);
+      } else {
+        // Impresora Windows normal → PDF
+        final bytes = await _buildPdfTestPage();
+        ok = await Printing.directPrintPdf(
+          printer: _winPrinter!,
+          onLayout: (_) async => bytes,
+          name: 'Prueba_Impresora.pdf',
+        );
+      }
+      if (!mounted) return;
+      _snack(ok ? 'Página de prueba enviada a ${_winPrinter!.name}' : 'No se pudo imprimir', ok);
     } catch (e) {
       if (!mounted) return;
-      setState(() { _error = e.toString(); _cargando = false; });
+      _snack('Error: $e', false);
+    } finally {
+      if (mounted) setState(() => _trabajando = false);
     }
   }
 
@@ -1879,7 +2091,11 @@ class _ConexionImpresoraCardState extends State<_ConexionImpresoraCard> {
   @override
   Widget build(BuildContext context) {
     final webUsb    = ThermalPrinterService.isWebUsbSupported;
-    final conectada = _device != null;
+    final nativeExe = !kIsWeb;
+    final conectada = webUsb ? _device != null
+                             : nativeExe && _winPrinter != null;
+    final deviceLabel = webUsb ? (_device?.displayName ?? '')
+                                : (_winPrinter?.name ?? '');
 
     return _card(
       child: Column(
@@ -1893,12 +2109,12 @@ class _ConexionImpresoraCardState extends State<_ConexionImpresoraCard> {
             icon: conectada ? Icons.print_rounded : Icons.print_outlined,
             iconColor: conectada ? _green : _grey,
             iconBg: conectada ? const Color(0xFFECFDF5) : const Color(0xFFF3F4F6),
-            loading: _cargando,
+            loading: _cargando || _cargandoWin,
             title: 'Impresora térmica',
-            subtitle: _cargando   ? 'Buscando…'
-                    : conectada   ? _device!.displayName
-                    : webUsb      ? 'Sin impresora configurada'
-                                  : 'Requiere Chrome o Edge',
+            subtitle: (_cargando || _cargandoWin) ? 'Buscando…'
+                    : conectada                    ? deviceLabel
+                    : kIsWeb && !webUsb            ? 'Requiere Chrome o Edge'
+                                                   : 'Sin impresora configurada',
             subtitleColor: conectada ? _green : _grey,
           ),
 
@@ -1987,6 +2203,132 @@ class _ConexionImpresoraCardState extends State<_ConexionImpresoraCard> {
                 border: const Color(0xFFFECACA),
                 text: _error!,
               ),
+            ],
+          ] else if (nativeExe) ...[
+            // ── Exe nativo: selector de impresoras del sistema ──
+            const SizedBox(height: 10),
+            if (_cargandoWin)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            else if (_winPrinter != null) ...[
+              // Impresora seleccionada
+              _StatusChip(
+                label: _winPrinter!.name,
+                sub: _winPrinter!.isDefault ? 'Impresora predeterminada' : null,
+                color: _green,
+                bgColor: const Color(0xFFECFDF5),
+                borderColor: const Color(0xFF6EE7B7),
+                icon: Icons.check_circle_rounded,
+                trailing: TextButton(
+                  onPressed: _desvincularWin,
+                  child: const Text('Cambiar', style: TextStyle(fontSize: 11, color: _indigo)),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(children: [
+                Expanded(
+                  child: _ActionBtn(
+                    label: 'Prueba de impresión',
+                    icon: Icons.print_rounded,
+                    color: _indigo,
+                    loading: _trabajando,
+                    onTap: _imprimirPruebaWin,
+                  ),
+                ),
+              ]),
+            ] else ...[
+              // Sin impresora seleccionada
+              if (_winPrinters.isEmpty)
+                _InfoBanner(
+                  icon: Icons.warning_amber_rounded,
+                  color: const Color(0xFFD97706),
+                  bg: const Color(0xFFFFF7ED),
+                  border: const Color(0xFFFED7AA),
+                  text: 'No se encontraron impresoras instaladas. '
+                      'Instala el driver de tu impresora y recarga.',
+                )
+              else ...[
+                _InfoBanner(
+                  icon: Icons.info_outline_rounded,
+                  color: const Color(0xFF0284C7),
+                  bg: const Color(0xFFF0F9FF),
+                  border: const Color(0xFFBAE6FD),
+                  text: 'Selecciona la impresora térmica instalada en Windows. '
+                      'Queda guardada y los recibos se imprimen automáticamente.',
+                ),
+                const SizedBox(height: 10),
+                // Dropdown de impresoras disponibles
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    children: _winPrinters.map((p) {
+                      final isLast = p == _winPrinters.last;
+                      return InkWell(
+                        onTap: () => _seleccionarWinPrinter(p),
+                        borderRadius: BorderRadius.vertical(
+                          top: _winPrinters.first == p
+                              ? const Radius.circular(8) : Radius.zero,
+                          bottom: isLast ? const Radius.circular(8) : Radius.zero,
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            border: isLast ? null
+                                : const Border(bottom: BorderSide(
+                                    color: Color(0xFFE5E7EB))),
+                          ),
+                          child: Row(children: [
+                            Icon(
+                              p.isDefault
+                                  ? Icons.print_rounded
+                                  : Icons.print_outlined,
+                              size: 18,
+                              color: p.isDefault ? _indigo : _grey,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(p.name,
+                                      style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500)),
+                                  if (p.isDefault)
+                                    const Text('Predeterminada',
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            color: Color(0xFF6B7280))),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right_rounded,
+                                size: 16, color: Color(0xFF9CA3AF)),
+                          ]),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: _cargarWinPrinters,
+                  icon: const Icon(Icons.refresh_rounded, size: 14),
+                  label: const Text('Actualizar lista',
+                      style: TextStyle(fontSize: 12)),
+                  style: TextButton.styleFrom(
+                      foregroundColor: _grey,
+                      padding: EdgeInsets.zero),
+                ),
+              ],
             ],
           ] else ...[
             // ── Fallback Firefox/Safari ────────────────────

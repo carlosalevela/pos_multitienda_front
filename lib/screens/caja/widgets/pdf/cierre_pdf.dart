@@ -1,12 +1,42 @@
 // lib/screens/caja/widgets/pdf/cierre_pdf.dart
 
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../../../models/sesion_historial.dart';
 import '../../../../services/documento_service.dart';
+import '../../../../services/thermal_printer_service.dart';
+import '../../../../services/windows_printer_service.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+
+Future<void> _abrirPdf(List<int> bytes, String nombre) async {
+  if (kIsWeb) {
+    await Printing.sharePdf(bytes: Uint8List.fromList(bytes), filename: nombre);
+    return;
+  }
+  // Exe: imprimir directo si hay impresora configurada
+  final printed = await WindowsPrinterService.printPdf(bytes, nombre);
+  if (printed) return;
+
+  // Fallback: abrir con el visor del sistema
+  final dir  = await getTemporaryDirectory();
+  final safe = nombre.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+  final file = File('${dir.path}${Platform.pathSeparator}$safe');
+  await file.writeAsBytes(bytes);
+  if (Platform.isWindows) {
+    await Process.run('cmd', ['/c', 'start', '', file.path]);
+  } else if (Platform.isMacOS) {
+    await Process.run('open', [file.path]);
+  } else {
+    await Process.run('xdg-open', [file.path]);
+  }
+}
 
 // ── Palette (Enterprise POS) ──────────────────────────────
 const _pGreen      = PdfColor.fromInt(0xFF006C49);
@@ -51,7 +81,7 @@ String _hora(String raw) {
 // ENTRY POINT
 // ════════════════════════════════════════════════════════
 
-Future<void> exportarCierrePDF(SesionHistorial sesion) async {
+Future<void> exportarCierrePDF(SesionHistorial sesion, {String tipoPapel = '80mm'}) async {
   final doc = pw.Document(
     author:  sesion.empleadoNombre,
     title:   'Cierre de Caja #${sesion.id}',
@@ -114,11 +144,39 @@ Future<void> exportarCierrePDF(SesionHistorial sesion) async {
   final filename =
       'CIERRE_${sesion.id}_${sesion.tiendaNombre.replaceAll(' ', '_')}.pdf';
   final bytes = await doc.save();
+
+  // Siempre guardar PDF en carpeta local
   unawaited(DocumentoService.instance.guardarCierre(
     bytes: bytes,
     referencia: 'cierre_${sesion.id}_${sesion.tiendaNombre.replaceAll(' ', '_')}',
   ));
-  await Printing.sharePdf(bytes: bytes, filename: filename);
+
+  // Intentar imprimir en ESC/POS si hay impresora configurada
+  if (tipoPapel != 'pdf') {
+    final ps = tipoPapel == '58mm' ? PaperSize.mm58 : PaperSize.mm80;
+    try {
+      if (!kIsWeb && await WindowsPrinterService.hasSavedPrinter()) {
+        final tb = await ThermalPrinterService.buildCierreHistorial(
+          sesion: sesion, paperSize: ps,
+        );
+        await WindowsPrinterService.printRaw(tb);
+        return;
+      }
+      if (ThermalPrinterService.isWebUsbSupported) {
+        final dev = await ThermalPrinterService.getAutoDevice();
+        if (dev != null) {
+          final tb = await ThermalPrinterService.buildCierreHistorial(
+            sesion: sesion, paperSize: ps,
+          );
+          await ThermalPrinterService.printBytes(dev, tb);
+          return;
+        }
+      }
+    } catch (_) {}
+  }
+
+  // Fallback: abrir visor de PDF
+  await _abrirPdf(bytes, filename);
 }
 
 // ════════════════════════════════════════════════════════

@@ -191,14 +191,16 @@ class CajaService {
     int?    tiendaId,
     String? estado,
     String? fecha,
+    bool    misSesiones = false,
   }) async {
     try {
       final r = await ApiClient.instance.get(
-        '/caja/historial/',   // ← solo esto cambia
+        '/caja/historial/',
         queryParameters: {
-          if (tiendaId != null) 'tienda_id': tiendaId.toString(),
-          if (estado   != null) 'estado':    estado,
-          if (fecha    != null) 'fecha':     fecha,
+          if (tiendaId    != null) 'tienda_id':    tiendaId.toString(),
+          if (estado      != null) 'estado':       estado,
+          if (fecha       != null) 'fecha':        fecha,
+          if (misSesiones)         'mis_sesiones': 'true',
         },
       );
       final List data = r.data is List ? r.data : r.data['results'] ?? [];

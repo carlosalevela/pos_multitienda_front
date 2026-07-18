@@ -1,6 +1,8 @@
 // lib/providers/auth_provider.dart
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../services/documento_service.dart';
 
@@ -62,7 +64,7 @@ class AuthProvider extends ChangeNotifier {
       _empresaId     = emp['empresa_id']?.toString()     ?? '';
       _empresaNombre = emp['empresa_nombre']?.toString() ?? '';
       _isLoggedIn    = true;
-      DocumentoService.instance.setTienda(_tiendaNombre.isNotEmpty ? _tiendaNombre : _empresaNombre);
+      _sincronizarDocumentoService();
     } else {
       _errorMsg = result['error'] ?? 'Error desconocido';
     }
@@ -106,9 +108,56 @@ class AuthProvider extends ChangeNotifier {
     _tiendaNombre  = data['tienda_nombre']?.toString()  ?? '';
     _empresaId     = data['empresa_id']?.toString()     ?? '';
     _empresaNombre = data['empresa_nombre']?.toString() ?? '';
-    _isLoggedIn    = true;
-    DocumentoService.instance.setTienda(_tiendaNombre.isNotEmpty ? _tiendaNombre : _empresaNombre);
+
+    // Si tienda_nombre no estaba guardado en SharedPreferences (sesión anterior
+    // a que se añadiera ese campo), lo extraemos de las claims del JWT.
+    if (_tiendaNombre.isEmpty) {
+      final fromJwt = await _tiendaNombreDesdeJwt();
+      if (fromJwt.isNotEmpty) {
+        _tiendaNombre = fromJwt;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('tienda_nombre', _tiendaNombre);
+      }
+    }
+
+    _isLoggedIn = true;
+    _sincronizarDocumentoService();
     notifyListeners();
+  }
+
+  // ── Decodifica las claims del JWT para recuperar tienda_nombre ──────────
+  Future<String> _tiendaNombreDesdeJwt() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('access_token') ?? '';
+      if (token.isEmpty) return '';
+      final parts = token.split('.');
+      if (parts.length != 3) return '';
+      final payload = utf8.decode(
+        base64Url.decode(base64Url.normalize(parts[1])),
+      );
+      final claims = json.decode(payload) as Map<String, dynamic>;
+      return claims['tienda_nombre']?.toString() ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  // ── Actualiza la tienda activa desde cualquier pantalla ─────────────────
+  /// Llamar cuando el usuario (admin/supervisor) cambia de tienda activa,
+  /// por ejemplo al abrir el POS en una tienda específica.
+  void actualizarTiendaActiva(String nombre, [int? id]) {
+    _tiendaNombre = nombre;
+    if (id != null) _tiendaId = id;
+    _sincronizarDocumentoService();
+    notifyListeners();
+  }
+
+  void _sincronizarDocumentoService() {
+    final nombre = _tiendaNombre.isNotEmpty ? _tiendaNombre : _empresaNombre;
+    if (nombre.isNotEmpty) {
+      DocumentoService.instance.setTienda(nombre);
+    }
   }
 
   // ── Utilidades ─────────────────────────────────────────

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../../../theme/app_colors.dart';
 import '../../../providers/contabilidad_provider.dart';
 import '../../../providers/auth_provider.dart';
 
@@ -60,6 +61,14 @@ class _TabGastosState extends State<TabGastos> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _aplicarFiltro());
+  }
+
+  @override
+  void didUpdateWidget(TabGastos oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tiendaId != widget.tiendaId) {
+      _aplicarFiltro();
+    }
   }
 
   Future<void> _aplicarFiltro() async {
@@ -149,8 +158,8 @@ class _TabGastosState extends State<TabGastos> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF10B981)
-                            .withOpacity(0.1),
+                        color: AppColors.secondary
+                            .withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Icon(Icons.date_range_rounded,
@@ -158,10 +167,10 @@ class _TabGastosState extends State<TabGastos> {
                     ),
                     const SizedBox(width: 10),
                     Text('Rango personalizado',
-                        style: GoogleFonts.poppins(
+                        style: GoogleFonts.inter(
                             fontWeight: FontWeight.bold,
                             fontSize: 15,
-                            color: const Color(0xFF1A1A2E))),
+                            color: AppColors.onSurface)),
                     const Spacer(),
                     IconButton(
                       icon: Icon(Icons.close_rounded,
@@ -206,9 +215,9 @@ class _TabGastosState extends State<TabGastos> {
                     seleccionandoInicio
                         ? '👆 Toca la fecha de inicio'
                         : '👆 Toca la fecha de fin',
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
                         fontSize: 11,
-                        color: const Color(0xFF10B981)),
+                        color: AppColors.secondary),
                   ),
                   const SizedBox(height: 8),
 
@@ -256,7 +265,7 @@ class _TabGastosState extends State<TabGastos> {
                       TextButton(
                         onPressed: () => Navigator.pop(ctx),
                         child: Text('Cancelar',
-                            style: GoogleFonts.poppins(
+                            style: GoogleFonts.inter(
                                 color: Colors.grey.shade600)),
                       ),
                       const SizedBox(width: 8),
@@ -275,7 +284,7 @@ class _TabGastosState extends State<TabGastos> {
                             : null,
                         style: ElevatedButton.styleFrom(
                           backgroundColor:
-                              const Color(0xFF10B981),
+                              AppColors.secondary,
                           foregroundColor: Colors.white,
                           disabledBackgroundColor:
                               Colors.grey.shade200,
@@ -284,7 +293,7 @@ class _TabGastosState extends State<TabGastos> {
                               borderRadius: BorderRadius.circular(10)),
                         ),
                         child: Text('Aplicar',
-                            style: GoogleFonts.poppins(
+                            style: GoogleFonts.inter(
                                 fontWeight: FontWeight.w600)),
                       ),
                     ],
@@ -312,12 +321,12 @@ class _TabGastosState extends State<TabGastos> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: activo
-              ? const Color(0xFF10B981).withOpacity(0.08)
+              ? AppColors.secondary.withValues(alpha: 0.08)
               : Colors.grey.shade50,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: activo
-                ? const Color(0xFF10B981)
+                ? AppColors.secondary
                 : Colors.grey.shade200,
             width: activo ? 1.5 : 1,
           ),
@@ -326,18 +335,18 @@ class _TabGastosState extends State<TabGastos> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(label,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 10,
                     color: activo
-                        ? const Color(0xFF10B981)
+                        ? AppColors.secondary
                         : Colors.grey.shade500)),
             Text(valor,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: activo
-                        ? const Color(0xFF10B981)
-                        : const Color(0xFF1A1A2E))),
+                        ? AppColors.secondary
+                        : AppColors.onSurface)),
           ],
         ),
       ),
@@ -360,14 +369,14 @@ class _TabGastosState extends State<TabGastos> {
             children: [
               Text(
                 widget.esCajero ? 'Gastos de hoy' : _tituloRango(),
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
-                    color: const Color(0xFF1A1A2E)),
+                    color: AppColors.onSurface),
               ),
               Text(
                 '${gastos.length} registros  •  Total: ${widget.fmt.format(total)}',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 11, color: Colors.grey.shade500),
               ),
             ],
@@ -376,10 +385,10 @@ class _TabGastosState extends State<TabGastos> {
             onPressed: () => _mostrarDialogAgregar(context),
             icon: const Icon(Icons.add_rounded, size: 18),
             label: Text('Agregar',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 13, fontWeight: FontWeight.w600)),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF10B981),
+              backgroundColor: AppColors.secondary,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(
                   horizontal: 16, vertical: 10),
@@ -433,7 +442,7 @@ class _TabGastosState extends State<TabGastos> {
                     horizontal: 14, vertical: 7),
                 decoration: BoxDecoration(
                   color: _rangoSel == _Rango.custom
-                      ? const Color(0xFF10B981)
+                      ? AppColors.secondary
                       : Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(20),
                 ),
@@ -445,7 +454,7 @@ class _TabGastosState extends State<TabGastos> {
                           : Colors.grey.shade600),
                   const SizedBox(width: 5),
                   Text('Personalizado',
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: _rangoSel == _Rango.custom
@@ -461,7 +470,7 @@ class _TabGastosState extends State<TabGastos> {
         SizedBox(
           height: 38,
           child: DropdownButtonFormField<String?>(
-            value: _categoriaSel,
+            initialValue: _categoriaSel,
             isDense: true,
             decoration: InputDecoration(
               contentPadding: const EdgeInsets.symmetric(
@@ -476,18 +485,18 @@ class _TabGastosState extends State<TabGastos> {
                   borderSide: BorderSide(color: Colors.grey.shade200)),
             ),
             hint: Text('Todas las categorías',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 12, color: Colors.grey.shade500)),
             items: [
               DropdownMenuItem<String?>(
                 value: null,
                 child: Text('Todas las categorías',
-                    style: GoogleFonts.poppins(fontSize: 12)),
+                    style: GoogleFonts.inter(fontSize: 12)),
               ),
               ..._categoriasAdmin.map((c) => DropdownMenuItem<String?>(
                 value: c,
                 child: Text(c,
-                    style: GoogleFonts.poppins(fontSize: 12)),
+                    style: GoogleFonts.inter(fontSize: 12)),
               )),
             ],
             onChanged: (v) {
@@ -512,12 +521,12 @@ class _TabGastosState extends State<TabGastos> {
             horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
           color: sel
-              ? const Color(0xFF10B981)
+              ? AppColors.secondary
               : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(label,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: sel ? Colors.white : Colors.grey.shade700)),
@@ -533,16 +542,16 @@ class _TabGastosState extends State<TabGastos> {
             size: 56, color: Colors.grey.shade300),
         const SizedBox(height: 12),
         Text('Sin gastos en este período',
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 color: Colors.grey.shade400, fontSize: 15)),
         const SizedBox(height: 16),
         TextButton.icon(
           onPressed: () => _mostrarDialogAgregar(context),
           icon: const Icon(Icons.add_rounded),
           label: Text('Registrar gasto',
-              style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
           style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFF10B981)),
+              foregroundColor: AppColors.secondary),
         ),
       ],
     )));
@@ -561,7 +570,7 @@ class _TabGastosState extends State<TabGastos> {
             ? Border.all(color: Colors.orange.shade200)
             : null,
         boxShadow: [BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2))],
       ),
@@ -571,7 +580,7 @@ class _TabGastosState extends State<TabGastos> {
         leading: Container(
           width: 44, height: 44,
           decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
+              color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12)),
           child: Icon(_iconoCategoria(gasto.categoria),
               color: color, size: 22),
@@ -582,10 +591,10 @@ class _TabGastosState extends State<TabGastos> {
                 ? 'Sin categoría'
                 : gasto.categoria,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 fontWeight: FontWeight.bold,
                 fontSize: 14,
-                color: const Color(0xFF1A1A2E)),
+                color: AppColors.onSurface),
           )),
           if (soloAdmin && !widget.esCajero) ...[
             const SizedBox(width: 6),
@@ -601,7 +610,7 @@ class _TabGastosState extends State<TabGastos> {
                     size: 10, color: Colors.orange.shade700),
                 const SizedBox(width: 3),
                 Text('Admin',
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
                         fontSize: 9,
                         fontWeight: FontWeight.w600,
                         color: Colors.orange.shade700)),
@@ -610,7 +619,7 @@ class _TabGastosState extends State<TabGastos> {
             const SizedBox(width: 6),
           ],
           Text(widget.fmt.format(gasto.monto),
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
                   color: Colors.red.shade600)),
@@ -623,7 +632,7 @@ class _TabGastosState extends State<TabGastos> {
               Text(gasto.descripcion,
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                       fontSize: 12,
                       color: Colors.grey.shade600)),
             ],
@@ -653,10 +662,10 @@ class _TabGastosState extends State<TabGastos> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(20)),
       child: Text(label,
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
               fontSize: 10,
               fontWeight: FontWeight.w600,
               color: color)),
@@ -720,14 +729,14 @@ class _TabGastosState extends State<TabGastos> {
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16)),
         title: Text('¿Eliminar gasto?',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+            style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
         content: Text('Esta acción no se puede deshacer.',
-            style: GoogleFonts.poppins(fontSize: 13)),
+            style: GoogleFonts.inter(fontSize: 13)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text('Cancelar',
-                style: GoogleFonts.poppins(color: Colors.grey)),
+                style: GoogleFonts.inter(color: Colors.grey)),
           ),
           ElevatedButton(
             onPressed: () {
@@ -741,7 +750,7 @@ class _TabGastosState extends State<TabGastos> {
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10))),
             child: Text('Eliminar',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontWeight: FontWeight.w600)),
           ),
         ],
@@ -851,16 +860,16 @@ class _FormGastoState extends State<_FormGasto> {
                 borderRadius: BorderRadius.circular(2)),
           ),
           Text('Registrar gasto',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
-                  color: const Color(0xFF1A1A2E))),
+                  color: AppColors.onSurface)),
           const SizedBox(height: 20),
 
           Align(
             alignment: Alignment.centerLeft,
             child: Text('Categoría',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: Colors.grey.shade600)),
@@ -879,13 +888,13 @@ class _FormGastoState extends State<_FormGasto> {
                       horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
                     color: sel
-                        ? const Color(0xFF10B981)
+                        ? AppColors.secondary
                         : Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
                     Text(cat,
-                        style: GoogleFonts.poppins(
+                        style: GoogleFonts.inter(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                             color: sel
@@ -896,7 +905,7 @@ class _FormGastoState extends State<_FormGasto> {
                       Icon(Icons.lock_rounded,
                           size: 10,
                           color: sel
-                              ? Colors.white.withOpacity(0.8)
+                              ? Colors.white.withValues(alpha: 0.8)
                               : Colors.orange.shade400),
                     ],
                   ]),
@@ -930,14 +939,14 @@ class _FormGastoState extends State<_FormGasto> {
           const SizedBox(height: 12),
 
           DropdownButtonFormField<String>(
-            value: _metodoPago,
+            initialValue: _metodoPago,
             decoration: _inputDeco(
                 'Método de pago', Icons.payment_rounded),
             items: widget.metodos
                 .map((m) => DropdownMenuItem(
                       value: m,
                       child: Text(_label(m),
-                          style: GoogleFonts.poppins(fontSize: 14)),
+                          style: GoogleFonts.inter(fontSize: 14)),
                     ))
                 .toList(),
             onChanged: (v) => setState(() => _metodoPago = v!),
@@ -949,7 +958,7 @@ class _FormGastoState extends State<_FormGasto> {
             child: ElevatedButton(
               onPressed: _guardando ? null : _guardar,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF10B981),
+                backgroundColor: AppColors.secondary,
                 foregroundColor: Colors.white,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -961,7 +970,7 @@ class _FormGastoState extends State<_FormGasto> {
                       child: CircularProgressIndicator(
                           color: Colors.white, strokeWidth: 2.5))
                   : Text('Guardar gasto',
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontWeight: FontWeight.bold, fontSize: 15)),
             ),
           ),
@@ -981,10 +990,10 @@ class _FormGastoState extends State<_FormGasto> {
   InputDecoration _inputDeco(String hint, IconData icon) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: GoogleFonts.poppins(
+      hintStyle: GoogleFonts.inter(
           fontSize: 13, color: Colors.grey.shade400),
       prefixIcon: Icon(icon,
-          size: 20, color: const Color(0xFF10B981)),
+          size: 20, color: AppColors.secondary),
       filled: true, fillColor: Colors.grey.shade50,
       border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),

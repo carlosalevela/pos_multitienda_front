@@ -2,10 +2,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../../providers/proveedores_provider.dart';
-import '../compras_theme.dart';
-import 'compras_tabla.dart'; // EstadoBadge
+import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
+import '../compras_theme.dart'; // solo para fmt()
+import 'compras_tabla.dart';   // EstadoBadge
 
 class DetalleCompraDialog extends StatefulWidget {
   final int id;
@@ -36,17 +37,16 @@ class _DetalleCompraDialogState extends State<DetalleCompraDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16)),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(16))),
       titlePadding:   const EdgeInsets.fromLTRB(20, 20, 20, 0),
       contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
       title: Row(children: [
         const Icon(Icons.receipt_long_rounded,
-            color: ComprasTheme.accent),
+            color: AppColors.secondary),
         const SizedBox(width: 10),
         Text(_detalle?['numero_orden'] ?? 'Detalle de orden',
-          style: GoogleFonts.poppins(
-              fontWeight: FontWeight.bold, fontSize: 16)),
+            style: AppTextStyles.headlineSm),
         const Spacer(),
         if (_detalle != null)
           EstadoBadge(estado: _detalle!['estado'] ?? ''),
@@ -56,17 +56,20 @@ class _DetalleCompraDialogState extends State<DetalleCompraDialog> {
         child: _cargando
             ? const SizedBox(
                 height: 160,
-                child: Center(child: CircularProgressIndicator()))
+                child: Center(
+                    child: CircularProgressIndicator(
+                        color: AppColors.secondary)))
             : _detalle == null
                 ? Center(child: Text('No se pudo cargar el detalle',
-                    style: GoogleFonts.poppins(
-                        color: Colors.grey.shade400)))
+                    style: AppTextStyles.bodySm))
                 : SingleChildScrollView(child: _buildContenido()),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text('Cerrar', style: GoogleFonts.poppins())),
+          child: Text('Cerrar',
+              style: AppTextStyles.bodyMd
+                  .copyWith(color: AppColors.onSurfaceVariant))),
       ],
     );
   }
@@ -93,33 +96,28 @@ class _DetalleCompraDialogState extends State<DetalleCompraDialog> {
         if (d['fecha_recepcion'] != null)
           _infoRow(Icons.check_circle_rounded, 'Fecha recepción',
             d['fecha_recepcion'].toString().substring(0, 10),
-            color: Colors.green.shade600),
+            color: AppColors.secondary),
         if ((d['observaciones'] ?? '').toString().isNotEmpty)
           _infoRow(Icons.notes_rounded, 'Observaciones',
               d['observaciones']),
 
-        const Divider(height: 24),
-        Text('Productos',
-          style: GoogleFonts.poppins(
-              fontWeight: FontWeight.bold, fontSize: 14)),
+        const Divider(height: 24, color: AppColors.outlineVariant),
+        Text('Productos', style: AppTextStyles.headlineSm.copyWith(fontSize: 14)),
         const SizedBox(height: 10),
 
         ...items.map((item) => _itemProducto(item)),
 
-        const Divider(height: 16),
+        const Divider(height: 16, color: AppColors.outlineVariant),
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
             Text('Total: ',
-              style: GoogleFonts.poppins(
-                  fontSize: 14, color: Colors.grey.shade600)),
+                style: AppTextStyles.bodySm.copyWith(fontSize: 14)),
             Text(
               '\$${ComprasTheme.fmt(
                   double.tryParse(d['total'].toString()) ?? 0)}',
-              style: GoogleFonts.poppins(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: ComprasTheme.accent)),
+              style: AppTextStyles.numericData
+                  .copyWith(color: AppColors.secondary)),
           ],
         ),
         const SizedBox(height: 8),
@@ -133,16 +131,13 @@ class _DetalleCompraDialogState extends State<DetalleCompraDialog> {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(children: [
         Icon(icon, size: 15,
-            color: color ?? Colors.grey.shade400),
+            color: color ?? AppColors.outline),
         const SizedBox(width: 8),
-        Text('$label: ',
-          style: GoogleFonts.poppins(
-              fontSize: 12, color: Colors.grey.shade500)),
+        Text('$label: ', style: AppTextStyles.bodySm),
         Expanded(child: Text(valor,
-          style: GoogleFonts.poppins(
-              fontSize: 12,
+          style: AppTextStyles.bodySm.copyWith(
               fontWeight: FontWeight.w500,
-              color: color ?? ComprasTheme.dark))),
+              color: color ?? AppColors.onSurface))),
       ]),
     );
   }
@@ -152,32 +147,29 @@ class _DetalleCompraDialogState extends State<DetalleCompraDialog> {
       margin:  const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color:        Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(10),
-        border:       Border.all(color: Colors.grey.shade200),
+        color:        AppColors.surfaceContainerLow,
+        borderRadius: AppRadius.xl,
+        border:       Border.all(color: AppColors.outlineVariant),
       ),
       child: Row(children: [
         Expanded(child: Text(
           item['producto_nombre'] ?? '',
-          style: GoogleFonts.poppins(
-              fontWeight: FontWeight.w500, fontSize: 13))),
+          style: AppTextStyles.bodyMd.copyWith(fontWeight: FontWeight.w500))),
         Text(
           'x${double.tryParse(item['cantidad'].toString())
               ?.toStringAsFixed(0) ?? 0}  ',
-          style: GoogleFonts.poppins(
-              fontSize: 12, color: Colors.grey.shade500)),
+          style: AppTextStyles.bodySm),
         Text(
           '\$${ComprasTheme.fmt(double.tryParse(
               item['precio_unitario'].toString()) ?? 0)} c/u',
-          style: GoogleFonts.poppins(
-              fontSize: 12, color: Colors.grey.shade500)),
+          style: AppTextStyles.bodySm),
         const SizedBox(width: 12),
         Text(
           '\$${ComprasTheme.fmt(double.tryParse(
               item['subtotal'].toString()) ?? 0)}',
-          style: GoogleFonts.poppins(
+          style: AppTextStyles.bodyMd.copyWith(
               fontWeight: FontWeight.bold,
-              fontSize: 13, color: ComprasTheme.accent)),
+              color: AppColors.secondary)),
       ]),
     );
   }

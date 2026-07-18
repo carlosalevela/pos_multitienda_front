@@ -318,6 +318,29 @@ class InventarioService {
     }
   }
 
+  // ── Kardex por producto ────────────────────────────────
+
+  Future<Map<String, dynamic>> getMovimientosProducto({
+    required int productoId,
+    required int tiendaId,
+    int? limite,
+  }) async {
+    try {
+      final r = await ApiClient.instance.get(
+        '/productos/$productoId/inventario/$tiendaId/movimientos/',
+        queryParameters: {
+          if (limite != null) 'limite': limite.toString(),
+        },
+      );
+      final List data = r.data is List ? r.data : r.data['results'] ?? [];
+      return {'success': true, 'data': data.cast<Map<String, dynamic>>()};
+    } on DioException catch (e) {
+      return {'success': false, 'error': _extractError(e, 'Error al cargar kardex')};
+    } catch (e) {
+      return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
+
   // ── Movimientos recientes ──────────────────────────────
 
   Future<Map<String, dynamic>> getMovimientosRecientes({

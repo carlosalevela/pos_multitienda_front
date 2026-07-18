@@ -9,6 +9,7 @@ import '../../../models/separado.dart';
 import '../../../models/tier_model.dart';
 import '../../../providers/cliente_provider.dart';
 import '../../../services/tier_service.dart';
+import '../../../services/venta_service.dart';
 
 // ─────────────────────────────────────────────────────────────
 // Paleta — misma que clientes_screen.dart
@@ -90,16 +91,19 @@ class _ClienteDetalleSheetContentState
     extends State<_ClienteDetalleSheetContent>
     with SingleTickerProviderStateMixin {
   late final TabController _tabCtrl;
-  List<TierModel> _tiers         = [];
-  bool            _cargandoTiers = false;
+  List<TierModel>            _tiers           = [];
+  bool                       _cargandoTiers   = false;
+  List<Map<String, dynamic>> _ventasCliente   = [];
+  bool                       _cargandoVentas  = false;
 
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 4, vsync: this);
+    _tabCtrl = TabController(length: 5, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ClienteProvider>().cargarDetalleCliente(widget.cliente.id);
       _cargarTiers();
+      _cargarVentasCliente();
     });
   }
 
@@ -113,6 +117,18 @@ class _ClienteDetalleSheetContentState
         _tiers = List<TierModel>.from(res['data'] as List);
       }
     });
+  }
+
+  Future<void> _cargarVentasCliente() async {
+    setState(() => _cargandoVentas = true);
+    try {
+      final list = await VentaService().listarVentas(
+        clienteId: widget.cliente.id,
+      );
+      if (mounted) setState(() { _ventasCliente = list; _cargandoVentas = false; });
+    } catch (_) {
+      if (mounted) setState(() => _cargandoVentas = false);
+    }
   }
 
   @override
@@ -222,6 +238,7 @@ class _ClienteDetalleSheetContentState
             controller:      _tabCtrl,
             separadosCount:  prov.separadosActivos.length,
             historialCount:  prov.historialCliente.length,
+            ventasCount:     _ventasCliente.length,
             tieneTier:       widget.cliente.tierInfo != null,
           ),
 
@@ -293,6 +310,13 @@ class _ClienteDetalleSheetContentState
                         cliente:        widget.cliente,
                         tiers:          _tiers,
                         cargandoTiers:  _cargandoTiers,
+                      ),
+
+                      // Tab 5 — Compras (historial de ventas)
+                      _TabCompras(
+                        ventas:          _ventasCliente,
+                        cargando:        _cargandoVentas,
+                        onRefresh:       _cargarVentasCliente,
                       ),
                     ],
                   ),
@@ -412,12 +436,14 @@ class _DetalleTabBar extends StatelessWidget {
   final TabController controller;
   final int           separadosCount;
   final int           historialCount;
+  final int           ventasCount;
   final bool          tieneTier;
 
   const _DetalleTabBar({
     required this.controller,
     required this.separadosCount,
     required this.historialCount,
+    required this.ventasCount,
     required this.tieneTier,
   });
 
@@ -470,6 +496,15 @@ class _DetalleTabBar extends StatelessWidget {
                   size: 14),
               const SizedBox(width: 4),
               const Text('Fideliz.'),
+            ]),
+          ),
+          Tab(
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Text('Compras'),
+              if (ventasCount > 0) ...[
+                const SizedBox(width: 5),
+                _badge(ventasCount, _Pal.teal),
+              ],
             ]),
           ),
         ],
@@ -936,6 +971,236 @@ class _HistorialCard extends StatelessWidget {
         ]),
       ]),
     );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// TAB COMPRAS — historial de ventas del cliente
+// ─────────────────────────────────────────────────────────────
+class _TabCompras extends StatelessWidget {
+  final List<Map<String, dynamic>> ventas;
+  final bool     cargando;
+  final VoidCallback onRefresh;
+
+  const _TabCompras({
+    required this.ventas,
+    required this.cargando,
+    required this.onRefresh,
+  });
+
+  static final _fmt     = NumberFormat('#,##0', 'es_CO');
+  static final _fmtDate = DateFormat('d MMM yyyy', 'es');
+  static final _fmtHora = DateFormat('HH:mm', 'es');
+
+  static double _toDouble(dynamic v) {
+    if (v == null) return 0.0;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString()) ?? 0.0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (cargando) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(40),
+          child: CircularProgressIndicator(color: _Pal.teal, strokeWidth: 2.5),
+        ),
+      );
+    }
+
+    if (ventas.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 64, height: 64,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: const Icon(Icons.shopping_bag_outlined,
+                  size: 30, color: Color(0xFF94A3B8)),
+            ),
+            const SizedBox(height: 16),
+            Text('Sin compras registradas',
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 14, fontWeight: FontWeight.w700,
+                    color: _Pal.inkMid)),
+            const SizedBox(height: 6),
+            Text('Las ventas asociadas a este cliente\naparecerán aquí.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12, color: _Pal.inkLight)),
+          ],
+        ),
+      );
+    }
+
+    final completadas = ventas.where((v) => v['estado'] == 'completada').length;
+    final totalGastado = ventas
+        .where((v) => v['estado'] == 'completada')
+        .fold<double>(0, (s, v) => s + _toDouble(v['total']));
+
+    return RefreshIndicator(
+      color: _Pal.teal,
+      onRefresh: () async => onRefresh(),
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        itemCount: ventas.length + 1,
+        itemBuilder: (_, i) {
+          if (i == 0) {
+            // ── KPIs ──────────────────────────────────
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: Row(children: [
+                Expanded(child: _kpiCard(
+                  '\$${_fmt.format(totalGastado)}',
+                  'Total gastado',
+                  _Pal.teal, _Pal.tealSurface,
+                  Icons.payments_rounded,
+                )),
+                const SizedBox(width: 10),
+                Expanded(child: _kpiCard(
+                  '$completadas',
+                  'Compras realizadas',
+                  const Color(0xFF2E9E6B),
+                  const Color(0xFFDCFCE7),
+                  Icons.receipt_rounded,
+                )),
+              ]),
+            );
+          }
+
+          // ── Tarjeta de venta ───────────────────────
+          final v       = ventas[i - 1];
+          final id      = v['id'] as int;
+          final nroFact = v['numero_factura'] as String? ?? '#$id';
+          final total   = _toDouble(v['total']);
+          final metodo  = v['metodo_pago'] as String? ?? '';
+          final estado  = v['estado'] as String? ?? 'completada';
+          final anulada = estado == 'anulada';
+          final createdAt = v['created_at'] as String?;
+          DateTime? dt;
+          try {
+            dt = createdAt != null ? DateTime.parse(createdAt).toLocal() : null;
+          } catch (_) {}
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: anulada ? const Color(0xFFFFF8F7) : Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: anulada
+                      ? _Pal.danger.withValues(alpha: 0.2)
+                      : const Color(0xFFEBEFF3),
+                ),
+              ),
+              child: Row(children: [
+                Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    color: anulada ? const Color(0xFFFFDAD6) : _Pal.tealSurface,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(_iconMetodo(metodo), size: 18,
+                      color: anulada ? _Pal.danger : _Pal.teal),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Text(nroFact,
+                          style: GoogleFonts.plusJakartaSans(
+                              fontSize: 13, fontWeight: FontWeight.w700,
+                              color: anulada ? _Pal.inkLight : _Pal.ink)),
+                      const Spacer(),
+                      Text('\$${_fmt.format(total)}',
+                          style: GoogleFonts.plusJakartaSans(
+                              fontSize: 14, fontWeight: FontWeight.w800,
+                              color: anulada ? _Pal.inkLight : _Pal.teal)),
+                    ]),
+                    const SizedBox(height: 4),
+                    Row(children: [
+                      if (dt != null) ...[
+                        Expanded(
+                          child: Text('${_fmtDate.format(dt)} · ${_fmtHora.format(dt)}',
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11, color: _Pal.inkLight)),
+                        ),
+                      ],
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: anulada
+                              ? const Color(0xFFFFDAD6)
+                              : const Color(0xFFDCFCE7),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          anulada ? 'Anulada' : 'Completada',
+                          style: GoogleFonts.plusJakartaSans(
+                              fontSize: 9, fontWeight: FontWeight.w800,
+                              color: anulada ? _Pal.danger
+                                  : const Color(0xFF2E9E6B)),
+                        ),
+                      ),
+                    ]),
+                  ],
+                )),
+              ]),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _kpiCard(String value, String label, Color color, Color bg, IconData icon) =>
+      Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFEBEFF3)),
+        ),
+        child: Row(children: [
+          Container(
+            width: 32, height: 32,
+            decoration: BoxDecoration(color: bg,
+                borderRadius: BorderRadius.circular(8)),
+            child: Icon(icon, size: 16, color: color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value, style: GoogleFonts.plusJakartaSans(
+                  fontSize: 14, fontWeight: FontWeight.w800, color: color)),
+              Text(label, style: GoogleFonts.plusJakartaSans(
+                  fontSize: 9, color: _Pal.inkLight),
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+            ],
+          )),
+        ]),
+      );
+
+  IconData _iconMetodo(String m) {
+    return switch (m) {
+      'efectivo'      => Icons.payments_outlined,
+      'tarjeta'       => Icons.credit_card_outlined,
+      'transferencia' => Icons.account_balance_outlined,
+      'mixto'         => Icons.swap_horiz_rounded,
+      _               => Icons.shopping_bag_outlined,
+    };
   }
 }
 

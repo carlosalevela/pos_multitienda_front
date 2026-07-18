@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../providers/contabilidad_provider.dart';
-import '../../../core/constants.dart';
+import '../../../theme/app_colors.dart';
 
 class TabMensual extends StatelessWidget {
   final ContabilidadProvider cont;
@@ -53,7 +53,7 @@ class TabMensual extends StatelessWidget {
   }
 
   // ── Contenido principal ────────────────────────────────────
-  Widget _contenido(resumen) {
+  Widget _contenido(dynamic resumen) {
     final totalVentas   = resumen.totalVentas   as double;
     final totalGastos   = resumen.totalGastos   as double;
     final utilidadBruta = resumen.utilidadBruta as double;
@@ -105,7 +105,7 @@ class TabMensual extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 6,
             offset: const Offset(0, 2))],
       ),
@@ -124,11 +124,11 @@ class TabMensual extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.calendar_month_rounded, size: 18,
-                color: Color(Constants.primaryColor)),
+                color: AppColors.secondary),
             const SizedBox(width: 8),
             Text(
               '${meses[mes - 1]} $anio',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
                   color: const Color(0xFF1A1A2E)),
@@ -158,7 +158,7 @@ class TabMensual extends StatelessWidget {
             color: Colors.grey.shade300),
         const SizedBox(height: 12),
         Text('Sin datos para ${meses[mes - 1]} $anio',
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 color: Colors.grey.shade400, fontSize: 15)),
       ],
     )));
@@ -171,7 +171,7 @@ class TabMensual extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2))],
       ),
@@ -179,7 +179,7 @@ class TabMensual extends StatelessWidget {
         Icon(Icons.bar_chart_rounded, size: 48, color: Colors.grey.shade300),
         const SizedBox(height: 8),
         Text('Sin ventas registradas este mes',
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 color: Colors.grey.shade400, fontSize: 13)),
       ])),
     );
@@ -231,19 +231,19 @@ class TabMensual extends StatelessWidget {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withOpacity(0.15)),
+        border: Border.all(color: color.withValues(alpha: 0.15)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Icon(icon, color: color, size: 20),
         const SizedBox(height: 8),
         Text(label,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 color: Colors.grey.shade600, fontSize: 11)),
         const SizedBox(height: 4),
         Text(valor,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 fontWeight: FontWeight.bold, fontSize: 14, color: color)),
       ]),
     );
@@ -253,9 +253,9 @@ class TabMensual extends StatelessWidget {
   Widget _tituloSeccion(IconData icon, String titulo, {Color? color}) {
     return Row(children: [
       Icon(icon, size: 18,
-          color: color ?? const Color(Constants.primaryColor)),
+          color: color ?? AppColors.secondary),
       const SizedBox(width: 8),
-      Text(titulo, style: GoogleFonts.poppins(
+      Text(titulo, style: GoogleFonts.inter(
           fontWeight: FontWeight.bold,
           fontSize: 15,
           color: const Color(0xFF1A1A2E))),
@@ -271,7 +271,7 @@ class TabMensual extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2))],
       ),
@@ -297,10 +297,10 @@ class TabMensual extends StatelessWidget {
                     Text(NumberFormat('#,##0').format(total),
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.poppins(
+                        style: GoogleFonts.inter(
                             fontSize: 7,
                             fontWeight: FontWeight.bold,
-                            color: const Color(Constants.primaryColor)))
+                            color: AppColors.secondary))
                   else
                     const SizedBox(height: 12),
                   Tooltip(
@@ -311,9 +311,9 @@ class TabMensual extends StatelessWidget {
                       height: 130 * pct.clamp(0.04, 1.0),
                       decoration: BoxDecoration(
                         color: isMax
-                            ? const Color(Constants.primaryColor)
-                            : const Color(Constants.primaryColor)
-                                .withOpacity(0.4),
+                            ? AppColors.secondary
+                            : AppColors.secondary
+                                .withValues(alpha: 0.4),
                         borderRadius: const BorderRadius.vertical(
                             top: Radius.circular(4)),
                       ),
@@ -321,7 +321,7 @@ class TabMensual extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(numDia,
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontSize: 8.5, color: Colors.grey.shade500)),
                 ],
               ),
@@ -353,22 +353,22 @@ class TabMensual extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(10)),
           child: const Text('🏆', style: TextStyle(fontSize: 24)),
         ),
         const SizedBox(width: 16),
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Día $numDia — ${meses[mes - 1]} $anio',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   color: Colors.white70, fontSize: 12)),
           Text(fmt.format(total),
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
                   fontSize: 22)),
           Text('$cantidad transacciones',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   color: Colors.white70, fontSize: 11)),
         ]),
       ]),
@@ -393,14 +393,14 @@ class TabMensual extends StatelessWidget {
         border: Border.all(
             color: esMax ? Colors.amber.shade200 : Colors.grey.shade100),
         boxShadow: [BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 6,
             offset: const Offset(0, 2))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Text('Día $numDia',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
                   color: esMax
@@ -413,12 +413,12 @@ class TabMensual extends StatelessWidget {
           const Spacer(),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text(fmt.format(total),
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
-                    color: const Color(Constants.primaryColor))),
+                    color: AppColors.secondary)),
             Text('$cantidad transacciones',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 10, color: Colors.grey.shade500)),
           ]),
         ]),
@@ -431,7 +431,7 @@ class TabMensual extends StatelessWidget {
             backgroundColor: Colors.grey.shade100,
             valueColor: AlwaysStoppedAnimation<Color>(esMax
                 ? Colors.amber.shade600
-                : const Color(Constants.primaryColor).withOpacity(0.5)),
+                : AppColors.secondary.withValues(alpha: 0.5)),
           ),
         ),
       ]),

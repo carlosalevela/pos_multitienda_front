@@ -43,7 +43,8 @@ class SesionCaja {
     ventasTotal:      double.tryParse(json['ventas_total']?.toString()   ?? '0') ?? 0,
     numTransacciones: (json['num_transacciones'] as num?)?.toInt()               ?? 0,
     gastosTotal:      double.tryParse(json['gastos_total']?.toString()   ?? '0') ?? 0,
-    montoEsperado:    double.tryParse(json['monto_esperado']?.toString() ?? '0') ?? 0,
+    montoEsperado:    double.tryParse(json['monto_esperado']?.toString()
+                        ?? json['monto_final_sistema']?.toString() ?? '0') ?? 0,
     tiendaNombre:     json['tienda_nombre']   ?? '',
     empleadoNombre:   json['empleado_nombre'] ?? '',
   );

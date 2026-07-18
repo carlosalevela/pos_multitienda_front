@@ -4,8 +4,10 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../models/separado.dart';
 import '../../../providers/auth_provider.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../../services/recibo_pdf_service.dart';
 import '../../../services/thermal_printer_service.dart';
+import '../../../services/windows_printer_service.dart';
 
 class SeparadoDetalleSheet extends StatelessWidget {
   final Separado     separado;
@@ -568,30 +570,28 @@ class SeparadoDetalleSheet extends StatelessWidget {
         ? auth.empresaNombre
         : separado.tiendaNombre;
 
-    // Prioridad 1: impresora térmica USB
+    // Prioridad 1: WebUSB (Chrome/Edge)
     if (ThermalPrinterService.isWebUsbSupported) {
       try {
         final dev = await ThermalPrinterService.getAutoDevice();
         if (dev != null) {
           final bytes = await ThermalPrinterService.buildSeparadoRecibo(
-            separado, empresaNombre: empresaNombre);
+              separado, empresaNombre: empresaNombre);
           await ThermalPrinterService.printBytes(dev, bytes);
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text('Factura impresa',
-                  style: GoogleFonts.poppins(fontSize: 13)),
-              backgroundColor: const Color(0xFF437A22),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-            ));
-          }
           return;
         }
       } catch (_) {}
+    } else if (!kIsWeb && await WindowsPrinterService.hasSavedPrinter()) {
+      // Prioridad 1b: ESC/POS directo al puerto COM (exe Windows)
+      try {
+        final bytes = await ThermalPrinterService.buildSeparadoRecibo(
+            separado, empresaNombre: empresaNombre);
+        await WindowsPrinterService.printRaw(bytes);
+        return;
+      } catch (_) {}
     }
 
-    // Prioridad 2: PDF (diálogo del navegador)
+    // Prioridad 2: PDF (diálogo del navegador / visor del sistema)
     if (!context.mounted) return;
     await ReciboPdfService.imprimirSeparado(
       separado: separado, empresaNombre: empresaNombre);

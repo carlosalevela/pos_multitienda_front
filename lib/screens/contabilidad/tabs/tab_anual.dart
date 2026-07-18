@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../providers/contabilidad_provider.dart';
-import '../../../core/constants.dart';
+import '../../../theme/app_colors.dart';
 
 class TabAnual extends StatelessWidget {
   final ContabilidadProvider cont;
@@ -99,7 +99,7 @@ class TabAnual extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 6,
               offset: const Offset(0, 2))
         ],
@@ -113,10 +113,10 @@ class TabAnual extends StatelessWidget {
           child: Center(
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.bar_chart_rounded,
-                  size: 18, color: Color(Constants.primaryColor)),
+                  size: 18, color: AppColors.secondary),
               const SizedBox(width: 8),
               Text('Año $anioSel',
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
                       color: const Color(0xFF1A1A2E))),
@@ -139,7 +139,7 @@ class TabAnual extends StatelessWidget {
           Icon(Icons.bar_chart_rounded, size: 56, color: Colors.grey.shade300),
           const SizedBox(height: 12),
           Text('Sin datos para $anioSel',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   color: Colors.grey.shade400, fontSize: 15)),
         ]),
       ),
@@ -180,19 +180,19 @@ class TabAnual extends StatelessWidget {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withOpacity(0.15)),
+        border: Border.all(color: color.withValues(alpha: 0.15)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Icon(icon, color: color, size: 20),
         const SizedBox(height: 8),
         Text(label,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 color: Colors.grey.shade600, fontSize: 11)),
         const SizedBox(height: 4),
         Text(valor,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 fontWeight: FontWeight.bold, fontSize: 14, color: color)),
       ]),
     );
@@ -202,10 +202,10 @@ class TabAnual extends StatelessWidget {
   Widget _tituloSeccion(IconData icon, String titulo, {Color? color}) {
     return Row(children: [
       Icon(icon,
-          size: 18, color: color ?? const Color(Constants.primaryColor)),
+          size: 18, color: color ?? AppColors.secondary),
       const SizedBox(width: 8),
       Text(titulo,
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
               fontWeight: FontWeight.bold,
               fontSize: 15,
               color: const Color(0xFF1A1A2E))),
@@ -222,7 +222,7 @@ class TabAnual extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 8,
               offset: const Offset(0, 2))
         ],
@@ -247,10 +247,10 @@ class TabAnual extends StatelessWidget {
                     Text(NumberFormat('#,##0').format(ventas),
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.poppins(
+                        style: GoogleFonts.inter(
                             fontSize: 7,
                             fontWeight: FontWeight.bold,
-                            color: const Color(Constants.primaryColor)))
+                            color: AppColors.secondary))
                   else
                     const SizedBox(height: 12),
                   Tooltip(
@@ -261,10 +261,10 @@ class TabAnual extends StatelessWidget {
                       height: 150 * pct.clamp(0.02, 1.0),
                       decoration: BoxDecoration(
                         color: isMax
-                            ? const Color(Constants.primaryColor)
+                            ? AppColors.secondary
                             : ventas > 0
-                                ? const Color(Constants.primaryColor)
-                                    .withOpacity(0.4)
+                                ? AppColors.secondary
+                                    .withValues(alpha: 0.4)
                                 : Colors.grey.shade200,
                         borderRadius: const BorderRadius.vertical(
                             top: Radius.circular(4)),
@@ -273,7 +273,7 @@ class TabAnual extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(abrev,
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontSize: 8.5, color: Colors.grey.shade500)),
                 ],
               ),
@@ -304,22 +304,22 @@ class TabAnual extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(10)),
           child: const Text('🏆', style: TextStyle(fontSize: 24)),
         ),
         const SizedBox(width: 16),
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('$nombre $anioSel',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   color: Colors.white70, fontSize: 12)),
           Text(fmt.format(ventas),
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
                   fontSize: 22)),
           Text('Utilidad: ${fmt.format(util)}',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   color: Colors.white70, fontSize: 11)),
         ]),
       ]),
@@ -346,7 +346,7 @@ class TabAnual extends StatelessWidget {
             color: esMax ? Colors.amber.shade200 : Colors.grey.shade100),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 6,
               offset: const Offset(0, 2))
         ],
@@ -354,7 +354,7 @@ class TabAnual extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Text(nombre,
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
                   color: esMax
@@ -367,12 +367,12 @@ class TabAnual extends StatelessWidget {
           const Spacer(),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text(fmt.format(ventas),
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
-                    color: const Color(Constants.primaryColor))),
+                    color: AppColors.secondary)),
             Text('$cantidad ventas  •  Gastos: ${fmt.format(gastos)}',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 10, color: Colors.grey.shade500)),
           ]),
         ]),
@@ -385,13 +385,13 @@ class TabAnual extends StatelessWidget {
             backgroundColor: Colors.grey.shade100,
             valueColor: AlwaysStoppedAnimation<Color>(esMax
                 ? Colors.amber.shade600
-                : const Color(Constants.primaryColor).withOpacity(0.5)),
+                : AppColors.secondary.withValues(alpha: 0.5)),
           ),
         ),
         const SizedBox(height: 6),
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Text('Utilidad: ${fmt.format(utilidad)}',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                   color: utilidad >= 0
@@ -401,7 +401,7 @@ class TabAnual extends StatelessWidget {
               ventas > 0
                   ? 'Margen: ${(utilidad / ventas * 100).toStringAsFixed(1)}%'
                   : 'Sin ventas',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   fontSize: 10, color: Colors.grey.shade400)),
         ]),
       ]),

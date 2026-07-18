@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../../../theme/app_colors.dart';
 
 import '../../../models/contabilidad_models.dart';
 import '../../../providers/contabilidad_provider.dart';
@@ -29,13 +30,19 @@ class _TabPLState extends State<TabPL> {
   DateTime _customIni = DateTime.now().subtract(const Duration(days: 30));
   DateTime _customFin = DateTime.now();
 
-  static const _primary = Color(0xFF10B981);
-  static const _green   = Color(0xFF006C49);
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _cargar());
+  }
+
+  @override
+  void didUpdateWidget(TabPL oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tiendaId != widget.tiendaId) {
+      _cargar();
+    }
   }
 
   (String, String) _rango() {
@@ -174,7 +181,7 @@ class _TabPLState extends State<TabPL> {
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                 decoration: BoxDecoration(
                   color: _periodo == _Periodo.custom
-                      ? _primary
+                      ? AppColors.secondary
                       : Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(20),
                 ),
@@ -187,7 +194,7 @@ class _TabPLState extends State<TabPL> {
                   const SizedBox(width: 5),
                   Text(
                     _periodo == _Periodo.custom ? _labelPeriodo() : 'Personalizado',
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: _periodo == _Periodo.custom
@@ -221,9 +228,9 @@ class _TabPLState extends State<TabPL> {
                 child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
             : const Icon(Icons.download_rounded, size: 16),
         label: Text('Exportar Reporte',
-            style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF1A1A2E),
+          backgroundColor: AppColors.onSurface,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -244,11 +251,11 @@ class _TabPLState extends State<TabPL> {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: sel ? _primary : Colors.grey.shade100,
+          color: sel ? AppColors.secondary : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(label,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: sel ? Colors.white : Colors.grey.shade700)),
@@ -271,11 +278,11 @@ class _TabPLState extends State<TabPL> {
         label:    'Ganancia Neta',
         value:    '\$${widget.fmt.format(util.abs())}',
         icon:     Icons.payments_rounded,
-        iconColor: util >= 0 ? _green : Colors.red.shade700,
+        iconColor: util >= 0 ? AppColors.secondary : Colors.red.shade700,
         subText:  util >= 0
             ? '+${er.utilidadOperativaPct.toStringAsFixed(1)}% margen operativo'
             : 'Pérdida operativa',
-        subColor: util >= 0 ? _green : Colors.red.shade600,
+        subColor: util >= 0 ? AppColors.secondary : Colors.red.shade600,
         subIcon:  util >= 0 ? Icons.trending_up_rounded : Icons.trending_down_rounded,
       )),
       const SizedBox(width: 12),
@@ -283,13 +290,13 @@ class _TabPLState extends State<TabPL> {
         label:       'Punto de Equilibrio',
         value:       alcanzado ? 'Superado' : 'En progreso',
         icon:        Icons.balance_rounded,
-        iconColor:   alcanzado ? _green : Colors.orange.shade700,
+        iconColor:   alcanzado ? AppColors.secondary : Colors.orange.shade700,
         subText:     pe != null
             ? 'Margen de seguridad: ${pe.margenContribucionPct.toStringAsFixed(1)}%'
             : '—',
-        subColor:    alcanzado ? _green : Colors.orange.shade700,
+        subColor:    alcanzado ? AppColors.secondary : Colors.orange.shade700,
         subIcon:     alcanzado ? Icons.check_circle_rounded : Icons.schedule_rounded,
-        leftBorder:  alcanzado ? _green : null,
+        leftBorder:  alcanzado ? AppColors.secondary : null,
         isTextValue: true,
       )),
       const SizedBox(width: 12),
@@ -297,7 +304,7 @@ class _TabPLState extends State<TabPL> {
         label:    'Ingresos',
         value:    '\$${widget.fmt.format(er.ingresosNetos)}',
         icon:     Icons.add_business_rounded,
-        iconColor: _primary,
+        iconColor: AppColors.secondary,
         subText:  '${er.numVentas} ventas registradas',
         subColor: Colors.grey.shade500,
         subIcon:  null,
@@ -353,7 +360,7 @@ class _TabPLState extends State<TabPL> {
         Row(children: [
           Expanded(
             child: Text(label,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     color: Colors.grey.shade500,
@@ -371,10 +378,10 @@ class _TabPLState extends State<TabPL> {
         const SizedBox(height: 12),
         Text(
           value,
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
               fontSize: isTextValue ? 22 : 20,
               fontWeight: FontWeight.bold,
-              color: const Color(0xFF1A1A2E)),
+              color: AppColors.onSurface),
         ),
         const SizedBox(height: 8),
         Row(children: [
@@ -384,7 +391,7 @@ class _TabPLState extends State<TabPL> {
           ],
           Expanded(
             child: Text(subText,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 11,
                     color: subColor,
                     fontWeight: FontWeight.w500),
@@ -405,10 +412,10 @@ class _TabPLState extends State<TabPL> {
   Widget _plCard(EstadoResultados er) {
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _seccionTitulo('Estado de Resultados', Icons.receipt_long_rounded, _primary),
+        _seccionTitulo('Estado de Resultados', Icons.receipt_long_rounded, AppColors.secondary),
         const SizedBox(height: 16),
 
-        _grupo('INGRESOS', const Color(0xFF10B981)),
+        _grupo('INGRESOS', AppColors.secondary),
         _fila('Ventas brutas',    er.ventasBrutas,          positivo: true),
         _fila('(-) Descuentos',  -er.menosDescuentos),
         _fila('(-) Devoluciones',-er.menosDevoluciones),
@@ -444,18 +451,18 @@ class _TabPLState extends State<TabPL> {
         Row(children: [
           Expanded(
             child: Text('UTILIDAD OPERATIVA',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
-                    color: const Color(0xFF1A1A2E))),
+                    color: AppColors.onSurface)),
           ),
           Text(
             '\$${widget.fmt.format(er.utilidadOperativa.abs())}',
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
                 color: er.utilidadOperativa >= 0
-                    ? _green
+                    ? AppColors.secondary
                     : Colors.red.shade600),
           ),
         ]),
@@ -465,7 +472,7 @@ class _TabPLState extends State<TabPL> {
           child: Text(
             'Margen: ${er.utilidadOperativaPct.toStringAsFixed(2)}%  •  '
             '${er.numVentas} ventas  •  ${er.numDevoluciones} devoluciones',
-            style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey.shade500),
+            style: GoogleFonts.inter(fontSize: 10, color: Colors.grey.shade500),
           ),
         ),
       ]),
@@ -481,7 +488,7 @@ class _TabPLState extends State<TabPL> {
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(label,
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
               fontSize: 10,
               fontWeight: FontWeight.bold,
               color: color,
@@ -501,11 +508,11 @@ class _TabPLState extends State<TabPL> {
       child: Row(children: [
         Expanded(
             child: Text(label,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 13, color: Colors.grey.shade700))),
         Text(
           '${valor < 0 ? '-' : ''}\$${widget.fmt.format(valor.abs())}',
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
               fontSize: 13, fontWeight: FontWeight.w500, color: color),
         ),
       ]),
@@ -529,10 +536,10 @@ class _TabPLState extends State<TabPL> {
       child: Row(children: [
         Expanded(
             child: Text(label,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
-                    color: const Color(0xFF1A1A2E)))),
+                    color: AppColors.onSurface))),
         if (extra != null) ...[
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -541,7 +548,7 @@ class _TabPLState extends State<TabPL> {
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(extra,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
                     color: positivo
@@ -552,7 +559,7 @@ class _TabPLState extends State<TabPL> {
         ],
         Text(
           '${valor < 0 ? '-' : ''}\$${widget.fmt.format(valor.abs())}',
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
               fontSize: 14, fontWeight: FontWeight.bold, color: color),
         ),
       ]),
@@ -563,7 +570,7 @@ class _TabPLState extends State<TabPL> {
 
   Widget _peCard(PuntoEquilibrio pe) {
     final alcanzado = pe.alcanzado;
-    final peColor   = alcanzado ? _green : Colors.orange.shade700;
+    final peColor   = alcanzado ? AppColors.secondary : Colors.orange.shade700;
     final progreso  = pe.puntoEquilibrioIngresos != null && pe.ingresosNetos > 0
         ? (pe.ingresosNetos / pe.puntoEquilibrioIngresos!).clamp(0.0, 1.5)
         : 0.0;
@@ -589,7 +596,7 @@ class _TabPLState extends State<TabPL> {
             const SizedBox(width: 6),
             Text(
               alcanzado ? 'Punto de equilibrio alcanzado' : 'Por debajo del punto de equilibrio',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   fontSize: 12, fontWeight: FontWeight.w600, color: peColor),
             ),
           ]),
@@ -599,9 +606,9 @@ class _TabPLState extends State<TabPL> {
         if (pe.puntoEquilibrioIngresos != null) ...[
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             Text('Ingresos actuales',
-                style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade500)),
+                style: GoogleFonts.inter(fontSize: 11, color: Colors.grey.shade500)),
             Text('${(progreso * 100).toStringAsFixed(0)}%',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 11, fontWeight: FontWeight.bold, color: peColor)),
           ]),
           const SizedBox(height: 6),
@@ -627,9 +634,9 @@ class _TabPLState extends State<TabPL> {
           const SizedBox(height: 4),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             Text('\$0',
-                style: GoogleFonts.poppins(fontSize: 9, color: Colors.grey.shade400)),
+                style: GoogleFonts.inter(fontSize: 9, color: Colors.grey.shade400)),
             Text('PE: \$${widget.fmt.format(pe.puntoEquilibrioIngresos!)}',
-                style: GoogleFonts.poppins(fontSize: 9, color: Colors.grey.shade500)),
+                style: GoogleFonts.inter(fontSize: 9, color: Colors.grey.shade500)),
           ]),
           const SizedBox(height: 14),
         ],
@@ -643,7 +650,7 @@ class _TabPLState extends State<TabPL> {
             _peKpi(
               pe.excedenteDeficit! >= 0 ? 'Excedente' : 'Déficit',
               pe.excedenteDeficit!.abs(),
-              pe.excedenteDeficit! >= 0 ? _green : Colors.red.shade600,
+              pe.excedenteDeficit! >= 0 ? AppColors.secondary : Colors.red.shade600,
             ),
         ]),
       ]),
@@ -660,10 +667,10 @@ class _TabPLState extends State<TabPL> {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(label,
-            style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey.shade500)),
+            style: GoogleFonts.inter(fontSize: 10, color: Colors.grey.shade500)),
         Text(
           label2 ?? '\$${widget.fmt.format(valor!)}',
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
               fontSize: 13, fontWeight: FontWeight.bold, color: color),
         ),
       ]),
@@ -699,7 +706,7 @@ class _TabPLState extends State<TabPL> {
                 ),
                 child: Center(
                   child: Text('${i + 1}',
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                           color: badgeColor)),
@@ -709,22 +716,22 @@ class _TabPLState extends State<TabPL> {
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(emp.nombre,
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: const Color(0xFF1A1A2E))),
+                          color: AppColors.onSurface)),
                   Text('${emp.numVentas} ventas  •  '
                       'promedio \$${widget.fmt.format(emp.promedioVenta)}',
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontSize: 11, color: Colors.grey.shade500)),
                 ]),
               ),
               Text(
                 '\$${widget.fmt.format(emp.totalVentas)}',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: _green),
+                    color: AppColors.secondary),
               ),
             ]),
           );
@@ -767,7 +774,7 @@ class _TabPLState extends State<TabPL> {
                 ),
                 child: Center(
                   child: Text('${i + 1}',
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontSize: 11, fontWeight: FontWeight.bold,
                           color: avatarColor)),
                 ),
@@ -781,7 +788,7 @@ class _TabPLState extends State<TabPL> {
                 ),
                 child: Center(
                   child: Text(iniciales,
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontSize: 10, fontWeight: FontWeight.bold,
                           color: avatarColor)),
                 ),
@@ -791,15 +798,15 @@ class _TabPLState extends State<TabPL> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(c.nombre,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontSize: 12, fontWeight: FontWeight.w600,
-                          color: const Color(0xFF1A1A2E))),
+                          color: AppColors.onSurface)),
                   if (c.tierNombre != null && tierColor != null)
                     Row(mainAxisSize: MainAxisSize.min, children: [
                       Icon(Icons.star_rounded, size: 9, color: tierColor),
                       const SizedBox(width: 2),
                       Text(c.tierNombre!,
-                          style: GoogleFonts.poppins(
+                          style: GoogleFonts.inter(
                               fontSize: 9, fontWeight: FontWeight.w600,
                               color: tierColor)),
                     ]),
@@ -807,11 +814,11 @@ class _TabPLState extends State<TabPL> {
               ),
               Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                 Text('\$${widget.fmt.format(c.totalPeriodo)}',
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
                         fontSize: 13, fontWeight: FontWeight.bold,
-                        color: const Color(0xFF006C49))),
+                        color: AppColors.secondary)),
                 Text('${c.numCompras} compra${c.numCompras != 1 ? "s" : ""}',
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
                         fontSize: 9, color: Colors.grey.shade500)),
               ]),
             ]),
@@ -838,7 +845,7 @@ class _TabPLState extends State<TabPL> {
               Icons.store_mall_directory_rounded, Colors.indigo.shade600),
           const Spacer(),
           Text('Desglose completo ↓',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: Colors.indigo.shade400)),
@@ -856,13 +863,13 @@ class _TabPLState extends State<TabPL> {
               Row(children: [
                 Expanded(
                   child: Text(t.tiendaNombre,
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF1A1A2E))),
+                          color: AppColors.onSurface)),
                 ),
                 Text('\$${widget.fmt.format(t.ingresosNetos)}',
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
                         fontSize: 12, color: Colors.grey.shade600)),
               ]),
               const SizedBox(height: 6),
@@ -879,7 +886,7 @@ class _TabPLState extends State<TabPL> {
                   child: Container(
                     height: 10,
                     decoration: BoxDecoration(
-                      color: _green,
+                      color: AppColors.secondary,
                       borderRadius: BorderRadius.circular(5),
                     ),
                   ),
@@ -893,17 +900,17 @@ class _TabPLState extends State<TabPL> {
 
         // ── Título tabla ────────────────────────────────
         Text('Desglose Financiero por Sucursal',
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFF1A1A2E))),
+                color: AppColors.onSurface)),
         const SizedBox(height: 12),
 
         // ── Cabecera tabla ──────────────────────────────
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: const Color(0xFFF2F4F6),
+            color: AppColors.surfaceContainerLow,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(children: [
@@ -935,30 +942,30 @@ class _TabPLState extends State<TabPL> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(t.tiendaNombre,
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF1A1A2E))),
+                          color: AppColors.onSurface)),
                 ),
               ])),
               Expanded(flex: 2, child: Text(
                 '\$${widget.fmt.format(t.ventasBrutas)}',
                 textAlign: TextAlign.right,
-                style: GoogleFonts.poppins(fontSize: 12),
+                style: GoogleFonts.inter(fontSize: 12),
               )),
               Expanded(flex: 2, child: Text(
                 '\$${widget.fmt.format(t.gastos + t.costoVentas)}',
                 textAlign: TextAlign.right,
-                style: GoogleFonts.poppins(fontSize: 12),
+                style: GoogleFonts.inter(fontSize: 12),
               )),
               Expanded(flex: 2, child: Text(
                 '${t.utilidadOperativa >= 0 ? '+' : '-'}'
                 '\$${widget.fmt.format(t.utilidadOperativa.abs())}',
                 textAlign: TextAlign.right,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: t.utilidadOperativa >= 0 ? _green : Colors.red.shade600),
+                    color: t.utilidadOperativa >= 0 ? AppColors.secondary : Colors.red.shade600),
               )),
               Expanded(flex: 2, child: Padding(
                 padding: const EdgeInsets.only(left: 8),
@@ -969,7 +976,7 @@ class _TabPLState extends State<TabPL> {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(status.$1,
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
                           color: status.$2)),
@@ -990,25 +997,25 @@ class _TabPLState extends State<TabPL> {
             ),
             child: Row(children: [
               Expanded(flex: 3, child: Text('TOTAL',
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                       fontSize: 12, fontWeight: FontWeight.bold))),
               Expanded(flex: 2, child: Text(
                 '\$${widget.fmt.format(cont.comparativoTotales!['ingresos_netos'] ?? 0)}',
                 textAlign: TextAlign.right,
-                style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold),
+                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold),
               )),
               Expanded(flex: 2, child: Text(
                 '\$${widget.fmt.format(cont.comparativoTotales!['gastos'] ?? 0)}',
                 textAlign: TextAlign.right,
-                style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold),
+                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold),
               )),
               Expanded(flex: 2, child: Text(
                 '\$${widget.fmt.format(cont.comparativoTotales!['utilidad_operativa'] ?? 0)}',
                 textAlign: TextAlign.right,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: _green),
+                    color: AppColors.secondary),
               )),
               const Expanded(flex: 2, child: SizedBox()),
             ]),
@@ -1020,7 +1027,7 @@ class _TabPLState extends State<TabPL> {
 
   (String, Color) _tiendaStatus(TiendaComparativo t) {
     if (t.utilidadOperativa > 0 && t.margenBrutoPct > 20) {
-      return ('Optimizado', _green);
+      return ('Optimizado', AppColors.secondary);
     } else if (t.utilidadOperativa > 0) {
       return ('Estable', Colors.grey.shade600);
     } else {
@@ -1031,7 +1038,7 @@ class _TabPLState extends State<TabPL> {
   Widget _th(String label, {bool right = false}) => Text(
     label,
     textAlign: right ? TextAlign.right : TextAlign.left,
-    style: GoogleFonts.poppins(
+    style: GoogleFonts.inter(
         fontSize: 11,
         fontWeight: FontWeight.bold,
         color: Colors.grey.shade500),
@@ -1046,14 +1053,14 @@ class _TabPLState extends State<TabPL> {
           Icon(Icons.receipt_long_rounded, size: 56, color: Colors.grey.shade300),
           const SizedBox(height: 12),
           Text('Sin datos para el período',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   color: Colors.grey.shade400, fontSize: 15)),
           const SizedBox(height: 8),
           TextButton(
             onPressed: _cargar,
             child: Text('Reintentar',
-                style: GoogleFonts.poppins(
-                    color: _primary, fontWeight: FontWeight.w600)),
+                style: GoogleFonts.inter(
+                    color: AppColors.secondary, fontWeight: FontWeight.w600)),
           ),
         ]),
       ),
@@ -1092,10 +1099,10 @@ class _TabPLState extends State<TabPL> {
       ),
       const SizedBox(width: 10),
       Text(label,
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
               fontWeight: FontWeight.bold,
               fontSize: 15,
-              color: const Color(0xFF1A1A2E))),
+              color: AppColors.onSurface)),
     ],
   );
 
@@ -1122,14 +1129,14 @@ class _TabPLState extends State<TabPL> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: _primary.withValues(alpha: 0.1),
+                    color: AppColors.secondary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(Icons.date_range_rounded, color: _primary, size: 18),
+                  child: Icon(Icons.date_range_rounded, color: AppColors.secondary, size: 18),
                 ),
                 const SizedBox(width: 10),
                 Text('Rango personalizado',
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
                         fontWeight: FontWeight.bold, fontSize: 15)),
                 const Spacer(),
                 IconButton(
@@ -1167,7 +1174,7 @@ class _TabPLState extends State<TabPL> {
               const SizedBox(height: 8),
               Text(
                 selIni ? '👆 Selecciona inicio' : '👆 Selecciona fin',
-                style: GoogleFonts.poppins(fontSize: 11, color: _primary),
+                style: GoogleFonts.inter(fontSize: 11, color: AppColors.secondary),
               ),
               const SizedBox(height: 8),
               SizedBox(
@@ -1200,7 +1207,7 @@ class _TabPLState extends State<TabPL> {
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
                   child: Text('Cancelar',
-                      style: GoogleFonts.poppins(color: Colors.grey.shade600)),
+                      style: GoogleFonts.inter(color: Colors.grey.shade600)),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
@@ -1216,7 +1223,7 @@ class _TabPLState extends State<TabPL> {
                         }
                       : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _primary,
+                    backgroundColor: AppColors.secondary,
                     foregroundColor: Colors.white,
                     disabledBackgroundColor: Colors.grey.shade200,
                     elevation: 0,
@@ -1224,7 +1231,7 @@ class _TabPLState extends State<TabPL> {
                         borderRadius: BorderRadius.circular(10)),
                   ),
                   child: Text('Aplicar',
-                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
                 ),
               ]),
             ]),
@@ -1246,23 +1253,23 @@ class _TabPLState extends State<TabPL> {
           duration: const Duration(milliseconds: 180),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: activo ? _primary.withValues(alpha: 0.08) : Colors.grey.shade50,
+            color: activo ? AppColors.secondary.withValues(alpha: 0.08) : Colors.grey.shade50,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: activo ? _primary : Colors.grey.shade200,
+              color: activo ? AppColors.secondary : Colors.grey.shade200,
               width: activo ? 1.5 : 1,
             ),
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(label,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 10,
-                    color: activo ? _primary : Colors.grey.shade500)),
+                    color: activo ? AppColors.secondary : Colors.grey.shade500)),
             Text(valor,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: activo ? _primary : const Color(0xFF1A1A2E))),
+                    color: activo ? AppColors.secondary : AppColors.onSurface)),
           ]),
         ),
       );
