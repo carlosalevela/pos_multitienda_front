@@ -1,5 +1,6 @@
 // lib/screens/inventario/inventario_screen.dart
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../utils/file_downloader.dart';
@@ -12,6 +13,7 @@ import '../../models/producto.dart';
 import '../../models/separado.dart';
 import '../../services/empleado_service.dart';
 import '../../services/inventario_service.dart';
+import '../../services/barcode_service.dart';
 import '../../core/api_client.dart';
 import '../../services/cliente_service.dart';
 import 'widgets/producto_form_dialog.dart';
@@ -51,6 +53,11 @@ class _InventarioScreenState extends State<InventarioScreen>
 
   late AnimationController _fadeCtrl;
   late Animation<double>   _fadeAnim;
+
+  // Barcode scanner
+  StreamSubscription<String>? _barcodeSub;
+  bool   _scanActivo    = false;
+  Timer? _scanPulseTimer;
 
   // ── Design tokens ──────────────────────────────────────
   static const _bg       = Color(0xFFF7F9FB);
@@ -93,6 +100,8 @@ class _InventarioScreenState extends State<InventarioScreen>
     _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
     _fadeCtrl.forward();
 
+    _barcodeSub = BarcodeService.instance.onBarcode.listen(_onBarcode);
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final auth = context.read<AuthProvider>();
@@ -119,9 +128,25 @@ class _InventarioScreenState extends State<InventarioScreen>
 
   @override
   void dispose() {
+    _barcodeSub?.cancel();
+    _scanPulseTimer?.cancel();
     _searchCtrl.dispose();
     _fadeCtrl.dispose();
     super.dispose();
+  }
+
+  void _onBarcode(String codigo) {
+    if (!mounted) return;
+    if (ModalRoute.of(context)?.isCurrent == false) return;
+    _searchCtrl.text = codigo;
+    context.read<InventarioProvider>().cargarProductos(
+      q: codigo, tiendaId: _tiendaActiva, activo: _activoFiltro,
+    );
+    setState(() => _scanActivo = true);
+    _scanPulseTimer?.cancel();
+    _scanPulseTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted) setState(() => _scanActivo = false);
+    });
   }
 
   // ══════════════════════════════════════════════════════
@@ -789,6 +814,28 @@ class _InventarioScreenState extends State<InventarioScreen>
                   q: val, tiendaId: _tiendaActiva, activo: _activoFiltro),
           ),
         ),
+      ),
+      const SizedBox(width: 10),
+      // Indicador escáner
+      AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        decoration: BoxDecoration(
+          color:        _scanActivo ? const Color(0xFFE8FFF4) : _surfLow,
+          borderRadius: BorderRadius.circular(999),
+          border:       Border.all(
+            color: _scanActivo ? _green : _border,
+          ),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.qr_code_scanner_rounded,
+              size: 16,
+              color: _scanActivo ? _green : _muted2),
+          if (_scanActivo) ...[
+            const SizedBox(width: 5),
+            Text('OK', style: _t(size: 11, weight: FontWeight.w700, color: _green)),
+          ],
+        ]),
       ),
       if (!esCajero) ...[
         const SizedBox(width: 10),
