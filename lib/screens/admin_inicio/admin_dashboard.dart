@@ -25,6 +25,7 @@ import '../caja/caja_dashboard_admin.dart';
 import '../cajero_inicio/cajero_dashboard.dart';
 import '../separados/separados_screen.dart';
 import '../configuracion/configuracion_screen.dart';
+import '../etiquetas/etiquetas_screen.dart';
 
 class _C {
   static const bg = Color(0xFFF5F7F8);
@@ -95,6 +96,7 @@ List<_NavItem> _buildNavItems(String rol) {
     const _NavItem(label: 'Separados', screen: 'separados', icon: Icons.bookmark_rounded),
     const _NavItem(label: 'Compras', screen: 'compras', icon: Icons.shopping_cart_rounded),
     const _NavItem(label: 'Devoluciones', screen: 'devoluciones', icon: Icons.assignment_return_rounded),
+    const _NavItem(label: 'Etiquetas', screen: 'etiquetas', icon: Icons.label_rounded),
     const _NavItem(label: 'Empleados', screen: 'empleados', icon: Icons.people_rounded),
     const _NavItem(label: 'Tiendas', screen: 'stores', icon: Icons.store_rounded),
     const _NavItem(label: 'Empresas', screen: 'empresas', icon: Icons.business_rounded),
@@ -114,6 +116,7 @@ List<_NavItem> _buildNavItems(String rol) {
       case 'suppliers': return ['admin', 'supervisor', 'superadmin'].contains(rol);
       case 'compras': return ['admin', 'supervisor', 'superadmin'].contains(rol);
       case 'devoluciones': return ['admin', 'supervisor', 'cajero', 'superadmin'].contains(rol);
+      case 'etiquetas': return ['admin', 'supervisor', 'superadmin'].contains(rol);
       case 'empleados': return ['admin', 'superadmin'].contains(rol);
       case 'stores': return ['admin', 'superadmin'].contains(rol);
       case 'empresas': return ['admin', 'superadmin'].contains(rol);
@@ -180,6 +183,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       case 'suppliers': return const ComprasModuloScreen();
       case 'compras': return const ComprasModuloScreen();
       case 'devoluciones': return const DevolucionesScreen();
+      case 'etiquetas': return const EtiquetasScreen();
       case 'empleados': return const EmpleadosScreen();
       case 'stores': return const TiendasScreen();
       case 'empresas': return const EmpresasScreen();
