@@ -86,7 +86,7 @@ class _DetalleCompraDialogState extends State<DetalleCompraDialog> {
         _infoRow(Icons.store_rounded,    'Proveedor',
             d['proveedor_nombre'] ?? ''),
         _infoRow(Icons.business_rounded, 'Tienda',
-            d['tienda_nombre'] ?? ''),
+            d['tienda_nombre'] ?? 'Multi-tienda'),
         _infoRow(Icons.badge_rounded,    'Empleado',
             d['empleado_nombre'] ?? ''),
         _infoRow(Icons.calendar_today_rounded, 'Fecha orden',
@@ -143,6 +143,9 @@ class _DetalleCompraDialogState extends State<DetalleCompraDialog> {
   }
 
   Widget _itemProducto(Map<String, dynamic> item) {
+    final distribuciones = (item['distribuciones'] as List?)
+        ?.cast<Map<String, dynamic>>() ?? [];
+
     return Container(
       margin:  const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
@@ -151,26 +154,52 @@ class _DetalleCompraDialogState extends State<DetalleCompraDialog> {
         borderRadius: AppRadius.xl,
         border:       Border.all(color: AppColors.outlineVariant),
       ),
-      child: Row(children: [
-        Expanded(child: Text(
-          item['producto_nombre'] ?? '',
-          style: AppTextStyles.bodyMd.copyWith(fontWeight: FontWeight.w500))),
-        Text(
-          'x${double.tryParse(item['cantidad'].toString())
-              ?.toStringAsFixed(0) ?? 0}  ',
-          style: AppTextStyles.bodySm),
-        Text(
-          '\$${ComprasTheme.fmt(double.tryParse(
-              item['precio_unitario'].toString()) ?? 0)} c/u',
-          style: AppTextStyles.bodySm),
-        const SizedBox(width: 12),
-        Text(
-          '\$${ComprasTheme.fmt(double.tryParse(
-              item['subtotal'].toString()) ?? 0)}',
-          style: AppTextStyles.bodyMd.copyWith(
-              fontWeight: FontWeight.bold,
-              color: AppColors.secondary)),
-      ]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Expanded(child: Text(
+              item['producto_nombre'] ?? '',
+              style: AppTextStyles.bodyMd.copyWith(fontWeight: FontWeight.w500))),
+            Text(
+              'x${double.tryParse(item['cantidad'].toString())
+                  ?.toStringAsFixed(0) ?? 0}  ',
+              style: AppTextStyles.bodySm),
+            Text(
+              '\$${ComprasTheme.fmt(double.tryParse(
+                  item['precio_unitario'].toString()) ?? 0)} c/u',
+              style: AppTextStyles.bodySm),
+            const SizedBox(width: 12),
+            Text(
+              '\$${ComprasTheme.fmt(double.tryParse(
+                  item['subtotal'].toString()) ?? 0)}',
+              style: AppTextStyles.bodyMd.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.secondary)),
+          ]),
+          if (distribuciones.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            ...distribuciones.map((dist) => Padding(
+              padding: const EdgeInsets.only(left: 4, top: 2),
+              child: Row(children: [
+                Icon(Icons.store_rounded,
+                    size: 11, color: AppColors.outline),
+                const SizedBox(width: 4),
+                Text(dist['tienda_nombre'] ?? '—',
+                    style: AppTextStyles.labelSm
+                        .copyWith(color: AppColors.onSurfaceVariant)),
+                const Spacer(),
+                Text(
+                  'x${double.tryParse(dist['cantidad'].toString())
+                      ?.toStringAsFixed(0) ?? 0}',
+                  style: AppTextStyles.labelSm.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.secondary)),
+              ]),
+            )),
+          ],
+        ],
+      ),
     );
   }
 }

@@ -1,11 +1,13 @@
 // lib/screens/compras/widgets/nueva_orden_dialog.dart
 
+import 'dart:async';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/proveedores_provider.dart';
 import '../../../providers/auth_provider.dart';
+import '../../../services/barcode_service.dart';
 import '../../../services/compra_service.dart';
 import '../../../services/compras_pdf_service.dart';
 import '../../../theme/app_colors.dart';
@@ -27,8 +29,14 @@ class _NuevaOrdenDialogState extends State<NuevaOrdenDialog> {
 
   int?                             _proveedorId;
   int?                             _tiendaId;
+  bool                             _multiTienda = false;
+  final Set<int>                   _tiendasSeleccionadas = {};
   final List<Map<String, dynamic>> _detalles = [];
-  bool                             _parseando = false;
+  bool                             _parseando      = false;
+  bool                             _buscandoBarcode = false;
+  bool                             _scanActivo     = false;
+  Timer?                           _scanPulseTimer;
+  StreamSubscription<String>?      _barcodeSub;
 
   @override
   void initState() {
@@ -37,7 +45,133 @@ class _NuevaOrdenDialogState extends State<NuevaOrdenDialog> {
     if (!ComprasTheme.esAdmin(auth.rol)) {
       _tiendaId = auth.tiendaId == 0 ? null : auth.tiendaId;
     }
+    _barcodeSub = BarcodeService.instance.onBarcode.listen(_onBarcode);
     WidgetsBinding.instance.addPostFrameCallback((_) => _cargarDatos());
+  }
+
+  // ── Escáner de código de barras ──────────────────────────────
+
+  void _pulsarEscaner() {
+    setState(() => _scanActivo = true);
+    _scanPulseTimer?.cancel();
+    _scanPulseTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted) setState(() => _scanActivo = false);
+    });
+  }
+
+  Future<void> _onBarcode(String codigo) async {
+    if (!mounted) return;
+    _pulsarEscaner();
+
+    setState(() => _buscandoBarcode = true);
+    // Búsqueda a nivel empresa (sin tiendaId) para encontrar cualquier
+    // producto existente sin importar en qué tienda tenga inventario.
+    final prov = context.read<ProveedoresProvider>();
+    final resultados = await prov.buscarProductos(q: codigo);
+    if (!mounted) return;
+    setState(() => _buscandoBarcode = false);
+
+    if (resultados.isNotEmpty) {
+      final p      = resultados.first;
+      final id     = p['id'] as int;
+      final nombre = p['nombre'] as String? ?? '';
+      setState(() => _detalles.add({
+        'producto':         id,
+        'nombre':           nombre,
+        'cantidad':         '1',
+        'precio_unitario':  '',
+        'categoria_nombre': '',
+      }));
+    } else {
+      await _alertaProductoNoEncontrado(codigo);
+    }
+  }
+
+  Future<void> _alertaProductoNoEncontrado(String codigo) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(16))),
+        titlePadding:   const EdgeInsets.fromLTRB(20, 20, 20, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+        title: Row(children: [
+          const Icon(Icons.qr_code_rounded,
+              color: AppColors.warning, size: 22),
+          const SizedBox(width: 10),
+          Text('Producto no encontrado',
+              style: AppTextStyles.headlineSm),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 10),
+            Text('El código escaneado no existe en el inventario:',
+                style: AppTextStyles.bodySm
+                    .copyWith(color: AppColors.onSurfaceVariant)),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceContainerLow,
+                borderRadius: AppRadius.lg,
+                border: Border.all(color: AppColors.outlineVariant),
+              ),
+              child: Text(codigo,
+                  style: AppTextStyles.bodyMd.copyWith(
+                      fontFamily: 'monospace',
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2)),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '¿Deseas agregar este código como producto nuevo '
+              'en la orden para crearlo al recibirla?',
+              style: AppTextStyles.bodySm,
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancelar',
+                style: AppTextStyles.bodyMd.copyWith(
+                    color: AppColors.onSurfaceVariant)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() => _detalles.add({
+                'producto':            null,
+                'nombre':              '',
+                'codigo_barras_input': codigo,
+                'cantidad':            '1',
+                'precio_unitario':     '',
+                'categoria_nombre':    '',
+              }));
+            },
+            icon:  const Icon(Icons.add_rounded, size: 16),
+            label: Text('Agregar como nuevo',
+                style: AppTextStyles.bodyMd
+                    .copyWith(fontWeight: FontWeight.w600)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.secondary,
+              foregroundColor: AppColors.onSecondary,
+              elevation: 0,
+              shape: const RoundedRectangleBorder(
+                  borderRadius: AppRadius.xl),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 18, vertical: 10),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _cargarDatos() async {
@@ -52,6 +186,8 @@ class _NuevaOrdenDialogState extends State<NuevaOrdenDialog> {
   @override
   void dispose() {
     _obsCtrl.dispose();
+    _barcodeSub?.cancel();
+    _scanPulseTimer?.cancel();
     super.dispose();
   }
 
@@ -77,6 +213,41 @@ class _NuevaOrdenDialogState extends State<NuevaOrdenDialog> {
             color: AppColors.secondary, size: 22),
         const SizedBox(width: 10),
         Text('Nueva orden de compra', style: AppTextStyles.headlineSm),
+        const Spacer(),
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            color:        _scanActivo
+                ? AppColors.secondary.withValues(alpha: 0.12)
+                : AppColors.surfaceContainerLow,
+            borderRadius: AppRadius.lg,
+            border: Border.all(
+              color: _scanActivo
+                  ? AppColors.secondary
+                  : AppColors.outlineVariant),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            _buscandoBarcode
+                ? const SizedBox(
+                    width: 12, height: 12,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        color: AppColors.secondary))
+                : Icon(Icons.qr_code_scanner_rounded,
+                    size: 14,
+                    color: _scanActivo
+                        ? AppColors.secondary
+                        : AppColors.onSurfaceVariant),
+            if (_scanActivo && !_buscandoBarcode) ...[
+              const SizedBox(width: 4),
+              Text('OK',
+                  style: AppTextStyles.labelSm.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.secondary)),
+            ],
+          ]),
+        ),
       ]),
       content: SizedBox(
         width: 620,
@@ -89,31 +260,116 @@ class _NuevaOrdenDialogState extends State<NuevaOrdenDialog> {
               children: [
                 const SizedBox(height: 8),
 
-                // ── Tienda (solo admin/superadmin) ──────
+                // ── Tienda / Multi-tienda (solo admin) ──
                 if (esAdmin) ...[
-                  _label('Tienda *'),
-                  const SizedBox(height: 6),
-                  DropdownButtonFormField<int>(
-                    value:      _tiendaId,
-                    decoration: _dropdownDeco(Icons.store_rounded),
-                    style: AppTextStyles.bodyMd
-                        .copyWith(fontSize: 13, color: AppColors.onSurface),
-                    hint: Text('Seleccionar tienda',
-                        style: AppTextStyles.bodyMd
-                            .copyWith(fontSize: 13,
-                                color: AppColors.outlineVariant)),
-                    validator: (v) =>
-                        v == null ? 'Selecciona una tienda' : null,
-                    items: prov.tiendasSimple.map((t) =>
-                      DropdownMenuItem<int>(
-                        value: t['id'] as int,
-                        child: Text(t['nombre'],
-                            style: AppTextStyles.bodyMd
-                                .copyWith(fontSize: 13)),
+                  Row(children: [
+                    _label('Tienda'),
+                    const Spacer(),
+                    Text('Multi-tienda',
+                        style: AppTextStyles.bodySm.copyWith(
+                            color: AppColors.onSurfaceVariant)),
+                    const SizedBox(width: 4),
+                    Transform.scale(
+                      scale: 0.8,
+                      child: Switch(
+                        value:          _multiTienda,
+                        activeColor:    AppColors.secondary,
+                        onChanged: (v) => setState(() {
+                          _multiTienda = v;
+                          if (v) {
+                            _tiendaId = null;
+                          } else {
+                            _tiendasSeleccionadas.clear();
+                          }
+                        }),
                       ),
-                    ).toList(),
-                    onChanged: (v) => setState(() => _tiendaId = v),
-                  ),
+                    ),
+                  ]),
+                  const SizedBox(height: 6),
+                  if (!_multiTienda) ...[
+                    DropdownButtonFormField<int>(
+                      value:      _tiendaId,
+                      decoration: _dropdownDeco(Icons.store_rounded),
+                      style: AppTextStyles.bodyMd
+                          .copyWith(fontSize: 13, color: AppColors.onSurface),
+                      hint: Text('Seleccionar tienda',
+                          style: AppTextStyles.bodyMd
+                              .copyWith(fontSize: 13,
+                                  color: AppColors.outlineVariant)),
+                      validator: (v) => v == null
+                          ? 'Selecciona una tienda' : null,
+                      items: prov.tiendasSimple.map((t) =>
+                        DropdownMenuItem<int>(
+                          value: t['id'] as int,
+                          child: Text(t['nombre'],
+                              style: AppTextStyles.bodyMd
+                                  .copyWith(fontSize: 13)),
+                        ),
+                      ).toList(),
+                      onChanged: (v) => setState(() => _tiendaId = v),
+                    ),
+                  ] else ...[
+                    if (prov.tiendasSimple.isEmpty)
+                      Text('Cargando tiendas...',
+                          style: AppTextStyles.bodySm
+                              .copyWith(color: AppColors.onSurfaceVariant))
+                    else ...[
+                      Text('Selecciona las tiendas que recibirán este pedido:',
+                          style: AppTextStyles.bodySm
+                              .copyWith(color: AppColors.onSurfaceVariant)),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: prov.tiendasSimple.map((t) {
+                          final id       = t['id'] as int;
+                          final selected = _tiendasSeleccionadas.contains(id);
+                          return FilterChip(
+                            label: Text(t['nombre'] as String),
+                            selected: selected,
+                            onSelected: (v) => setState(() {
+                              if (v) {
+                                _tiendasSeleccionadas.add(id);
+                              } else {
+                                _tiendasSeleccionadas.remove(id);
+                              }
+                            }),
+                            selectedColor: AppColors.secondary
+                                .withValues(alpha: 0.15),
+                            checkmarkColor: AppColors.secondary,
+                            backgroundColor:
+                                AppColors.surfaceContainerLow,
+                            side: BorderSide(
+                              color: selected
+                                  ? AppColors.secondary
+                                  : AppColors.outlineVariant,
+                            ),
+                            labelStyle: AppTextStyles.bodySm.copyWith(
+                              color: selected
+                                  ? AppColors.secondary
+                                  : AppColors.onSurface,
+                              fontWeight: selected
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                            ),
+                            shape: const RoundedRectangleBorder(
+                              borderRadius:
+                                  BorderRadius.all(Radius.circular(8)),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      if (_tiendasSeleccionadas.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            'Selecciona al menos una tienda',
+                            style: AppTextStyles.bodySm.copyWith(
+                                color: AppColors.error, fontSize: 11),
+                          ),
+                        ),
+                    ],
+                  ],
                   const SizedBox(height: 14),
                 ],
 
@@ -219,10 +475,17 @@ class _NuevaOrdenDialogState extends State<NuevaOrdenDialog> {
                 else
                   ..._detalles.asMap().entries.map((e) =>
                     FilaProductoWidget(
-                      key:        ValueKey(e.key),
-                      index:      e.key,
-                      fila:       e.value,
-                      tiendaId:   _tiendaId,
+                      key:               ValueKey(e.key),
+                      index:             e.key,
+                      fila:              e.value,
+                      tiendaId:          _tiendaId,
+                      multiTienda:       _multiTienda,
+                      tiendasDisponibles: _multiTienda
+                          ? prov.tiendasSimple
+                              .where((t) => _tiendasSeleccionadas
+                                  .contains(t['id'] as int))
+                              .toList()
+                          : const [],
                       onEliminar: () =>
                           setState(() => _detalles.removeAt(e.key)),
                       onCambio: (fila) =>
@@ -262,7 +525,8 @@ class _NuevaOrdenDialogState extends State<NuevaOrdenDialog> {
           builder: (ctx2, p, child) => ElevatedButton.icon(
             onPressed: p.guardando ||
                     _detalles.isEmpty ||
-                    _tiendaId == null
+                    (!_multiTienda && _tiendaId == null) ||
+                    (_multiTienda && _tiendasSeleccionadas.isEmpty)
                 ? null
                 : _crear,
             icon: p.guardando
@@ -532,12 +796,14 @@ class _NuevaOrdenDialogState extends State<NuevaOrdenDialog> {
     final compra = await context
         .read<ProveedoresProvider>()
         .crearCompra({
-      'tienda':        _tiendaId,
+      if (!_multiTienda) 'tienda': _tiendaId,
       'proveedor':     _proveedorId,
       'observaciones': _obsCtrl.text.trim(),
       'detalles': _detalles.map((d) {
         final pv = double.tryParse(
             d['precio_venta']?.toString() ?? '');
+        final distribuciones =
+            (d['distribuciones'] as List?)?.cast<Map<String, dynamic>>() ?? [];
         return {
           'producto':               d['producto'],
           'nombre_libre':           d['nombre'] ?? '',
@@ -548,6 +814,11 @@ class _NuevaOrdenDialogState extends State<NuevaOrdenDialog> {
           'precio_unitario': double.tryParse(
               d['precio_unitario'].toString()) ?? 0,
           if (pv != null && pv > 0) 'precio_venta': pv,
+          if (_multiTienda && distribuciones.isNotEmpty)
+            'distribuciones': distribuciones.map((dist) => {
+              'tienda':   dist['tienda'],
+              'cantidad': dist['cantidad'],
+            }).toList(),
         };
       }).toList(),
     });

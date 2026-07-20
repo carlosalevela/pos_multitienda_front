@@ -13,6 +13,8 @@ class FilaProductoWidget extends StatefulWidget {
   final int?                              tiendaId;
   final VoidCallback                      onEliminar;
   final void Function(Map<String, dynamic>) onCambio;
+  final bool                              multiTienda;
+  final List<Map<String, dynamic>>        tiendasDisponibles;
 
   const FilaProductoWidget({
     super.key,
@@ -21,6 +23,8 @@ class FilaProductoWidget extends StatefulWidget {
     required this.tiendaId,
     required this.onEliminar,
     required this.onCambio,
+    this.multiTienda        = false,
+    this.tiendasDisponibles = const [],
   });
 
   @override
@@ -35,6 +39,7 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
   List<Map<String, dynamic>> _sugerencias = [];
   bool _buscando  = false;
   bool _modoLibre = false;
+  final Map<int, TextEditingController> _distCtrl = {};
 
   @override
   void initState() {
@@ -45,6 +50,32 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
         text: widget.fila['cantidad']?.toString() ?? '1');
     _precioCtrl = TextEditingController(
         text: widget.fila['precio_unitario']?.toString() ?? '');
+    _sincDistCtrl();
+  }
+
+  @override
+  void didUpdateWidget(FilaProductoWidget old) {
+    super.didUpdateWidget(old);
+    if (widget.tiendasDisponibles != old.tiendasDisponibles) {
+      _sincDistCtrl();
+    }
+  }
+
+  void _sincDistCtrl() {
+    final distribExistentes = (widget.fila['distribuciones'] as List?)
+        ?.cast<Map<String, dynamic>>() ?? [];
+    for (final t in widget.tiendasDisponibles) {
+      final id = t['id'] as int;
+      if (!_distCtrl.containsKey(id)) {
+        final existente = distribExistentes.firstWhere(
+          (d) => d['tienda'] == id,
+          orElse: () => {},
+        );
+        _distCtrl[id] = TextEditingController(
+          text: existente['cantidad']?.toString() ?? '',
+        );
+      }
+    }
   }
 
   @override
@@ -52,6 +83,9 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
     _searchCtrl.dispose();
     _cantCtrl.dispose();
     _precioCtrl.dispose();
+    for (final c in _distCtrl.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -71,15 +105,32 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
   }
 
   void _notificar() {
+    final distribuciones = widget.multiTienda
+        ? widget.tiendasDisponibles
+            .map((t) {
+              final id   = t['id'] as int;
+              final cant = double.tryParse(_distCtrl[id]?.text ?? '') ?? 0;
+              return {'tienda': id, 'cantidad': cant};
+            })
+            .where((d) => (d['cantidad'] as double) > 0)
+            .toList()
+        : null;
+
     widget.onCambio({
       ...widget.fila,
       'producto':         _modoLibre ? null : widget.fila['producto'],
       'nombre':           _searchCtrl.text,
-      'cantidad':         _cantCtrl.text,
+      'cantidad':         widget.multiTienda ? _totalDistribuido.toString() : _cantCtrl.text,
       'precio_unitario':  _precioCtrl.text,
       'categoria_nombre': widget.fila['categoria_nombre'] ?? '',
+      if (distribuciones != null) 'distribuciones': distribuciones,
     });
   }
+
+  double get _totalDistribuido => widget.tiendasDisponibles.fold(0.0, (s, t) {
+    final id = t['id'] as int;
+    return s + (double.tryParse(_distCtrl[id]?.text ?? '') ?? 0);
+  });
 
   double get _subtotal =>
       (double.tryParse(_cantCtrl.text) ?? 0) *
@@ -427,8 +478,85 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
               ),
             ],
           ),
+
+          // ── Distribución multi-tienda ───────────────
+          if (widget.multiTienda) _buildDistribucion(),
         ],
       ),
+    );
+  }
+
+  Widget _buildDistribucion() {
+    if (widget.tiendasDisponibles.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text('Cargando tiendas...',
+            style: AppTextStyles.bodySm
+                .copyWith(color: AppColors.onSurfaceVariant)),
+      );
+    }
+    final total  = _totalDistribuido;
+    final ok     = total > 0;
+    final color  = ok ? AppColors.secondary : AppColors.outlineVariant;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 10),
+        const Divider(height: 1, color: AppColors.outlineVariant),
+        const SizedBox(height: 8),
+        Row(children: [
+          Icon(Icons.store_rounded, size: 13, color: AppColors.secondary),
+          const SizedBox(width: 5),
+          Text('Distribución por tienda',
+              style: AppTextStyles.labelMd
+                  .copyWith(color: AppColors.secondary)),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color:        ok ? AppColors.secondary.withOpacity(0.1) : AppColors.surfaceContainerLow,
+              borderRadius: AppRadius.full,
+              border:       Border.all(color: color.withOpacity(0.4)),
+            ),
+            child: Text(
+              'Total: ${ComprasTheme.fmt(total)}',
+              style: AppTextStyles.labelSm.copyWith(
+                  fontWeight: FontWeight.w700, color: color),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 8),
+        ...widget.tiendasDisponibles.map((t) {
+          final id     = t['id'] as int;
+          final nombre = t['nombre'] as String? ?? '—';
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(children: [
+              Expanded(
+                child: Text(nombre,
+                    style: AppTextStyles.bodySm
+                        .copyWith(color: AppColors.onSurface)),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 80,
+                child: TextFormField(
+                  controller:   _distCtrl[id],
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style:        AppTextStyles.bodySm
+                      .copyWith(color: AppColors.onSurface),
+                  decoration:   _inputDeco('Cant.'),
+                  onChanged: (_) {
+                    setState(() {});
+                    _notificar();
+                  },
+                ),
+              ),
+            ]),
+          );
+        }),
+      ],
     );
   }
 
