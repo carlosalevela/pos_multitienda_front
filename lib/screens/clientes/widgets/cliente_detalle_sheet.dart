@@ -95,15 +95,18 @@ class _ClienteDetalleSheetContentState
   bool                       _cargandoTiers   = false;
   List<Map<String, dynamic>> _ventasCliente   = [];
   bool                       _cargandoVentas  = false;
+  Map<String, dynamic>?      _creditosData;
+  bool                       _cargandoCreditos = false;
 
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 5, vsync: this);
+    _tabCtrl = TabController(length: 6, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ClienteProvider>().cargarDetalleCliente(widget.cliente.id);
       _cargarTiers();
       _cargarVentasCliente();
+      if (widget.cliente.limiteCredito > 0) _cargarCreditos();
     });
   }
 
@@ -129,6 +132,16 @@ class _ClienteDetalleSheetContentState
     } catch (_) {
       if (mounted) setState(() => _cargandoVentas = false);
     }
+  }
+
+  Future<void> _cargarCreditos() async {
+    setState(() => _cargandoCreditos = true);
+    final res = await VentaService().getCreditosCliente(widget.cliente.id);
+    if (!mounted) return;
+    setState(() {
+      _cargandoCreditos = false;
+      if (res['success'] == true) _creditosData = res['data'] as Map<String, dynamic>;
+    });
   }
 
   @override
@@ -240,6 +253,8 @@ class _ClienteDetalleSheetContentState
             historialCount:  prov.historialCliente.length,
             ventasCount:     _ventasCliente.length,
             tieneTier:       widget.cliente.tierInfo != null,
+            tieneCredito:    widget.cliente.limiteCredito > 0,
+            deudaCredito:    (_creditosData?['deuda_total'] as num?)?.toDouble() ?? 0,
           ),
 
           const Divider(height: 1, color: Color(0xFFEBEFF3)),
@@ -317,6 +332,15 @@ class _ClienteDetalleSheetContentState
                         ventas:          _ventasCliente,
                         cargando:        _cargandoVentas,
                         onRefresh:       _cargarVentasCliente,
+                      ),
+
+                      // Tab 6 — Crédito
+                      _TabCredito(
+                        cliente:          widget.cliente,
+                        creditosData:     _creditosData,
+                        cargando:         _cargandoCreditos,
+                        onRefresh:        _cargarCreditos,
+                        onSnack:          _showSnack,
                       ),
                     ],
                   ),
@@ -438,6 +462,8 @@ class _DetalleTabBar extends StatelessWidget {
   final int           historialCount;
   final int           ventasCount;
   final bool          tieneTier;
+  final bool          tieneCredito;
+  final double        deudaCredito;
 
   const _DetalleTabBar({
     required this.controller,
@@ -445,6 +471,8 @@ class _DetalleTabBar extends StatelessWidget {
     required this.historialCount,
     required this.ventasCount,
     required this.tieneTier,
+    required this.tieneCredito,
+    required this.deudaCredito,
   });
 
   Widget _badge(int count, Color color) => Container(
@@ -462,14 +490,16 @@ class _DetalleTabBar extends StatelessWidget {
       color: Colors.white,
       child: TabBar(
         controller:           controller,
+        isScrollable:         true,
+        tabAlignment:         TabAlignment.start,
         labelColor:           _Pal.teal,
         unselectedLabelColor: _Pal.inkLight,
         indicatorColor:       _Pal.teal,
         indicatorWeight:      2.5,
         labelStyle:           GoogleFonts.plusJakartaSans(
-            fontSize: 12, fontWeight: FontWeight.w700),
+            fontSize: 11, fontWeight: FontWeight.w700),
         unselectedLabelStyle: GoogleFonts.plusJakartaSans(
-            fontSize: 12, fontWeight: FontWeight.w600),
+            fontSize: 11, fontWeight: FontWeight.w600),
         tabs: [
           const Tab(text: 'Información'),
           Tab(
@@ -504,6 +534,17 @@ class _DetalleTabBar extends StatelessWidget {
               if (ventasCount > 0) ...[
                 const SizedBox(width: 5),
                 _badge(ventasCount, _Pal.teal),
+              ],
+            ]),
+          ),
+          Tab(
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.handshake_rounded, size: 14),
+              const SizedBox(width: 4),
+              const Text('Crédito'),
+              if (tieneCredito && deudaCredito > 0) ...[
+                const SizedBox(width: 5),
+                _badge(1, const Color(0xFF7C3AED)),
               ],
             ]),
           ),
@@ -1798,6 +1839,430 @@ class _ConfirmDialog extends StatelessWidget {
               style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
         ),
       ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// TAB CRÉDITO
+// ─────────────────────────────────────────────────────────────
+class _TabCredito extends StatelessWidget {
+  final Cliente              cliente;
+  final Map<String, dynamic>? creditosData;
+  final bool                 cargando;
+  final VoidCallback         onRefresh;
+  final void Function(String, Color) onSnack;
+
+  const _TabCredito({
+    required this.cliente,
+    required this.creditosData,
+    required this.cargando,
+    required this.onRefresh,
+    required this.onSnack,
+  });
+
+  static final _fmt = NumberFormat('#,##0', 'es_CO');
+
+  @override
+  Widget build(BuildContext context) {
+    if (cliente.limiteCredito <= 0) {
+      return const _TabVacio(
+        icon:    Icons.handshake_outlined,
+        mensaje: 'Sin crédito habilitado',
+        sub:     'Edita el cliente y asigna un\nlímite de crédito para habilitar el fiado.',
+      );
+    }
+
+    if (cargando) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(40),
+          child: CircularProgressIndicator(color: Color(0xFF7C3AED), strokeWidth: 2.5),
+        ),
+      );
+    }
+
+    final data    = creditosData;
+    final ventas  = data == null
+        ? <Map<String, dynamic>>[]
+        : List<Map<String, dynamic>>.from(data['ventas'] as List);
+    final limite  = (data?['limite_credito'] as num?)?.toDouble() ?? cliente.limiteCredito;
+    final deuda   = (data?['deuda_total']    as num?)?.toDouble() ?? 0;
+    final disponible = limite - deuda;
+    final pct     = limite > 0 ? (deuda / limite).clamp(0.0, 1.0) : 0.0;
+
+    return RefreshIndicator(
+      onRefresh: () async => onRefresh(),
+      color: const Color(0xFF7C3AED),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        children: [
+          // Resumen
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F3FF),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF7C3AED).withOpacity(0.2)),
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const Icon(Icons.handshake_rounded, size: 16, color: Color(0xFF7C3AED)),
+                const SizedBox(width: 8),
+                Text('Crédito', style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13, fontWeight: FontWeight.w700,
+                    color: const Color(0xFF5B21B6))),
+              ]),
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: pct,
+                  backgroundColor: const Color(0xFFEDE9FE),
+                  valueColor: AlwaysStoppedAnimation(
+                    pct > 0.85 ? const Color(0xFFDC2626) : const Color(0xFF7C3AED)),
+                  minHeight: 7,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                _statChip('Deuda', '\$${_fmt.format(deuda)}',
+                    deuda > 0 ? const Color(0xFFDC2626) : const Color(0xFF7C3AED)),
+                _statChip('Disponible', '\$${_fmt.format(disponible)}',
+                    const Color(0xFF059669)),
+                _statChip('Límite', '\$${_fmt.format(limite)}',
+                    const Color(0xFF5B21B6)),
+              ]),
+            ]),
+          ),
+
+          const SizedBox(height: 16),
+
+          if (ventas.isEmpty)
+            const _TabVacio(
+              icon:    Icons.receipt_long_outlined,
+              mensaje: 'Sin ventas a crédito',
+              sub:     'Las ventas al fiado aparecerán aquí.',
+            )
+          else
+            ...ventas.map((v) => _CreditoCard(
+              venta:    v,
+              onAbonar: () => _mostrarAbonar(context, v),
+            )),
+        ],
+      ),
+    );
+  }
+
+  Widget _statChip(String label, String value, Color color) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: GoogleFonts.plusJakartaSans(
+          fontSize: 10, color: _Pal.inkLight)),
+      Text(value, style: GoogleFonts.plusJakartaSans(
+          fontSize: 13, fontWeight: FontWeight.w700, color: color)),
+    ],
+  );
+
+  void _mostrarAbonar(BuildContext context, Map<String, dynamic> venta) {
+    final saldo = (venta['saldo_pendiente'] as num).toDouble();
+    if (saldo <= 0) return;
+    showModalBottomSheet(
+      context:            context,
+      isScrollControlled: true,
+      backgroundColor:    Colors.transparent,
+      builder: (_) => _AbonarCreditoSheet(
+        ventaId:        venta['id'] as int,
+        numeroFactura:  venta['numero_factura'] as String,
+        saldoPendiente: saldo,
+        onAbonar: (monto, metodo) async {
+          final res = await VentaService().abonarCredito(
+              ventaId: venta['id'] as int, monto: monto, metodo: metodo);
+          if (!context.mounted) return;
+          Navigator.pop(context);
+          onSnack(
+            res['success'] == true
+                ? 'Abono registrado correctamente'
+                : (res['error'] ?? 'Error al registrar abono'),
+            res['success'] == true ? _Pal.success : _Pal.danger,
+          );
+          if (res['success'] == true) onRefresh();
+        },
+      ),
+    );
+  }
+}
+
+// ─── Tarjeta de venta a crédito ──────────────────────────────
+class _CreditoCard extends StatelessWidget {
+  final Map<String, dynamic> venta;
+  final VoidCallback         onAbonar;
+
+  const _CreditoCard({required this.venta, required this.onAbonar});
+
+  static final _fmt     = NumberFormat('#,##0', 'es_CO');
+  static final _fmtDate = DateFormat('dd/MM/yyyy', 'es');
+
+  @override
+  Widget build(BuildContext context) {
+    final saldo    = (venta['saldo_pendiente'] as num).toDouble();
+    final total    = (venta['total']           as num).toDouble();
+    final pagado   = (venta['total_pagado']    as num).toDouble();
+    final fecha    = DateTime.tryParse(venta['fecha'] as String? ?? '');
+    final estadoOk = saldo <= 0;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: estadoOk
+              ? const Color(0xFF059669).withOpacity(0.3)
+              : const Color(0xFF7C3AED).withOpacity(0.2)),
+        boxShadow: [
+          BoxShadow(
+            color:  Colors.black.withOpacity(0.04),
+            blurRadius: 8, offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(venta['numero_factura'] as String,
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13, fontWeight: FontWeight.w700, color: _Pal.ink)),
+            if (fecha != null) ...[
+              const SizedBox(height: 2),
+              Text(_fmtDate.format(fecha),
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11, color: _Pal.inkLight)),
+            ],
+            const SizedBox(height: 6),
+            Row(children: [
+              Text('Total: \$${_fmt.format(total)}',
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11, color: _Pal.inkMid)),
+              const SizedBox(width: 10),
+              if (pagado > 0)
+                Text('Pagado: \$${_fmt.format(pagado)}',
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11, color: const Color(0xFF059669))),
+            ]),
+          ]),
+        ),
+        const SizedBox(width: 12),
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: estadoOk
+                  ? const Color(0xFFECFDF5)
+                  : const Color(0xFFF5F3FF),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              estadoOk ? 'Pagado' : '\$${_fmt.format(saldo)}',
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12, fontWeight: FontWeight.w700,
+                  color: estadoOk
+                      ? const Color(0xFF059669)
+                      : const Color(0xFF7C3AED)),
+            ),
+          ),
+          if (!estadoOk) ...[
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: onAbonar,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF7C3AED),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('Abonar',
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11, fontWeight: FontWeight.w700,
+                        color: Colors.white)),
+              ),
+            ),
+          ],
+        ]),
+      ]),
+    );
+  }
+}
+
+// ─── Sheet de abono a crédito ─────────────────────────────────
+class _AbonarCreditoSheet extends StatefulWidget {
+  final int    ventaId;
+  final String numeroFactura;
+  final double saldoPendiente;
+  final Future<void> Function(double monto, String metodo) onAbonar;
+
+  const _AbonarCreditoSheet({
+    required this.ventaId,
+    required this.numeroFactura,
+    required this.saldoPendiente,
+    required this.onAbonar,
+  });
+
+  @override
+  State<_AbonarCreditoSheet> createState() => _AbonarCreditoSheetState();
+}
+
+class _AbonarCreditoSheetState extends State<_AbonarCreditoSheet> {
+  final _montoCtrl = TextEditingController();
+  String _metodo   = 'efectivo';
+  bool   _loading  = false;
+
+  static final _fmt = NumberFormat('#,##0', 'es_CO');
+
+  @override
+  void dispose() {
+    _montoCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _confirmar() async {
+    final monto = double.tryParse(_montoCtrl.text.trim());
+    if (monto == null || monto <= 0) return;
+    if (monto > widget.saldoPendiente) return;
+    setState(() => _loading = true);
+    await widget.onAbonar(monto, _metodo);
+    if (mounted) setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    const purple = Color(0xFF7C3AED);
+    const purpleDark = Color(0xFF5B21B6);
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(24, 8, 24, 24 + bottom),
+      decoration: const BoxDecoration(
+        color:        Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Center(
+          child: Container(
+            width: 36, height: 4,
+            margin: const EdgeInsets.only(top: 12, bottom: 20),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(2)),
+          ),
+        ),
+        Row(children: [
+          const Icon(Icons.handshake_rounded, color: purple, size: 22),
+          const SizedBox(width: 10),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Abonar crédito',
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 17, fontWeight: FontWeight.w800, color: purpleDark)),
+            Text(widget.numeroFactura,
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12, color: _Pal.inkLight)),
+          ]),
+        ]),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF5F3FF),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Saldo pendiente',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 12, color: _Pal.inkMid)),
+              Text('\$${_fmt.format(widget.saldoPendiente)}',
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 14, fontWeight: FontWeight.w700, color: purple)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Monto
+        TextField(
+          controller:  _montoCtrl,
+          keyboardType: TextInputType.number,
+          autofocus:   true,
+          style: GoogleFonts.plusJakartaSans(fontSize: 15, color: _Pal.ink),
+          decoration: InputDecoration(
+            labelText:  'Monto a abonar',
+            prefixText: '\$ ',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: purple, width: 1.5)),
+          ),
+          onSubmitted: (_) => _confirmar(),
+        ),
+        const SizedBox(height: 12),
+        // Método
+        Row(children: [
+          for (final (val, label, icon) in [
+            ('efectivo',      'Efectivo',   Icons.payments_rounded),
+            ('tarjeta',       'Tarjeta',    Icons.credit_card_rounded),
+            ('transferencia', 'Transfer.',  Icons.account_balance_rounded),
+          ]) ...[
+            Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() => _metodo = val),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  margin: const EdgeInsets.only(right: 6),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: _metodo == val
+                        ? purple.withOpacity(0.08)
+                        : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: _metodo == val ? purple : const Color(0xFFE2E8F0),
+                      width: _metodo == val ? 1.5 : 1),
+                  ),
+                  child: Column(children: [
+                    Icon(icon, size: 16,
+                        color: _metodo == val ? purpleDark : _Pal.inkLight),
+                    const SizedBox(height: 2),
+                    Text(label, style: GoogleFonts.plusJakartaSans(
+                        fontSize: 10, fontWeight: FontWeight.w600,
+                        color: _metodo == val ? purpleDark : _Pal.inkLight)),
+                  ]),
+                ),
+              ),
+            ),
+          ],
+        ]),
+        const SizedBox(height: 20),
+        SizedBox(
+          width: double.infinity, height: 48,
+          child: ElevatedButton(
+            onPressed: _loading ? null : _confirmar,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: purple,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+            ),
+            child: _loading
+                ? const SizedBox(
+                    width: 20, height: 20,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2.5))
+                : Text('Registrar abono',
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 15, fontWeight: FontWeight.w700)),
+          ),
+        ),
+      ]),
     );
   }
 }

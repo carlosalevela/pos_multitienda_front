@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../../models/sesion_caja.dart';
 import '../../../providers/caja_provider.dart';
+import '../../../providers/contabilidad_provider.dart';
 import '../../../providers/reportes_provider.dart';
 import '../../../services/cierre_turno_print_service.dart';
 import 'reporte_utils.dart';
@@ -35,6 +36,7 @@ class ReporteTurnoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final caja   = context.watch<CajaProvider>();
     final rep    = context.watch<ReportesProvider>();
+    final contab = context.watch<ContabilidadProvider>();
     final accent = cajaAbierta ? _kAmber : _kGreen;
     final gradStart = cajaAbierta ? _kAmber    : _kGreen;
     final gradEnd   = cajaAbierta ? _kAmberMid : _kGreenMid;
@@ -130,18 +132,27 @@ class ReporteTurnoCard extends StatelessWidget {
                 )
               else
                 ElevatedButton.icon(
-                  onPressed: caja.cargandoGastos
-                      ? null
-                      : () => CierreTurnoPrintService.imprimir(
-                            context:       context,
-                            sesion:        sesion,
-                            fecha:         fecha,
-                            tiendaNombre:  tiendaNombre,
-                            empresaNombre: empresaNombre,
-                            metodosPago:   rep.totalPorMetodo,
-                            gastosSesion:  caja.gastosSesion,
-                            totalGastos:   caja.gastosTotalSesion,
-                          ),
+                  onPressed: () => CierreTurnoPrintService.imprimir(
+                    context:       context,
+                    sesion:        sesion,
+                    fecha:         fecha,
+                    tiendaNombre:  tiendaNombre,
+                    empresaNombre: empresaNombre,
+                    metodosPago:   rep.totalPorMetodo,
+                    // Para sesiones históricas usa los gastos del día ya cargados
+                    // en ContabilidadProvider; para la sesión activa usa la lista viva.
+                    gastosSesion: cajaAbierta
+                        ? caja.gastosSesion
+                        : contab.gastos.map((g) => {
+                            'monto':       g.monto,
+                            'descripcion': g.descripcion,
+                            'categoria':   g.categoria,
+                            'metodo_pago': g.metodoPago,
+                          }).toList(),
+                    totalGastos: cajaAbierta
+                        ? caja.gastosTotalSesion
+                        : sesion.gastosTotal,
+                  ),
                   icon: const Icon(Icons.print_rounded, size: 15),
                   label: Text(
                     'Imprimir cierre',

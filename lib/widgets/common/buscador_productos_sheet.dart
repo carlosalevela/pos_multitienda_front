@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../models/producto.dart';
 import '../../services/inventario_service.dart';
+import '../../services/barcode_service.dart';
 
 class BuscadorProductosSheet extends StatefulWidget {
   final int? tiendaId;
@@ -29,18 +30,52 @@ class _BuscadorProductosSheetState extends State<BuscadorProductosSheet> {
   List<Producto> _productos = [];
   bool  _cargando = false;
   Timer? _debounce;
+  StreamSubscription<String>? _barcodeSub;
 
   @override
   void initState() {
     super.initState();
     _ctrl.addListener(_buscarDebounced);
+    _barcodeSub = BarcodeService.instance.onBarcode.listen(_onBarcode);
   }
 
   @override
   void dispose() {
+    _barcodeSub?.cancel();
     _debounce?.cancel();
     _ctrl.dispose();
     super.dispose();
+  }
+
+  // Disparado por el lector USB vía BarcodeService (timing < 80 ms por tecla).
+  // El scanner ya escribió el código en el TextField; aquí hacemos match exacto
+  // y auto-seleccionamos si hay un único resultado.
+  Future<void> _onBarcode(String codigo) async {
+    if (!mounted) return;
+    _debounce?.cancel();
+    // Remover listener temporalmente para que asignar el texto no dispare
+    // _buscarDebounced en paralelo con buscarProductoPos.
+    _ctrl.removeListener(_buscarDebounced);
+    _ctrl.text = codigo;
+    _ctrl.addListener(_buscarDebounced);
+    setState(() => _cargando = true);
+    try {
+      final result = await _service.buscarProductoPos(q: codigo, tiendaId: widget.tiendaId);
+      if (!mounted) return;
+      if (result['success'] == true) {
+        final lista = result['data'] as List<Producto>;
+        if (lista.length == 1) {
+          Navigator.pop(context, lista.first);
+          return;
+        }
+        _productos = lista;
+      } else {
+        _productos = [];
+      }
+    } catch (_) {
+      _productos = [];
+    }
+    if (mounted) setState(() => _cargando = false);
   }
 
   void _buscarDebounced() {

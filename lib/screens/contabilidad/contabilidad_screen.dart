@@ -17,6 +17,7 @@ import 'tabs/tab_comparativo.dart';
 import 'tabs/tab_ventas.dart';
 import 'tabs/tab_vendedores.dart';
 import 'tabs/tab_rentabilidad.dart';
+import 'tabs/tab_cartera.dart';
 
 class ContabilidadScreen extends StatefulWidget {
   const ContabilidadScreen({super.key});
@@ -43,7 +44,7 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
     final auth  = context.read<AuthProvider>();
     final esCaj = auth.rol == 'cajero';
 
-    _tabCtrl = TabController(length: esCaj ? 3 : 9, vsync: this);
+    _tabCtrl = TabController(length: esCaj ? 3 : 10, vsync: this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
@@ -335,10 +336,11 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
     const ventas        = Tab(text: 'Ventas');
     const vendedores    = Tab(text: 'Vendedores');
     const rentabilidad  = Tab(text: 'Rentabilidad');
+    const cartera = Tab(text: 'Cartera');
     return esCaj
         ? [resumen, productos, operacion]
         : [resumen, analisis, operacion, productos, clientes, comparativo,
-           ventas, vendedores, rentabilidad];
+           ventas, vendedores, rentabilidad, cartera];
   }
 
   // ── TABS — contenido ───────────────────────────────
@@ -370,6 +372,7 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
       TabVentas(tiendaId: _tiendaId, auth: auth),
       TabVendedores(tiendaId: _tiendaId),
       TabRentabilidad(tiendaId: _tiendaId),
+      TabCartera(tiendaId: _tiendaId),
     ];
   }
 

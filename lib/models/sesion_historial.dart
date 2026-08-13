@@ -90,7 +90,8 @@ class SesionHistorial {
     devolucionesEfectivo:  double.tryParse(j['devoluciones_efectivo']?.toString()      ?? '0') ?? 0.0,
     numDevoluciones:       (j['num_devoluciones']       as num?)?.toInt() ?? 0,
     numCambiosProducto:    (j['num_cambios_producto']   as num?)?.toInt() ?? 0,
-    montoFinalSistema:     double.tryParse(j['monto_esperado']?.toString()             ?? '0') ?? 0.0,
+    montoFinalSistema:     double.tryParse(
+                             (j['monto_esperado'] ?? j['monto_final_sistema'])?.toString() ?? '0') ?? 0.0,
     montoFinalReal:        double.tryParse(j['monto_final_real']?.toString()           ?? '0') ?? 0.0,
     diferencia:            double.tryParse(j['diferencia']?.toString()                 ?? '0') ?? 0.0,
     numTransacciones:      (j['num_transacciones'] as num?)?.toInt() ?? 0,

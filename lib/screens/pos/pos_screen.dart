@@ -18,6 +18,7 @@ import '../../services/cliente_service.dart';
 import '../clientes/widgets/separado_form.dart';
 import '../../providers/notificaciones_provider.dart';
 import '../../services/recibo_pdf_service.dart';
+import '../../services/cotizacion_pdf_service.dart';
 import '../../services/thermal_printer_service.dart';
 import '../../services/windows_printer_service.dart';
 import '../../providers/config_provider.dart';
@@ -176,7 +177,7 @@ class _PosScreenState extends State<PosScreen> {
     if (!mounted) return;
     setState(() => _separadosCliente = (resumen['separados_activos'] as int?) ?? 0);
 
-    // Aplicar descuento del tier si el cliente lo tiene y el carrito tiene items
+    // Aplicar descuento del tier si el cliente lo tiene y el carrito ya tiene items
     final pct = _clienteSeleccionado?.tierInfo?.descuentoPct ?? 0;
     if (pct > 0) {
       final pos = context.read<PosProvider>();
@@ -184,6 +185,20 @@ class _PosScreenState extends State<PosScreen> {
         pos.setDescuentoPorcentaje(pct.round());
         _descuentoCtrl.text = pos.descuento.toStringAsFixed(0);
       }
+      // Si el carrito está vacío, el descuento se aplicará en _aplicarDescuentoTierSiNecesario
+      // cuando se agregue el primer producto.
+    }
+  }
+
+  // Aplica el descuento del tier del cliente seleccionado al agregar un producto,
+  // sólo si aún no hay descuento manual activo.
+  void _aplicarDescuentoTierSiNecesario() {
+    final pct = _clienteSeleccionado?.tierInfo?.descuentoPct ?? 0;
+    if (pct <= 0) return;
+    final pos = context.read<PosProvider>();
+    if (pos.descuento == 0 && pos.total > 0) {
+      pos.setDescuentoPorcentaje(pct.round());
+      _descuentoCtrl.text = pos.descuento.toStringAsFixed(0);
     }
   }
 
@@ -235,6 +250,7 @@ class _PosScreenState extends State<PosScreen> {
         return;
       }
       context.read<PosProvider>().agregarAlCarrito(p);
+      _aplicarDescuentoTierSiNecesario();
       HapticFeedback.lightImpact();
       return;
     }
@@ -802,6 +818,7 @@ class _PosScreenState extends State<PosScreen> {
     return GestureDetector(
       onTap: sinStock ? null : () {
         pos.agregarAlCarrito(p);
+        _aplicarDescuentoTierSiNecesario();
         HapticFeedback.lightImpact();
       },
       child: Container(
@@ -923,6 +940,7 @@ class _PosScreenState extends State<PosScreen> {
     return GestureDetector(
       onTap: sinStock ? null : () {
         pos.agregarAlCarrito(p);
+        _aplicarDescuentoTierSiNecesario();
         HapticFeedback.lightImpact();
       },
       child: Container(
@@ -1433,6 +1451,10 @@ class _PosScreenState extends State<PosScreen> {
         const SizedBox(height: 10),
         _buildEfectivoSection(pos),
       ],
+      if (pos.metodoPago == 'credito') ...[
+        const SizedBox(height: 10),
+        _buildCreditoInfo(),
+      ],
     ]),
   );
 
@@ -1525,11 +1547,24 @@ class _PosScreenState extends State<PosScreen> {
         // Cobrar
         Expanded(
           child: GestureDetector(
-            onTap: pos.procesando ? null : () {
+            onTap: pos.procesando ? null : () async {
+              final clienteAntes     = _clienteSeleccionado;
+              final tierNombreAntes  = clienteAntes?.tierInfo?.nombre;
               _montoCtrl.clear();
               _descuentoCtrl.clear();
-              pos.cobrar(auth.tiendaId, clienteId: _clienteSeleccionado?.id);
+              final ok = await pos.cobrar(auth.tiendaId, clienteId: clienteAntes?.id);
+              if (!mounted) return;
               setState(() => _clienteSeleccionado = null);
+              if (ok && clienteAntes != null) {
+                final feedback = pos.ultimaVenta?['tier_feedback'] as Map<String, dynamic>?;
+                if (feedback != null) {
+                  final tierData    = feedback['tier_actual']    as Map<String, dynamic>?;
+                  final siguienteT  = feedback['siguiente_tier'] as Map<String, dynamic>?;
+                  if (tierData != null || siguienteT != null) {
+                    _mostrarTierFeedback(clienteAntes, feedback, tierNombreAntes);
+                  }
+                }
+              }
             },
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1553,7 +1588,27 @@ class _PosScreenState extends State<PosScreen> {
         ),
       ]),
 
-      const SizedBox(height: 8),
+      const SizedBox(height: 6),
+
+      // Cotización
+      if (pos.carrito.isNotEmpty)
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => _generarCotizacion(pos, auth),
+            icon: const Icon(Icons.request_quote_rounded, size: 15),
+            label: Text('Cotización PDF',
+                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _kGreenDark,
+              side: const BorderSide(color: _kGreenDark),
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ),
+
+      const SizedBox(height: 6),
 
       // Quick actions — 4 íconos
       Row(children: [
@@ -1603,9 +1658,37 @@ class _PosScreenState extends State<PosScreen> {
 
   // ── Campo descuento ──────────────────────────────────────
 
-  Widget _buildDescuentoField(PosProvider pos) => Row(children: [
-    Expanded(
-      child: TextField(
+  Widget _buildDescuentoField(PosProvider pos) {
+    final tier = _clienteSeleccionado?.tierInfo;
+    final hasTier = tier != null && tier.descuentoPct > 0;
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      if (hasTier) ...[
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: _hexFromString(tier.colorHex).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: _hexFromString(tier.colorHex).withValues(alpha: 0.3)),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.workspace_premium_rounded, size: 12,
+                  color: _hexFromString(tier.colorHex)),
+              const SizedBox(width: 5),
+              Text(
+                'Tier ${tier.nombre} · ${tier.descuentoPct.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}% aplicado',
+                style: GoogleFonts.inter(
+                    fontSize: 11, fontWeight: FontWeight.w600,
+                    color: _hexFromString(tier.colorHex)),
+              ),
+            ]),
+          ),
+        ]),
+        const SizedBox(height: 6),
+      ],
+      Row(children: [
+      Expanded(
+        child: TextField(
         controller: _descuentoCtrl,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
@@ -1661,7 +1744,9 @@ class _PosScreenState extends State<PosScreen> {
     _pctBtn(pos, 10),
     const SizedBox(width: 4),
     _pctBtn(pos, 15),
-  ]);
+      ]),
+    ]);
+  }
 
   Widget _pctBtn(PosProvider pos, int pct) => GestureDetector(
     onTap: () {
@@ -1686,15 +1771,59 @@ class _PosScreenState extends State<PosScreen> {
       ('efectivo',      Icons.payments_rounded,       'Efectivo'),
       ('tarjeta',       Icons.credit_card_rounded,     'Tarjeta'),
       ('transferencia', Icons.account_balance_rounded, 'Transf.'),
+      ('credito',       Icons.handshake_rounded,       'Fiado'),
     ];
+    final tieneCredito = (_clienteSeleccionado?.limiteCredito ?? 0) > 0;
+
     return Row(children: metodos.indexed.map((e) {
       final (idx, (value, icon, label)) = e;
-      final selected = pos.metodoPago == value;
+      final esFiado    = value == 'credito';
+      final disabled   = esFiado && !tieneCredito;
+      final selected   = pos.metodoPago == value && !disabled;
+      final activeClr  = esFiado ? const Color(0xFF7C3AED) : _kGreen;
+      final activeDark = esFiado ? const Color(0xFF5B21B6) : _kGreenDark;
+      final iconColor  = disabled
+          ? _kTextMuted.withValues(alpha: 0.4)
+          : selected ? activeDark : _kTextMuted;
+      final textColor  = disabled
+          ? _kTextMuted.withValues(alpha: 0.4)
+          : selected ? activeDark : _kTextMuted;
+
+      Widget chip = AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        decoration: BoxDecoration(
+          color: selected
+              ? activeClr.withValues(alpha: 0.08)
+              : disabled ? _kSurfaceLow.withValues(alpha: 0.5) : _kSurfaceLow,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? activeClr : _kBorder.withValues(alpha: disabled ? 0.5 : 1),
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Column(children: [
+          Icon(icon, size: 17, color: iconColor),
+          const SizedBox(height: 3),
+          Text(label, style: GoogleFonts.inter(
+              fontSize: 10, fontWeight: FontWeight.w600,
+              color: textColor)),
+        ]),
+      );
+
+      if (disabled) {
+        chip = Tooltip(
+          message: 'Selecciona un cliente\ncon crédito habilitado',
+          preferBelow: false,
+          child: chip,
+        );
+      }
+
       return Expanded(
         child: Padding(
           padding: EdgeInsets.only(right: idx < metodos.length - 1 ? 6 : 0),
           child: GestureDetector(
-            onTap: () {
+            onTap: disabled ? null : () {
               pos.setMetodoPago(value);
               if (value != 'efectivo') {
                 _montoCtrl.clear();
@@ -1702,29 +1831,40 @@ class _PosScreenState extends State<PosScreen> {
               }
               setState(() {});
             },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              padding: const EdgeInsets.symmetric(vertical: 9),
-              decoration: BoxDecoration(
-                color: selected ? _kGreen.withValues(alpha: 0.08) : _kSurfaceLow,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: selected ? _kGreen : _kBorder,
-                  width: selected ? 1.5 : 1,
-                ),
-              ),
-              child: Column(children: [
-                Icon(icon, size: 17, color: selected ? _kGreenDark : _kTextMuted),
-                const SizedBox(height: 3),
-                Text(label, style: GoogleFonts.inter(
-                    fontSize: 10, fontWeight: FontWeight.w600,
-                    color: selected ? _kGreenDark : _kTextMuted)),
-              ]),
-            ),
+            child: chip,
           ),
         ),
       );
     }).toList());
+  }
+
+  // ── Info crédito ──────────────────────────────────────────
+
+  Widget _buildCreditoInfo() {
+    final cliente = _clienteSeleccionado;
+    if (cliente == null) return const SizedBox.shrink();
+    final fmt = (double v) => '\$${v.toStringAsFixed(0).replaceAllMapped(
+        RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},')}';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F3FF),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.3)),
+      ),
+      child: Row(children: [
+        const Icon(Icons.handshake_rounded, size: 16, color: Color(0xFF5B21B6)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            '${cliente.nombre} · Límite ${fmt(cliente.limiteCredito)}',
+            style: GoogleFonts.inter(
+                fontSize: 11, fontWeight: FontWeight.w600,
+                color: const Color(0xFF5B21B6)),
+          ),
+        ),
+      ]),
+    );
   }
 
   // ── Sección efectivo ─────────────────────────────────────
@@ -2110,6 +2250,29 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
+  Future<void> _generarCotizacion(PosProvider pos, AuthProvider auth) async {
+    if (pos.carrito.isEmpty) return;
+    try {
+      await CotizacionPdfService.generarCotizacion(
+        items:          List.from(pos.carrito),
+        descuento:      pos.descuento,
+        total:          pos.totalConDescuento,
+        empresaNombre:  auth.empresaNombre.isNotEmpty ? auth.empresaNombre : 'Empresa',
+        tiendaNombre:   auth.tiendaNombre.isNotEmpty  ? auth.tiendaNombre  : 'Tienda',
+        cajeroNombre:   auth.nombre,
+        clienteNombre:  _clienteSeleccionado?.nombreCompleto,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al generar cotización: $e'),
+          backgroundColor: _kError,
+        ),
+      );
+    }
+  }
+
   Future<void> _cobrarEImprimir(PosProvider pos, AuthProvider auth) async {
     // Snapshot antes de cobrar — pos limpia el carrito en caso de éxito
     final items         = List<ItemCarrito>.from(pos.carrito);
@@ -2118,9 +2281,10 @@ class _PosScreenState extends State<PosScreen> {
     final montoRecibido = pos.montoRecibido;
     final vuelto        = pos.vuelto;
     final metodoPago    = pos.metodoPago;
-    final clienteNombre  = _clienteSeleccionado?.nombre ?? '';
-    final clienteId      = _clienteSeleccionado?.id;
-    final tierAnteriorNombre = _clienteSeleccionado?.tierInfo?.nombre;
+    final clienteAntes       = _clienteSeleccionado;
+    final clienteNombre      = clienteAntes?.nombre ?? '';
+    final clienteId          = clienteAntes?.id;
+    final tierAnteriorNombre = clienteAntes?.tierInfo?.nombre;
 
     _montoCtrl.clear();
     _descuentoCtrl.clear();
@@ -2130,7 +2294,16 @@ class _PosScreenState extends State<PosScreen> {
     if (!ok || !mounted) return;
 
     // Feedback de fidelización (no bloqueante — no afecta el flujo de impresión)
-    if (clienteId != null) _mostrarTierFeedback(clienteId, tierAnteriorNombre, clienteNombre);
+    if (clienteAntes != null) {
+      final feedback = pos.ultimaVenta?['tier_feedback'] as Map<String, dynamic>?;
+      if (feedback != null) {
+        final tierData   = feedback['tier_actual']    as Map<String, dynamic>?;
+        final siguienteT = feedback['siguiente_tier'] as Map<String, dynamic>?;
+        if (tierData != null || siguienteT != null) {
+          _mostrarTierFeedback(clienteAntes, feedback, tierAnteriorNombre);
+        }
+      }
+    }
 
     final factura    = pos.ultimaVenta?['numero_factura']?.toString() ?? '-';
     final config     = context.read<ConfigProvider>();
@@ -2156,6 +2329,14 @@ class _PosScreenState extends State<PosScreen> {
           if (esCash && await ThermalPrinterService.hasCashDrawer()) {
             await ThermalPrinterService.kickDrawer(device);
           }
+          unawaited(ReciboPdfService.imprimirRecibo(
+            items: items, numeroFactura: factura,
+            tiendaNombre: auth.tiendaNombre, empresaNombre: auth.empresaNombre,
+            cajeroNombre: auth.nombre, metodoPago: metodoPago,
+            descuento: descuento, total: total,
+            montoRecibido: montoRecibido, vuelto: vuelto,
+            clienteNombre: clienteNombre, soloGuardar: true,
+          ));
           return;
         }
       } else if (tipoPapel != 'pdf' && !kIsWeb &&
@@ -2170,6 +2351,14 @@ class _PosScreenState extends State<PosScreen> {
           clienteNombre: clienteNombre,
         );
         await WindowsPrinterService.printRaw(bytes);
+        unawaited(ReciboPdfService.imprimirRecibo(
+          items: items, numeroFactura: factura,
+          tiendaNombre: auth.tiendaNombre, empresaNombre: auth.empresaNombre,
+          cajeroNombre: auth.nombre, metodoPago: metodoPago,
+          descuento: descuento, total: total,
+          montoRecibido: montoRecibido, vuelto: vuelto,
+          clienteNombre: clienteNombre, soloGuardar: true,
+        ));
         return;
       }
       // Fallback: PDF (abre en Edge o visor del sistema)
@@ -2194,57 +2383,6 @@ class _PosScreenState extends State<PosScreen> {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ));
-    }
-  }
-
-  Future<void> _mostrarTierFeedback(
-      int clienteId, String? tierAnterior, String clienteNombre) async {
-    try {
-      final cliente = await ClienteService().getCliente(clienteId);
-      if (!mounted || cliente == null) return;
-
-      final fmt         = NumberFormat('#,##0', 'es_CO');
-      final tierActual  = cliente.tierInfo;
-      final totalAcum   = cliente.totalAcumulado;
-      final subioTier   = tierActual != null && tierActual.nombre != tierAnterior;
-
-      Color bgColor;
-      String mensaje;
-      IconData icono;
-
-      if (subioTier) {
-        bgColor = const Color(0xFF7C3AED);
-        icono   = Icons.emoji_events_rounded;
-        mensaje = '¡$clienteNombre subió a ${tierActual!.nombre}! · Acumulado: \$${fmt.format(totalAcum)}';
-      } else if (tierActual != null) {
-        // Parsear color del tier
-        final hex = tierActual.colorHex.replaceAll('#', '');
-        bgColor   = Color(int.parse('FF$hex', radix: 16));
-        icono     = Icons.star_rounded;
-        mensaje   = '${tierActual.nombre} · $clienteNombre · Acumulado: \$${fmt.format(totalAcum)}';
-      } else {
-        bgColor = const Color(0xFF0F766E);
-        icono   = Icons.person_rounded;
-        mensaje = '$clienteNombre · Acumulado: \$${fmt.format(totalAcum)}';
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Row(children: [
-          Icon(icono, color: Colors.white, size: 18),
-          const SizedBox(width: 10),
-          Expanded(child: Text(mensaje,
-              style: GoogleFonts.inter(fontSize: 13,
-                  fontWeight: FontWeight.w600, color: Colors.white))),
-        ]),
-        backgroundColor:   bgColor,
-        duration:          const Duration(seconds: 4),
-        behavior:          SnackBarBehavior.floating,
-        shape:             RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10)),
-        margin:            const EdgeInsets.all(16),
-      ));
-    } catch (_) {
-      // silencioso — no interrumpir el flujo de cobro si falla
     }
   }
 
@@ -2431,5 +2569,233 @@ class _PosScreenState extends State<PosScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       margin: const EdgeInsets.all(16),
     ));
+  }
+
+  void _mostrarTierFeedback(
+    Cliente cliente,
+    Map<String, dynamic> feedback,
+    String? tierNombreAntes,
+  ) {
+    final tierData        = feedback['tier_actual']    as Map<String, dynamic>?;
+    final siguienteTier   = feedback['siguiente_tier'] as Map<String, dynamic>?;
+    final tierNombreAhora = tierData?['nombre'] as String?;
+    final subioTier = tierNombreAntes != tierNombreAhora && tierNombreAhora != null;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _TierFeedbackSheet(
+        clienteNombre:  cliente.nombreCompleto,
+        totalAcumulado: (feedback['total_acumulado'] as num?)?.toDouble() ?? 0,
+        tierActual:     tierData,
+        siguienteTier:  siguienteTier,
+        subioTier:      subioTier,
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TIER FEEDBACK BOTTOM SHEET
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _TierFeedbackSheet extends StatelessWidget {
+  final String                  clienteNombre;
+  final double                  totalAcumulado;
+  final Map<String, dynamic>?   tierActual;
+  final Map<String, dynamic>?   siguienteTier;
+  final bool                    subioTier;
+
+  const _TierFeedbackSheet({
+    required this.clienteNombre,
+    required this.totalAcumulado,
+    required this.subioTier,
+    this.tierActual,
+    this.siguienteTier,
+  });
+
+  Color _color(String? hex, Color fallback) {
+    if (hex == null) return fallback;
+    try { return Color(int.parse(hex.replaceFirst('#', '0xFF'))); } catch (_) { return fallback; }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tierColor = _color(
+      tierActual?['color_hex'] as String?,
+      siguienteTier != null ? _kGreenDark : _kGreenDark,
+    );
+
+    final fmt = NumberFormat('#,##0', 'es');
+
+    // Progreso hacia siguiente tier (0.0 – 1.0)
+    double progress = 0;
+    double faltante = 0;
+    if (siguienteTier != null) {
+      final umbral = (siguienteTier!['umbral_min'] as num?)?.toDouble() ?? 0;
+      if (umbral > 0) {
+        progress = (totalAcumulado / umbral).clamp(0.0, 1.0);
+        faltante = (umbral - totalAcumulado).clamp(0.0, double.infinity);
+      }
+    }
+
+    final esMaxTier = tierActual != null && siguienteTier == null;
+
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        decoration: BoxDecoration(
+          color: _kCard,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle
+            Container(
+              margin: const EdgeInsets.only(top: 10),
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: _kBorder,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              child: Column(
+                children: [
+                  // Header
+                  if (subioTier) ...[
+                    Icon(Icons.workspace_premium_rounded, size: 52, color: tierColor),
+                    const SizedBox(height: 8),
+                    Text('¡Subiste de nivel!',
+                        style: GoogleFonts.inter(
+                            fontSize: 22, fontWeight: FontWeight.w800, color: tierColor)),
+                    Text(clienteNombre,
+                        style: GoogleFonts.inter(fontSize: 13, color: _kTextMuted)),
+                  ] else ...[
+                    Row(children: [
+                      Icon(Icons.star_rounded, size: 16, color: _kAmber),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text('Puntos de $clienteNombre',
+                            style: GoogleFonts.inter(
+                                fontSize: 13, fontWeight: FontWeight.w700, color: _kText),
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                    ]),
+                  ],
+
+                  const SizedBox(height: 14),
+
+                  // Total acumulado
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: _kGreenLight,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: _kGreenDark.withValues(alpha: 0.2)),
+                    ),
+                    child: Column(children: [
+                      Text('Total acumulado',
+                          style: GoogleFonts.inter(
+                              fontSize: 11, color: _kTextMuted,
+                              fontWeight: FontWeight.w500)),
+                      const SizedBox(height: 4),
+                      Text('\$${fmt.format(totalAcumulado)}',
+                          style: GoogleFonts.inter(
+                              fontSize: 28, fontWeight: FontWeight.w800,
+                              color: _kGreenDark)),
+                    ]),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Badge tier actual
+                  if (tierActual != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: tierColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: tierColor.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.workspace_premium_rounded, size: 14, color: tierColor),
+                        const SizedBox(width: 6),
+                        Text(
+                          subioTier
+                              ? '¡Ahora eres ${tierActual!['nombre']}!'
+                              : 'Nivel ${tierActual!['nombre']}',
+                          style: GoogleFonts.inter(
+                              fontSize: 13, fontWeight: FontWeight.w700,
+                              color: tierColor),
+                        ),
+                      ]),
+                    ),
+
+                  // Progreso hacia siguiente tier
+                  if (siguienteTier != null) ...[
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Próximo: ${siguienteTier!['nombre']}',
+                            style: GoogleFonts.inter(fontSize: 11, color: _kTextMuted)),
+                        Text('Faltan \$${fmt.format(faltante)}',
+                            style: GoogleFonts.inter(
+                                fontSize: 11, fontWeight: FontWeight.w600,
+                                color: _kText)),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        backgroundColor: _kSurfaceMid,
+                        valueColor: AlwaysStoppedAnimation(tierColor),
+                        minHeight: 8,
+                      ),
+                    ),
+                  ] else if (esMaxTier) ...[
+                    const SizedBox(height: 10),
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      const Icon(Icons.emoji_events_rounded, size: 14, color: _kAmber),
+                      const SizedBox(width: 5),
+                      Text('¡Estás en el nivel más alto!',
+                          style: GoogleFonts.inter(fontSize: 12, color: _kTextMuted)),
+                    ]),
+                  ],
+
+                  const SizedBox(height: 20),
+
+                  // Botón cerrar
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _kGreenDark,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: Text('Continuar',
+                          style: GoogleFonts.inter(
+                              fontSize: 14, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

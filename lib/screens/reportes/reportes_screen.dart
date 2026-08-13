@@ -41,20 +41,52 @@ class _ReportesScreenState extends State<ReportesScreen> {
   final _cajaService  = CajaService();
   SesionCaja? _sesionHistorial;
   Timer? _refreshTimer;
+  CajaProvider? _cajaEscuchado;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _cargar());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _cargar();
+      // Escuchar cuando la caja se cierra para cargar la sesión automáticamente
+      _cajaEscuchado = context.read<CajaProvider>()
+        ..addListener(_onCajaCerrada);
+    });
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) _cargar();
+      if (mounted && !context.read<ReportesProvider>().cargando) _cargar();
     });
   }
 
   @override
   void dispose() {
+    _cajaEscuchado?.removeListener(_onCajaCerrada);
     _refreshTimer?.cancel();
     super.dispose();
+  }
+
+  // Se dispara cada vez que CajaProvider notifica. Si la caja acaba de
+  // cerrarse y estamos viendo hoy sin sesión cargada, la cargamos del API.
+  void _onCajaCerrada() {
+    if (!mounted) return;
+    final caja = _cajaEscuchado!;
+    if (_esHoy && !caja.cajaAbierta && !caja.cargando && _sesionHistorial == null) {
+      _cargarSesionCerradaHoy();
+    }
+  }
+
+  Future<void> _cargarSesionCerradaHoy() async {
+    if (!mounted) return;
+    final auth = context.read<AuthProvider>();
+    if (auth.rol != 'cajero') return;
+    final lista = await _cajaService.getHistorialSesiones(
+      tiendaId:    auth.tiendaId,
+      fecha:       _fechaStr,
+      estado:      'cerrada',
+      misSesiones: true,
+    );
+    if (mounted && lista.isNotEmpty) {
+      setState(() => _sesionHistorial = SesionCaja.fromJson(lista.first));
+    }
   }
 
   Future<void> _cargar() async {
@@ -80,6 +112,17 @@ class _ReportesScreenState extends State<ReportesScreen> {
         if (!mounted) return;
         if (caja.sesionActiva != null) {
           caja.cargarGastosSesion(caja.sesionActiva!.id);
+        } else {
+          // Caja cerrada hoy: cargar la sesión del día para mostrar el resumen
+          final lista = await _cajaService.getHistorialSesiones(
+            tiendaId:    auth.tiendaId,
+            fecha:       _fechaStr,
+            estado:      'cerrada',
+            misSesiones: true,
+          );
+          if (mounted && lista.isNotEmpty) {
+            setState(() => _sesionHistorial = SesionCaja.fromJson(lista.first));
+          }
         }
       } else {
         final lista = await _cajaService.getHistorialSesiones(
@@ -119,7 +162,10 @@ class _ReportesScreenState extends State<ReportesScreen> {
       lastDate: DateTime(2030),
     );
     if (nueva == null || !mounted) return;
-    setState(() => _fecha = nueva);
+    setState(() {
+      _fecha = nueva;
+      _sesionHistorial = null;
+    });
     _cargar();
   }
 
@@ -155,9 +201,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
     final contab   = context.watch<ContabilidadProvider>();
     final esCajero = auth.rol == 'cajero';
     final sesionCard = esCajero
-        ? (_esHoy
-            ? (caja.sesionActiva ?? caja.ultimaSesionCerrada)
-            : _sesionHistorial)
+        ? (caja.sesionActiva ?? _sesionHistorial)
         : null;
 
     final totalGastos =
@@ -189,7 +233,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
                             ),
                             const SizedBox(height: 24),
                           ],
-                          _buildKPIRow(rep, totalGastos, caja),
+                          _buildKPIRow(rep, totalGastos, caja, sesionCard),
                           const SizedBox(height: 10),
                           _buildStatsChips(rep),
                           const SizedBox(height: 16),
@@ -322,12 +366,15 @@ class _ReportesScreenState extends State<ReportesScreen> {
   // ── KPI Row ────────────────────────────────────────────────
 
   Widget _buildKPIRow(
-      ReportesProvider rep, double totalGastos, CajaProvider caja) {
-    // Para hoy usamos datos de la sesión activa (datos frescos del turno).
-    // Para fechas pasadas usamos los totales del provider (correctos para ese día).
-    final sesion = _esHoy ? caja.sesionActiva : null;
-    final ventas   = sesion != null ? sesion.ventasTotal      : rep.totalDia;
-    final gastos   = sesion != null ? caja.gastosTotalSesion  : totalGastos;
+      ReportesProvider rep, double totalGastos, CajaProvider caja,
+      SesionCaja? sesionCard) {
+    // sesionCard = sesionActiva | ultimaSesionCerrada (hoy) | _sesionHistorial (pasado)
+    final sesion   = sesionCard;
+    final ventas   = sesion?.ventasTotal ?? rep.totalDia;
+    // gastosTotalSesion solo está disponible cuando la sesión está activa ahora mismo
+    final gastos   = (_esHoy && caja.sesionActiva != null)
+        ? caja.gastosTotalSesion
+        : totalGastos;
     final esperado = sesion?.montoEsperado ?? 0.0;
 
     return Row(
@@ -686,9 +733,18 @@ class _ReportesScreenState extends State<ReportesScreen> {
 
   Widget _saleRow(Map<String, dynamic> v) {
     final esAnulada = v['estado'] == 'anulada';
-    final created   = v['created_at']?.toString() ?? '';
-    final hora      = created.length >= 19
-        ? created.substring(11, 16) : '--:--';
+    final created = v['created_at']?.toString() ?? '';
+    String hora;
+    if (created.isNotEmpty) {
+      try {
+        final dt = DateTime.parse(created).toLocal();
+        hora = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+      } catch (_) {
+        hora = created.length >= 19 ? created.substring(11, 16) : '--:--';
+      }
+    } else {
+      hora = '--:--';
+    }
     final metodo    = v['metodo_pago']?.toString() ?? '';
     final total     = double.tryParse(
         v['total']?.toString() ?? '0') ?? 0;
@@ -933,14 +989,17 @@ class _ReportesScreenState extends State<ReportesScreen> {
                 final cliente = a['cliente_nombre']
                         ?.toString() ??
                     'Cliente';
-                final sepId =
-                    a['separado_id']?.toString() ?? '--';
+                final sepIdRaw = a['separado_id'];
+                final sepRef = (sepIdRaw != null &&
+                        sepIdRaw.toString() != 'null')
+                    ? 'REF: #SEP-$sepIdRaw'
+                    : 'Abono directo';
                 final monto = double.tryParse(
                         a['monto']?.toString() ?? '0') ??
                     0;
                 return _sideItem(
                   title: cliente,
-                  sub: 'REF: #SEP-$sepId',
+                  sub: sepRef,
                   valueText: '+\$${fmtNum(monto)}',
                   valueColor: _kSecondary,
                 );

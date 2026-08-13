@@ -42,9 +42,6 @@ class _CajaScreenState extends State<CajaScreen>
       if (!esAdmin) {
         final caja = context.read<CajaProvider>();
         await caja.verificarSesion(auth.tiendaId);
-        if (mounted && caja.cajaAbierta) {
-          caja.cargarHistorial(tiendaId: auth.tiendaId);
-        }
       }
     });
   }
@@ -103,10 +100,7 @@ class _CajaScreenState extends State<CajaScreen>
                                   caja: caja,
                                   auth: auth,
                                   saldoCtrl: _saldoCtrl,
-                                  onCajaAbierta: () {
-                                    context.read<CajaProvider>()
-                                        .cargarHistorial(tiendaId: auth.tiendaId);
-                                  },
+                                  onCajaAbierta: () {},
                                 ),
                               ),
               ),
@@ -201,7 +195,7 @@ class _CajaScreenState extends State<CajaScreen>
   Future<void> _abrirCorteCaja(CajaProvider caja) async {
     await caja.cargarResumenCierre();
     if (!mounted) return;
-    showDialog(
+    await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => const CorteCajaDialog(),

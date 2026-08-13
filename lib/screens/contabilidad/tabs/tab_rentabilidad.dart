@@ -65,12 +65,14 @@ class _TabRentabilidadState extends State<TabRentabilidad> {
       final data = r.data as Map<String, dynamic>;
       final lista = (data['productos'] as List?)
               ?.cast<Map<String, dynamic>>() ?? [];
+      if (!mounted) return;
       setState(() {
         _productos = lista;
         _cargando = false;
       });
       _reordenar();
     } catch (e) {
+      if (!mounted) return;
       setState(() { _error = 'Error al cargar datos.'; _cargando = false; });
     }
   }

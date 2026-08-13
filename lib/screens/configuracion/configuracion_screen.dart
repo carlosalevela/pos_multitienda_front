@@ -235,7 +235,16 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
     final auth    = context.watch<AuthProvider>();
     final config  = context.watch<ConfigProvider>();
     final tiendas = context.watch<TiendaProvider>();
-    final puedeEditar = auth.esAdminOSupervisor || auth.esSuperadmin;
+
+    // Flags de edición por rol:
+    //  - esAdmin:            admin + superadmin
+    //  - puedeEditarGeneral: moneda, IVA, métodos de pago → solo admin
+    //  - puedeEditarOp:      mayoreo tienda, separados, impresión → admin + supervisor
+    //  - puedeEditarEmpresa: mayoreo empresa, fidelización → solo admin
+    final esAdmin           = auth.esSuperadmin || auth.rol == 'admin';
+    final puedeEditarGeneral  = esAdmin;
+    final puedeEditarOp       = auth.esAdminOSupervisor || auth.esSuperadmin;
+    final puedeEditarEmpresa  = esAdmin;
 
     final nombreTienda = auth.esSuperadmin
         ? (_tiendaSeleccionada?.nombre ?? '')
@@ -274,22 +283,23 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
                             ivaPct:        _ivaPctCtrl,
                             metodosPago:   _metodosPago,
                             onMetodoPago:  (m, v) => setState(() => v ? _metodosPago.add(m) : _metodosPago.remove(m)),
-                            puedeEditar:   puedeEditar,
+                            puedeEditar:   puedeEditarGeneral,   // solo admin
                             guardando:     _guardando,
                             onGuardar:     _guardarGeneral,
                           ),
                           _TabMayoreo(
-                            habilitadoTienda:  _mayoreoHabilitado,
-                            onChangeTienda:    (v) => setState(() => _mayoreoHabilitado = v),
-                            umbralTienda:      _umbralTiendaCtrl,
-                            empresaManejaM:    _empresaManejaM,
-                            onChangeEmpresa:   (v) => setState(() => _empresaManejaM = v),
-                            cantidadMayoreo:   _cantidadMayoreoCtrl,
-                            puedeEditar:       puedeEditar,
-                            guardando:         _guardando,
-                            guardandoEmpresa:  _guardandoEmpresa,
-                            onGuardarTienda:   _guardarMayoreo,
-                            onGuardarEmpresa:  _guardarMayoreoEmpresa,
+                            habilitadoTienda:   _mayoreoHabilitado,
+                            onChangeTienda:     (v) => setState(() => _mayoreoHabilitado = v),
+                            umbralTienda:       _umbralTiendaCtrl,
+                            empresaManejaM:     _empresaManejaM,
+                            onChangeEmpresa:    (v) => setState(() => _empresaManejaM = v),
+                            cantidadMayoreo:    _cantidadMayoreoCtrl,
+                            puedeEditar:        puedeEditarOp,      // supervisor puede editar su tienda
+                            puedeEditarEmpresa: puedeEditarEmpresa, // solo admin edita empresa
+                            guardando:          _guardando,
+                            guardandoEmpresa:   _guardandoEmpresa,
+                            onGuardarTienda:    _guardarMayoreo,
+                            onGuardarEmpresa:   _guardarMayoreoEmpresa,
                           ),
                           _TabSeparados(
                             abonoMinPct:  _abonoMinPctCtrl,
@@ -297,7 +307,7 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
                             diasAlerta:   _diasAlertaCtrl,
                             politica:     _politica,
                             onPolitica:   (v) => setState(() => _politica = v!),
-                            puedeEditar:  puedeEditar,
+                            puedeEditar:  puedeEditarOp,     // supervisor puede
                             guardando:    _guardando,
                             onGuardar:    _guardarSeparados,
                           ),
@@ -312,11 +322,11 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
                             onCopias:      (v) => setState(() => _copias = v),
                             onMostrarLogo: (v) => setState(() => _mostrarLogo = v),
                             onMostrarNit:  (v) => setState(() => _mostrarNit  = v),
-                            puedeEditar:   puedeEditar,
+                            puedeEditar:   puedeEditarOp,    // supervisor puede
                             guardando:     _guardando,
                             onGuardar:     _guardarImpresion,
                           ),
-                          _TabFidelizacion(puedeEditar: puedeEditar),
+                          _TabFidelizacion(puedeEditar: puedeEditarEmpresa), // solo admin
                         ],
                       ),
           ),
@@ -619,7 +629,10 @@ class _TabGeneral extends StatelessWidget {
 class _TabMayoreo extends StatelessWidget {
   final bool   habilitadoTienda;
   final bool   empresaManejaM;
+  /// Permiso para editar la sección de ESTA TIENDA (supervisor puede).
   final bool   puedeEditar;
+  /// Permiso para editar la sección EMPRESA (solo admin/superadmin).
+  final bool   puedeEditarEmpresa;
   final bool   guardando;
   final bool   guardandoEmpresa;
   final TextEditingController cantidadMayoreo;
@@ -637,6 +650,7 @@ class _TabMayoreo extends StatelessWidget {
     required this.onChangeTienda,
     required this.onChangeEmpresa,
     required this.puedeEditar,
+    required this.puedeEditarEmpresa,
     required this.guardando,
     required this.guardandoEmpresa,
     required this.onGuardarTienda,
@@ -714,7 +728,7 @@ class _TabMayoreo extends StatelessWidget {
                 ),
                 Switch(
                   value:           empresaManejaM,
-                  onChanged:       puedeEditar ? onChangeEmpresa : null,
+                  onChanged:       puedeEditarEmpresa ? onChangeEmpresa : null,
                   activeThumbColor: const Color(0xFF3730A3),
                   activeTrackColor: const Color(0xFFBFBFF7),
                 ),
@@ -730,7 +744,7 @@ class _TabMayoreo extends StatelessWidget {
                     cantidadMayoreo,
                     hint: '6',
                     keyboardType: TextInputType.number,
-                    enabled: puedeEditar,
+                    enabled: puedeEditarEmpresa,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -752,7 +766,7 @@ class _TabMayoreo extends StatelessWidget {
               ),
             ],
 
-            if (puedeEditar) ...[
+            if (puedeEditarEmpresa) ...[
               const SizedBox(height: 16),
               Align(
                 alignment: Alignment.centerRight,

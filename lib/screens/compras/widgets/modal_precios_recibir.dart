@@ -295,7 +295,7 @@ class _ModalPreciosRecibirState
                   children: detalles.map<Widget>((d) {
                     final id       = d['id'].toString();
                     final nombre   =
-                        d['nombre_producto']?.toString() ??
+                        d['producto_nombre']?.toString() ??
                         d['nombre_libre']?.toString() ??
                         'Producto';
                     final costo    = double.tryParse(

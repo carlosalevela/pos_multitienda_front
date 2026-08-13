@@ -40,13 +40,14 @@ class ClienteForm extends StatefulWidget {
 }
 
 class _ClienteFormState extends State<ClienteForm> {
-  final _formKey      = GlobalKey<FormState>();
+  final _formKey       = GlobalKey<FormState>();
   final _nombreCtrl    = TextEditingController();
   final _apellidoCtrl  = TextEditingController();
   final _cedulaCtrl    = TextEditingController();
   final _telefonoCtrl  = TextEditingController();
   final _emailCtrl     = TextEditingController();
   final _direccionCtrl = TextEditingController();
+  final _creditoCtrl   = TextEditingController();
 
   bool get _esEdicion => widget.cliente != null;
 
@@ -61,6 +62,9 @@ class _ClienteFormState extends State<ClienteForm> {
       _telefonoCtrl.text  = c.telefono;
       _emailCtrl.text     = c.email;
       _direccionCtrl.text = c.direccion;
+      if (c.limiteCredito > 0) {
+        _creditoCtrl.text = c.limiteCredito.toStringAsFixed(0);
+      }
     }
   }
 
@@ -72,6 +76,7 @@ class _ClienteFormState extends State<ClienteForm> {
     _telefonoCtrl.dispose();
     _emailCtrl.dispose();
     _direccionCtrl.dispose();
+    _creditoCtrl.dispose();
     super.dispose();
   }
 
@@ -81,6 +86,7 @@ class _ClienteFormState extends State<ClienteForm> {
     FocusScope.of(context).unfocus();
 
     final prov = context.read<ClienteProvider>();
+    final creditoStr = _creditoCtrl.text.trim();
     final data = {
       'nombre':     _nombreCtrl.text.trim(),
       'apellido':   _apellidoCtrl.text.trim(),
@@ -90,7 +96,8 @@ class _ClienteFormState extends State<ClienteForm> {
       'telefono':   _telefonoCtrl.text.trim(),
       'email':      _emailCtrl.text.trim(),
       'direccion':  _direccionCtrl.text.trim(),
-      if (widget.tiendaId != null) 'tienda': widget.tiendaId, // ✅
+      'limite_credito': creditoStr.isEmpty ? 0 : double.tryParse(creditoStr) ?? 0,
+      if (widget.tiendaId != null) 'tienda': widget.tiendaId,
     };
 
     final ok = _esEdicion
@@ -347,6 +354,22 @@ class _ClienteFormState extends State<ClienteForm> {
                 label:    'Dirección',
                 icono:    Icons.location_on_outlined,
                 maxLines: 2,
+              ),
+
+              const SizedBox(height: 16),
+
+              // ── Límite de crédito ────────────────────────
+              _campo(
+                ctrl:           _creditoCtrl,
+                label:          'Límite de crédito',
+                icono:          Icons.handshake_rounded,
+                tipo:           TextInputType.number,
+                capitalizacion: TextCapitalization.none,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return null;
+                  if (double.tryParse(v.trim()) == null) return 'Número inválido';
+                  return null;
+                },
               ),
 
               const SizedBox(height: 28),

@@ -185,6 +185,19 @@ class CajaService {
     }
   }
 
+  // ── Detalle completo de una sesión ───────────────────────
+
+  Future<Map<String, dynamic>> getDetalleSesion(int sesionId) async {
+    try {
+      final r = await ApiClient.instance.get('/caja/historial/$sesionId/');
+      return {'success': true, 'data': Map<String, dynamic>.from(r.data as Map)};
+    } on DioException catch (e) {
+      return {'success': false, 'error': _extractError(e, 'Error al cargar detalle')};
+    } catch (_) {
+      return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
+
   // ── Historial de sesiones ──────────────────────────────
 
   Future<List<Map<String, dynamic>>> getHistorialSesiones({

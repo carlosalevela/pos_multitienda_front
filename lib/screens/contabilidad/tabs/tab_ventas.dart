@@ -28,10 +28,32 @@ class _TabVentasState extends State<TabVentas> {
   final _fmtHora = DateFormat('HH:mm', 'es');
 
   List<Map<String, dynamic>> _ventas    = [];
-  bool   _cargando  = false;
-  String _error     = '';
-  String _fecha     = DateFormat('yyyy-MM-dd').format(DateTime.now());
-  int?   _anulando;
+  bool    _cargando     = false;
+  String  _error        = '';
+  String  _fecha        = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  int?    _anulando;
+  String? _metodoPago;   // null = todos
+  String? _cajeroNombre; // null = todos
+
+  // Filtro client-side sobre la lista ya cargada
+  List<Map<String, dynamic>> get _ventasFiltradas {
+    var list = _ventas;
+    if (_metodoPago != null)
+      list = list.where((v) => v['metodo_pago'] == _metodoPago).toList();
+    if (_cajeroNombre != null)
+      list = list.where((v) => v['empleado_nombre'] == _cajeroNombre).toList();
+    return list;
+  }
+
+  // Cajeros únicos presentes en la carga actual (para el dropdown)
+  List<String> get _cajeros {
+    final seen = <String>{};
+    for (final v in _ventas) {
+      final n = v['empleado_nombre'] as String? ?? '';
+      if (n.isNotEmpty) seen.add(n);
+    }
+    return seen.toList()..sort();
+  }
 
   // ── Design tokens (matching inventario_screen) ──────
   static const _surface  = Colors.white;
@@ -68,7 +90,11 @@ class _TabVentasState extends State<TabVentas> {
   @override
   void didUpdateWidget(TabVentas old) {
     super.didUpdateWidget(old);
-    if (old.tiendaId != widget.tiendaId) _cargar();
+    if (old.tiendaId != widget.tiendaId) {
+      _metodoPago   = null;
+      _cajeroNombre = null;
+      _cargar();
+    }
   }
 
   Future<void> _cargar() async {
@@ -186,9 +212,10 @@ class _TabVentasState extends State<TabVentas> {
     final esAdmin = widget.auth.esAdmin || widget.auth.esSuperadmin
         || widget.auth.esSupervisor;
 
-    final completadas = _ventas.where((v) => v['estado'] == 'completada').length;
-    final anuladas    = _ventas.where((v) => v['estado'] == 'anulada').length;
-    final totalDia    = _ventas
+    final filtradas   = _ventasFiltradas;
+    final completadas = filtradas.where((v) => v['estado'] == 'completada').length;
+    final anuladas    = filtradas.where((v) => v['estado'] == 'anulada').length;
+    final totalDia    = filtradas
         .where((v) => v['estado'] == 'completada')
         .fold<double>(0, (s, v) => s + _toDouble(v['total']));
 
@@ -246,6 +273,30 @@ class _TabVentasState extends State<TabVentas> {
           ),
         ]),
 
+        const SizedBox(height: 10),
+
+        // ── Filtros ──────────────────────────────────────
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            _metodoChip(null,              'Todos'),
+            const SizedBox(width: 6),
+            _metodoChip('efectivo',        'Efectivo'),
+            const SizedBox(width: 6),
+            _metodoChip('tarjeta',         'Tarjeta'),
+            const SizedBox(width: 6),
+            _metodoChip('transferencia',   'Transf.'),
+            const SizedBox(width: 6),
+            _metodoChip('mixto',           'Mixto'),
+            if (_cajeros.length > 1) ...[
+              const SizedBox(width: 12),
+              Container(width: 1, height: 20, color: _border),
+              const SizedBox(width: 12),
+              _cajeroDropdown(),
+            ],
+          ]),
+        ),
+
         const SizedBox(height: 14),
 
         // ── KPIs ────────────────────────────────────────
@@ -256,11 +307,11 @@ class _TabVentasState extends State<TabVentas> {
                 AppColors.mintLight, Icons.payments_rounded)),
             const SizedBox(width: 10),
             Expanded(child: _kpi('$completadas',
-                'Ventas completadas', _green, _greenBg,
+                'Completadas', _green, _greenBg,
                 Icons.check_circle_rounded)),
             const SizedBox(width: 10),
             Expanded(child: _kpi('$anuladas',
-                'Ventas anuladas',
+                'Anuladas',
                 anuladas > 0 ? _danger : _muted2,
                 anuladas > 0 ? _dangerBg : const Color(0xFFF1F5F9),
                 Icons.cancel_rounded)),
@@ -273,17 +324,18 @@ class _TabVentasState extends State<TabVentas> {
           _banner(_error, isError: true),
 
         // ── Lista ────────────────────────────────────────
-        Expanded(child: _body(esAdmin)),
+        Expanded(child: _body(esAdmin, filtradas)),
       ],
     );
   }
 
-  Widget _body(bool esAdmin) {
+  Widget _body(bool esAdmin, List<Map<String, dynamic>> lista) {
     if (_cargando) {
       return const Center(child: CircularProgressIndicator(
           color: AppColors.secondary, strokeWidth: 2));
     }
-    if (_ventas.isEmpty) {
+    final filtroActivo = _metodoPago != null || _cajeroNombre != null;
+    if (lista.isEmpty) {
       return Center(child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -298,20 +350,22 @@ class _TabVentasState extends State<TabVentas> {
                 size: 30, color: _muted2),
           ),
           const SizedBox(height: 16),
-          Text('Sin ventas en esta fecha',
-              style: _t(size: 15, weight: FontWeight.w600, color: _muted)),
+          Text(
+            filtroActivo ? 'Sin ventas con estos filtros' : 'Sin ventas en esta fecha',
+            style: _t(size: 15, weight: FontWeight.w600, color: _muted)),
           const SizedBox(height: 6),
-          Text('Selecciona otra fecha o verifica los filtros',
-              style: _t(size: 13, color: _muted2)),
+          Text(
+            filtroActivo ? 'Prueba cambiando el método o el cajero' : 'Selecciona otra fecha',
+            style: _t(size: 13, color: _muted2)),
         ],
       ));
     }
 
     return ListView.separated(
       padding: const EdgeInsets.only(bottom: 16),
-      itemCount: _ventas.length,
+      itemCount: lista.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (ctx, i) => _ventaCard(_ventas[i], esAdmin),
+      itemBuilder: (ctx, i) => _ventaCard(lista[i], esAdmin),
     );
   }
 
@@ -502,5 +556,60 @@ class _TabVentasState extends State<TabVentas> {
       'mixto'         => Icons.swap_horiz_rounded,
       _               => Icons.attach_money_rounded,
     };
+  }
+
+  // ── Filtro chip de método de pago ────────────────────────
+  Widget _metodoChip(String? value, String label) {
+    final active = _metodoPago == value;
+    return GestureDetector(
+      onTap: () => setState(() => _metodoPago = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: active ? AppColors.secondary : _surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: active ? AppColors.secondary : _border),
+        ),
+        child: Text(label, style: _t(
+          size: 11, weight: FontWeight.w600,
+          color: active ? Colors.white : _muted,
+        )),
+      ),
+    );
+  }
+
+  // ── Dropdown de cajero ───────────────────────────────────
+  Widget _cajeroDropdown() {
+    final activo = _cajeroNombre != null;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: activo ? AppColors.secondary.withValues(alpha: 0.10) : _surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: activo ? AppColors.secondary : _border),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String?>(
+          value: _cajeroNombre,
+          isDense: true,
+          icon: Icon(Icons.keyboard_arrow_down_rounded, size: 14,
+              color: activo ? AppColors.secondary : _muted),
+          style: _t(size: 11, weight: FontWeight.w600,
+              color: activo ? AppColors.secondary : _muted),
+          hint: Text('Cajero',
+              style: _t(size: 11, weight: FontWeight.w600, color: _muted)),
+          items: [
+            DropdownMenuItem<String?>(
+              value: null,
+              child: Text('Todos', style: _t(size: 12))),
+            ..._cajeros.map((n) => DropdownMenuItem<String?>(
+              value: n,
+              child: Text(n, style: _t(size: 12)))),
+          ],
+          onChanged: (v) => setState(() => _cajeroNombre = v),
+        ),
+      ),
+    );
   }
 }

@@ -59,12 +59,14 @@ class _TabVendedoresState extends State<TabVendedores> {
         queryParameters: params,
       );
       final data = r.data as Map<String, dynamic>;
+      if (!mounted) return;
       setState(() {
         _empleados = (data['empleados'] as List?)
                 ?.cast<Map<String, dynamic>>() ?? [];
         _cargando = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() { _error = 'Error al cargar datos.'; _cargando = false; });
     }
   }

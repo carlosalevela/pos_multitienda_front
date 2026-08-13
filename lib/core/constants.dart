@@ -1,6 +1,10 @@
 class Constants {
-  // Cambia esto por la IP de tu PC cuando pruebes en red local
-  static const String baseUrl = 'http://127.0.0.1:8000/api';
+  // LOCAL: 'http://127.0.0.1:8000/api'
+  // PRODUCCION: 'https://<tu-proyecto>.up.railway.app/api'
+  static const String baseUrl = String.fromEnvironment(
+    'API_URL',
+    defaultValue: 'http://127.0.0.1:8000/api',
+  );
 
   static const String moneda = '\$';
 

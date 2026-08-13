@@ -26,6 +26,7 @@ import '../cajero_inicio/cajero_dashboard.dart';
 import '../separados/separados_screen.dart';
 import '../configuracion/configuracion_screen.dart';
 import '../etiquetas/etiquetas_screen.dart';
+import '../documentos/documentos_screen.dart';
 
 class _C {
   static const bg = Color(0xFFF5F7F8);
@@ -44,8 +45,6 @@ class _C {
   static const roseLight = Color(0xFFFFF1F2);
   static const indigo = Color(0xFF3730A3);
   static const indigoLight = Color(0xFFEEF2FF);
-  static const purple = Color(0xFF7C3AED);
-  static const purpleLight = Color(0xFFF5F3FF);
   static const sidebar = Color(0xFFFFFFFF);
   static const sidebarHov = Color(0xFFF3F4F6);
 }
@@ -64,12 +63,6 @@ class _Movement {
   const _Movement({required this.id, required this.type, required this.description, required this.detail, required this.user, required this.time});
 }
 
-class _QuickAction {
-  final String title, sub, screen;
-  final IconData icon;
-  final Color accent, bg, border;
-  const _QuickAction({required this.title, required this.sub, required this.screen, required this.icon, required this.accent, required this.bg, required this.border});
-}
 
 class _NavItem {
   final String label, screen;
@@ -77,71 +70,83 @@ class _NavItem {
   const _NavItem({required this.label, required this.screen, required this.icon});
 }
 
-final _quickActions = [
-  const _QuickAction(title: 'Punto de Venta POS', sub: 'Registra ventas en terminal activa.', screen: 'pos', icon: Icons.shopping_cart_outlined, accent: _C.indigo, bg: _C.indigoLight, border: Color(0xFFD4D4F7)),
-  const _QuickAction(title: 'Cortes & Arqueo', sub: 'Consulta arqueo teórico vs físico.', screen: 'cash', icon: Icons.account_balance_outlined, accent: _C.amber, bg: _C.amberLight, border: Color(0xFFFDE68A)),
-  const _QuickAction(title: 'Clientes', sub: 'Consulta clientes y movimientos.', screen: 'clientes', icon: Icons.people_outline_rounded, accent: _C.purple, bg: _C.purpleLight, border: Color(0xFFDDD6FE)),
-  const _QuickAction(title: 'Logística', sub: 'Recibe embarques y surte almacenes.', screen: 'compras', icon: Icons.local_shipping_outlined, accent: _C.green, bg: _C.greenLight, border: Color(0xFFBBF7D0)),
+
+// Ítems en el orden exacto de las secciones del sidebar.
+// La función _sectionFor() determina el encabezado de grupo.
+const _allNavItems = <_NavItem>[
+  // ── OPERACIONES ──────────────────────────────────────────
+  _NavItem(label: 'Dashboard',    screen: 'dashboard',    icon: Icons.dashboard_rounded),
+  _NavItem(label: 'POS / Ventas', screen: 'pos',          icon: Icons.point_of_sale_rounded),
+  _NavItem(label: 'Caja',         screen: 'cash',         icon: Icons.account_balance_wallet_rounded),
+  _NavItem(label: 'Inventario',   screen: 'inventory',    icon: Icons.inventory_2_rounded),
+  _NavItem(label: 'Compras',      screen: 'compras',      icon: Icons.shopping_cart_rounded),
+  _NavItem(label: 'Devoluciones', screen: 'devoluciones', icon: Icons.assignment_return_rounded),
+  // ── CLIENTES ─────────────────────────────────────────────
+  _NavItem(label: 'Clientes',     screen: 'clientes',     icon: Icons.people_alt_rounded),
+  _NavItem(label: 'Separados',    screen: 'separados',    icon: Icons.bookmark_rounded),
+  // ── ANÁLISIS ─────────────────────────────────────────────
+  _NavItem(label: 'Contabilidad', screen: 'contabilidad', icon: Icons.bar_chart_rounded),
+  _NavItem(label: 'Reportes',     screen: 'reports',      icon: Icons.assessment_rounded),
+  _NavItem(label: 'Documentos',   screen: 'documentos',   icon: Icons.folder_copy_rounded),
+  // ── ADMINISTRACIÓN ───────────────────────────────────────
+  _NavItem(label: 'Etiquetas',              screen: 'etiquetas',    icon: Icons.label_rounded),
+  _NavItem(label: 'Empleados',              screen: 'empleados',    icon: Icons.people_rounded),
+  _NavItem(label: 'Empresas & Sucursales',  screen: 'empresas',     icon: Icons.business_rounded),
+  _NavItem(label: 'Configuración',          screen: 'configuracion',icon: Icons.settings_outlined),
 ];
 
-List<_NavItem> _buildNavItems(String rol) {
-  final items = <_NavItem>[
-    const _NavItem(label: 'Dashboard', screen: 'dashboard', icon: Icons.dashboard_rounded),
-    const _NavItem(label: 'POS / Ventas', screen: 'pos', icon: Icons.point_of_sale_rounded),
-    const _NavItem(label: 'Inventario', screen: 'inventory', icon: Icons.inventory_2_rounded),
-    const _NavItem(label: 'Caja', screen: 'cash', icon: Icons.account_balance_wallet_rounded),
-    const _NavItem(label: 'Contabilidad', screen: 'contabilidad', icon: Icons.bar_chart_rounded),
-    const _NavItem(label: 'Reportes', screen: 'reports', icon: Icons.assessment_rounded),
-    const _NavItem(label: 'Clientes', screen: 'clientes', icon: Icons.people_alt_rounded),
-    const _NavItem(label: 'Separados', screen: 'separados', icon: Icons.bookmark_rounded),
-    const _NavItem(label: 'Compras', screen: 'compras', icon: Icons.shopping_cart_rounded),
-    const _NavItem(label: 'Devoluciones', screen: 'devoluciones', icon: Icons.assignment_return_rounded),
-    const _NavItem(label: 'Etiquetas', screen: 'etiquetas', icon: Icons.label_rounded),
-    const _NavItem(label: 'Empleados', screen: 'empleados', icon: Icons.people_rounded),
-    const _NavItem(label: 'Tiendas', screen: 'stores', icon: Icons.store_rounded),
-    const _NavItem(label: 'Empresas', screen: 'empresas', icon: Icons.business_rounded),
-    const _NavItem(label: 'Configuración', screen: 'configuracion', icon: Icons.settings_outlined),
-  ];
+// Sección del sidebar a la que pertenece cada pantalla.
+String _sectionFor(String screen) {
+  switch (screen) {
+    case 'dashboard':
+    case 'pos':
+    case 'cash':
+    case 'inventory':
+    case 'compras':
+    case 'devoluciones':
+      return 'OPERACIONES';
+    case 'clientes':
+    case 'separados':
+      return 'CLIENTES';
+    case 'contabilidad':
+    case 'reports':
+    case 'documentos':
+      return 'ANÁLISIS';
+    case 'etiquetas':
+    case 'empleados':
+    case 'empresas':
+    case 'configuracion':
+      return 'ADMINISTRACIÓN';
+    default:
+      return '';
+  }
+}
 
+List<_NavItem> _buildNavItems(String rol) {
   bool allowed(_NavItem item) {
     switch (item.screen) {
-      case 'dashboard': return ['cajero', 'admin', 'supervisor', 'superadmin'].contains(rol);
-      case 'pos': return rol == 'cajero';
-      case 'inventory': return ['admin', 'supervisor', 'superadmin', 'cajero'].contains(rol);
-      case 'cash': return ['cajero', 'admin', 'supervisor', 'superadmin'].contains(rol);
+      case 'dashboard':    return true;
+      case 'pos':          return rol == 'cajero';
+      case 'cash':         return true;
+      case 'inventory':    return true;
+      case 'compras':      return ['admin', 'supervisor', 'superadmin'].contains(rol);
+      case 'devoluciones': return true;
+      // Cajero ve "Separados" — no "Clientes" (pantalla diferente)
+      case 'clientes':     return ['admin', 'supervisor', 'superadmin'].contains(rol);
+      case 'separados':    return true;
       case 'contabilidad': return ['admin', 'supervisor', 'superadmin'].contains(rol);
-      case 'reports': return rol == 'cajero';
-      case 'clientes': return ['admin', 'supervisor', 'cajero', 'superadmin'].contains(rol);
-      case 'separados': return ['admin', 'supervisor', 'superadmin'].contains(rol);
-      case 'suppliers': return ['admin', 'supervisor', 'superadmin'].contains(rol);
-      case 'compras': return ['admin', 'supervisor', 'superadmin'].contains(rol);
-      case 'devoluciones': return ['admin', 'supervisor', 'cajero', 'superadmin'].contains(rol);
-      case 'etiquetas': return ['admin', 'supervisor', 'superadmin'].contains(rol);
-      case 'empleados': return ['admin', 'superadmin'].contains(rol);
-      case 'stores': return ['admin', 'superadmin'].contains(rol);
-      case 'empresas': return ['admin', 'superadmin'].contains(rol);
-      case 'configuracion': return ['admin', 'supervisor', 'superadmin'].contains(rol);
+      // Reportes de turno: cajero + supervisor (supervisor revisa sus cajeros)
+      case 'reports':      return ['cajero', 'supervisor'].contains(rol);
+      case 'documentos':   return ['admin', 'supervisor', 'superadmin'].contains(rol);
+      case 'etiquetas':    return ['admin', 'supervisor', 'superadmin'].contains(rol);
+      case 'empleados':    return ['admin', 'superadmin'].contains(rol);
+      case 'empresas':     return ['admin', 'superadmin'].contains(rol);
+      case 'configuracion':return ['admin', 'supervisor', 'superadmin'].contains(rol);
       default: return false;
     }
   }
 
-  if (rol == 'superadmin') {
-    return items.where((i) => [
-      'dashboard',
-      'inventory',
-      'compras',
-      'contabilidad',
-      'cash',
-      'clientes',
-      'separados',
-      'devoluciones',
-      'empleados',
-      'stores',
-      'empresas',
-      'configuracion',
-    ].contains(i.screen)).toList();
-  }
-  return items.where(allowed).toList();
+  return _allNavItems.where(allowed).toList();
 }
 
 class AdminDashboard extends StatefulWidget {
@@ -177,7 +182,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
       case 'contabilidad': return const ContabilidadScreen();
       case 'reports': return const ReportesScreen();
       case 'clientes':
-        if (rol == 'cajero') return const SeparadosScreen();
         return ClientesScreen(esAdminOSupervisor: rol == 'admin' || rol == 'supervisor' || rol == 'superadmin');
       case 'separados': return const SeparadosScreen();
       case 'suppliers': return const ComprasModuloScreen();
@@ -188,6 +192,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       case 'stores': return const TiendasScreen();
       case 'empresas': return const EmpresasScreen();
       case 'configuracion': return const ConfiguracionScreen();
+      case 'documentos':    return const DocumentosScreen();
       default: return _PlaceholderScreen(screen: screen, onBack: () => _navigate('dashboard'));
     }
   }
@@ -222,6 +227,30 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 }
 
+List<Widget> _buildSidebarChildren(
+  List<_NavItem> navItems,
+  String activeScreen,
+  void Function(String) onNavigate,
+) {
+  final widgets = <Widget>[];
+  String lastSection = '';
+
+  for (final n in navItems) {
+    final section = _sectionFor(n.screen);
+    if (section.isNotEmpty && section != lastSection) {
+      if (lastSection.isNotEmpty) widgets.add(const SizedBox(height: 4));
+      widgets.add(_SidebarSection(label: section));
+      lastSection = section;
+    }
+    widgets.add(_NavTile(
+      item:   n,
+      active: activeScreen == n.screen,
+      onTap:  () => onNavigate(n.screen),
+    ));
+  }
+  return widgets;
+}
+
 class _Sidebar extends StatelessWidget {
   final String activeScreen, userName, userRole;
   final List<_NavItem> navItems;
@@ -247,10 +276,7 @@ class _Sidebar extends StatelessWidget {
         Expanded(
           child: ListView(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-            children: [
-              _SidebarSection(label: 'MÓDULOS'),
-              ...navItems.map((n) => _NavTile(item: n, active: activeScreen == n.screen, onTap: () => onNavigate(n.screen))),
-            ],
+            children: _buildSidebarChildren(navItems, activeScreen, onNavigate),
           ),
         ),
         Container(
@@ -362,6 +388,7 @@ class _DashboardBodyState extends State<_DashboardBody> {
   List<Map<String, dynamic>> _ventasPorTienda = [];
   List<Map<String, dynamic>> _transacciones   = [];
   List<Map<String, dynamic>> _desempeno       = [];
+  List<Map<String, dynamic>> _metodosPago     = [];
 
   @override
   void initState() {
@@ -390,6 +417,7 @@ class _DashboardBodyState extends State<_DashboardBody> {
       _ventasPorTienda   = List<Map<String, dynamic>>.from(d['ventas_por_tienda']       ?? []);
       _transacciones     = List<Map<String, dynamic>>.from(d['transacciones_recientes'] ?? []);
       _desempeno         = List<Map<String, dynamic>>.from(d['desempeno_tiendas']       ?? []);
+      _metodosPago       = List<Map<String, dynamic>>.from(d['metodos_pago']            ?? []);
     });
   }
 
@@ -522,37 +550,121 @@ class _DashboardBodyState extends State<_DashboardBody> {
         // KPIs
         LayoutBuilder(builder: (_, c) {
           final cols = c.maxWidth >= 900 ? 4 : c.maxWidth >= 600 ? 2 : 1;
-          return GridView.count(crossAxisCount: cols, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: c.maxWidth >= 900 ? 1.9 : 2.2, children: kpis.map((k) => _KPICard(kpi: k)).toList());
+          return GridView.count(crossAxisCount: cols, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: c.maxWidth >= 900 ? 1.65 : 1.9, children: kpis.map((k) => _KPICard(kpi: k)).toList());
         }),
         const SizedBox(height: 24),
 
-        // Transacciones + acciones rápidas
+        // Panel de alertas consolidado
+        _AlertasPanel(
+          inventarioBajo: _inventarioBajo,
+          alertasCriticas: _alertasCriticas,
+          comprasPendientes: _comprasPendientes,
+          onNavigate: widget.onNavigate,
+        ),
+        const SizedBox(height: 24),
+
+        // Bitácora + métodos de pago
         isWide
             ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Expanded(flex: 6, child: _MovementsCard(movements: movements)),
                 const SizedBox(width: 20),
-                Expanded(flex: 5, child: _QuickActionsCard(onNavigate: widget.onNavigate)),
+                Expanded(flex: 5, child: _MetodosPagoCard(metodos: _metodosPago, periodo: _periodo)),
               ])
             : Column(children: [
                 _MovementsCard(movements: movements),
                 const SizedBox(height: 20),
-                _QuickActionsCard(onNavigate: widget.onNavigate),
+                _MetodosPagoCard(metodos: _metodosPago, periodo: _periodo),
               ]),
 
-        // Ventas por tienda
-        if (_ventasPorTienda.isNotEmpty) ...[
+        // Ventas por tienda + Estado de sucursales (lado a lado en pantallas anchas)
+        if (_ventasPorTienda.isNotEmpty || _desempeno.isNotEmpty) ...[
           const SizedBox(height: 24),
-          _VentasPorTiendaCard(ventas: _ventasPorTienda, periodo: _periodo),
-        ],
-
-        // Desempeño por tienda
-        if (_desempeno.isNotEmpty) ...[
-          const SizedBox(height: 24),
-          _DesempenoCard(desempeno: _desempeno),
+          if (isWide)
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (_ventasPorTienda.isNotEmpty)
+                Expanded(child: _VentasPorTiendaCard(ventas: _ventasPorTienda, periodo: _periodo)),
+              if (_ventasPorTienda.isNotEmpty && _desempeno.isNotEmpty)
+                const SizedBox(width: 20),
+              if (_desempeno.isNotEmpty)
+                Expanded(child: _SucursalesCard(desempeno: _desempeno)),
+            ])
+          else
+            Column(children: [
+              if (_ventasPorTienda.isNotEmpty)
+                _VentasPorTiendaCard(ventas: _ventasPorTienda, periodo: _periodo),
+              if (_ventasPorTienda.isNotEmpty && _desempeno.isNotEmpty)
+                const SizedBox(height: 20),
+              if (_desempeno.isNotEmpty)
+                _SucursalesCard(desempeno: _desempeno),
+            ]),
         ],
 
         const SizedBox(height: 8),
       ]),
+    );
+  }
+}
+
+// ── Panel de alertas consolidado ───────────────────────────────────────────
+
+class _AlertasPanel extends StatelessWidget {
+  final int inventarioBajo;
+  final int alertasCriticas;
+  final int comprasPendientes;
+  final void Function(String) onNavigate;
+  const _AlertasPanel({required this.inventarioBajo, required this.alertasCriticas, required this.comprasPendientes, required this.onNavigate});
+
+  @override
+  Widget build(BuildContext context) {
+    final hayAlertas = alertasCriticas > 0 || inventarioBajo > 0 || comprasPendientes > 0;
+    final borderCol = alertasCriticas > 0 ? _C.rose.withOpacity(0.35) : inventarioBajo > 0 ? _C.amber.withOpacity(0.35) : _C.border;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: BoxDecoration(
+        color: hayAlertas ? _C.surface : _C.greenLight,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: hayAlertas ? borderCol : _C.green.withOpacity(0.25)),
+      ),
+      child: hayAlertas
+          ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(Icons.notifications_active_rounded, size: 14, color: alertasCriticas > 0 ? _C.rose : _C.amber),
+                const SizedBox(width: 8),
+                Text('Requiere atención', style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 12, fontWeight: FontWeight.w700)),
+              ]),
+              const SizedBox(height: 12),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                if (alertasCriticas > 0)
+                  _alertaChip(icon: Icons.block_rounded, color: _C.rose, bg: _C.roseLight, label: '$alertasCriticas sin stock', onTap: () => onNavigate('inventory')),
+                if (inventarioBajo > 0)
+                  _alertaChip(icon: Icons.inventory_2_outlined, color: _C.amber, bg: _C.amberLight, label: '$inventarioBajo stock bajo', onTap: () => onNavigate('inventory')),
+                if (comprasPendientes > 0)
+                  _alertaChip(icon: Icons.local_shipping_outlined, color: _C.indigo, bg: _C.indigoLight, label: '$comprasPendientes por recibir', onTap: () => onNavigate('compras')),
+              ]),
+            ])
+          : Row(children: [
+              Container(width: 24, height: 24, decoration: BoxDecoration(color: _C.green.withOpacity(0.2), shape: BoxShape.circle), child: Icon(Icons.check_rounded, size: 14, color: _C.greenDark)),
+              const SizedBox(width: 10),
+              Text('Sin alertas — Inventario y logística en orden', style: GoogleFonts.inter(color: _C.greenDark, fontSize: 12, fontWeight: FontWeight.w600)),
+            ]),
+    );
+  }
+
+  Widget _alertaChip({required IconData icon, required Color color, required Color bg, required String label, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8), border: Border.all(color: color.withOpacity(0.2))),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 6),
+          Text(label, style: GoogleFonts.inter(color: color, fontSize: 11, fontWeight: FontWeight.w700)),
+          const SizedBox(width: 6),
+          Icon(Icons.arrow_forward_rounded, size: 10, color: color.withOpacity(0.7)),
+        ]),
+      ),
     );
   }
 }
@@ -566,14 +678,39 @@ class _KPICard extends StatelessWidget {
     final trendIcon = kpi.trendUp == null ? Icons.remove_rounded : kpi.trendUp! ? Icons.trending_up_rounded : Icons.trending_down_rounded;
     return GestureDetector(
       onTap: kpi.onTap,
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(color: _C.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: _C.border)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Expanded(child: Text(kpi.title, style: GoogleFonts.inter(color: _C.textSecond, fontSize: 11.5, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis)), Container(width: 34, height: 34, decoration: BoxDecoration(color: kpi.accentBg, borderRadius: BorderRadius.circular(8)), child: Icon(kpi.icon, size: 17, color: kpi.accent))]),
-          Text(kpi.value, style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 24, fontWeight: FontWeight.w800)),
-          Row(children: [Icon(trendIcon, size: 13, color: trendColor), const SizedBox(width: 4), Text(kpi.trend, style: GoogleFonts.inter(color: trendColor, fontSize: 11, fontWeight: FontWeight.w600)), const SizedBox(width: 6), Text(kpi.sub, style: GoogleFonts.inter(color: _C.textFaint, fontSize: 10), overflow: TextOverflow.ellipsis)]),
-        ]),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          decoration: BoxDecoration(color: _C.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: _C.border)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(height: 3, color: kpi.accent),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Expanded(child: Text(kpi.title, style: GoogleFonts.inter(color: _C.textSecond, fontSize: 11, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  Container(width: 32, height: 32, decoration: BoxDecoration(color: kpi.accentBg, borderRadius: BorderRadius.circular(8)), child: Icon(kpi.icon, size: 16, color: kpi.accent)),
+                ]),
+                const SizedBox(height: 10),
+                Text(kpi.value, style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 26, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(color: trendColor.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(trendIcon, size: 10, color: trendColor),
+                      const SizedBox(width: 3),
+                      Text(kpi.trend, style: GoogleFonts.inter(color: trendColor, fontSize: 10, fontWeight: FontWeight.w700)),
+                    ]),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text(kpi.sub, style: GoogleFonts.inter(color: _C.textFaint, fontSize: 10), overflow: TextOverflow.ellipsis)),
+                ]),
+              ]),
+            ),
+          ]),
+        ),
       ),
     );
   }
@@ -614,45 +751,127 @@ class _MovementRow extends StatelessWidget {
   }
 }
 
-class _QuickActionsCard extends StatelessWidget {
-  final void Function(String) onNavigate;
-  const _QuickActionsCard({required this.onNavigate});
+class _MetodosPagoCard extends StatelessWidget {
+  final List<Map<String, dynamic>> metodos;
+  final String periodo;
+  const _MetodosPagoCard({required this.metodos, required this.periodo});
+
+  static const _info = {
+    'efectivo':      (label: 'Efectivo',      icon: Icons.payments_rounded,        color: Color(0xFF0B7A53)),
+    'tarjeta':       (label: 'Tarjeta',        icon: Icons.credit_card_rounded,      color: Color(0xFF3730A3)),
+    'transferencia': (label: 'Transferencia',  icon: Icons.account_balance_rounded,  color: Color(0xFFB45309)),
+    'mixto':         (label: 'Mixto',          icon: Icons.swap_horiz_rounded,       color: Color(0xFF0E7490)),
+    'credito':       (label: 'Fiado',          icon: Icons.handshake_rounded,        color: Color(0xFF7C3AED)),
+  };
+
+  String _fmt(double v) {
+    if (v >= 1000000) return '\$${(v / 1000000).toStringAsFixed(1)}M';
+    if (v >= 1000)    return '\$${(v / 1000).toStringAsFixed(0)}K';
+    return '\$${v.toStringAsFixed(0)}';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final total = metodos.fold(0.0, (s, m) => s + (m['total'] as num).toDouble());
+
     return Container(
       padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(color: _C.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: _C.border)),
+      decoration: BoxDecoration(
+        color: _C.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _C.border),
+      ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [Icon(Icons.bolt_rounded, size: 15, color: _C.indigo), const SizedBox(width: 8), Text('Accesos y Operaciones Rápidas', style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 13, fontWeight: FontWeight.w700))]),
+        Row(children: [
+          Icon(Icons.donut_small_rounded, size: 15, color: _C.greenDark),
+          const SizedBox(width: 8),
+          Text('Métodos de Pago',
+              style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(color: _C.bg, borderRadius: BorderRadius.circular(20), border: Border.all(color: _C.border)),
+            child: Text(periodo == 'semanal' ? 'Esta semana' : 'Este mes',
+                style: GoogleFonts.inter(color: _C.textFaint, fontSize: 10)),
+          ),
+        ]),
         const SizedBox(height: 4),
         Divider(color: _C.divider),
-        const SizedBox(height: 10),
-        GridView.count(crossAxisCount: 2, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.55, children: _quickActions.map((a) => _QuickActionTile(action: a, onTap: () => onNavigate(a.screen))).toList()),
-      ]),
-    );
-  }
-}
+        const SizedBox(height: 12),
 
-class _QuickActionTile extends StatelessWidget {
-  final _QuickAction action;
-  final VoidCallback onTap;
-  const _QuickActionTile({required this.action, required this.onTap});
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: action.bg, borderRadius: BorderRadius.circular(12), border: Border.all(color: action.border)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(action.icon, size: 20, color: action.accent),
-          const SizedBox(height: 8),
-          Text(action.title, style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 11.5, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 3),
-          Text(action.sub, style: GoogleFonts.inter(color: _C.textSecond, fontSize: 10, height: 1.4), maxLines: 2, overflow: TextOverflow.ellipsis),
-        ]),
-      ),
+        if (metodos.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            child: Center(child: Text('Sin ventas en el período',
+                style: GoogleFonts.inter(color: _C.textFaint, fontSize: 12))),
+          )
+        else ...[
+          // Barra apilada total
+          if (total > 0) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Row(
+                children: metodos.map((m) {
+                  final pct = (m['total'] as num).toDouble() / total;
+                  final info = _info[m['metodo']] ?? (label: m['metodo'] as String, icon: Icons.circle, color: _C.textFaint);
+                  return Expanded(
+                    flex: (pct * 1000).round(),
+                    child: Container(height: 10, color: info.color),
+                  );
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // Filas por método
+          ...metodos.map((m) {
+            final monto = (m['total'] as num).toDouble();
+            final count = (m['count'] as num).toInt();
+            final pct   = total > 0 ? monto / total : 0.0;
+            final info  = _info[m['metodo']] ?? (label: m['metodo'] as String, icon: Icons.circle, color: _C.textFaint);
+            final bg    = info.color.withValues(alpha: 0.08);
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: _C.bg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _C.border.withValues(alpha: 0.6)),
+              ),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Container(
+                    width: 28, height: 28,
+                    decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(7)),
+                    child: Icon(info.icon, size: 14, color: info.color),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(info.label,
+                      style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 12, fontWeight: FontWeight.w600))),
+                  Text(_fmt(monto),
+                      style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 13, fontWeight: FontWeight.w800)),
+                ]),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(child: ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: LinearProgressIndicator(
+                      value: pct, minHeight: 4,
+                      backgroundColor: _C.border,
+                      valueColor: AlwaysStoppedAnimation<Color>(info.color),
+                    ),
+                  )),
+                  const SizedBox(width: 10),
+                  Text('${(pct * 100).toStringAsFixed(0)}%  ·  $count vtas',
+                      style: GoogleFonts.inter(color: _C.textFaint, fontSize: 10, fontWeight: FontWeight.w600)),
+                ]),
+              ]),
+            );
+          }),
+        ],
+      ]),
     );
   }
 }
@@ -740,59 +959,93 @@ class _VentasPorTiendaCard extends StatelessWidget {
   }
 }
 
-// ── Desempeño por tienda ───────────────────────────────────────────────────
+// ── Estado de sucursales en tiempo real ───────────────────────────────────
 
-class _DesempenoCard extends StatelessWidget {
+class _SucursalesCard extends StatelessWidget {
   final List<Map<String, dynamic>> desempeno;
-  const _DesempenoCard({required this.desempeno});
+  const _SucursalesCard({required this.desempeno});
+
   @override
   Widget build(BuildContext context) {
+    final activas = desempeno.where((t) => (t['cajas_activas'] as num).toInt() > 0).length;
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(color: _C.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: _C.border)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [Icon(Icons.store_outlined, size: 15, color: _C.indigo), const SizedBox(width: 8), Text('Desempeño por Tienda', style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 13, fontWeight: FontWeight.w700))]),
+        Row(children: [
+          Icon(Icons.store_rounded, size: 15, color: _C.indigo),
+          const SizedBox(width: 8),
+          Text('Estado de Sucursales', style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: activas > 0 ? _C.greenLight : _C.bg,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: activas > 0 ? _C.green.withOpacity(0.3) : _C.border),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Container(width: 6, height: 6, decoration: BoxDecoration(color: activas > 0 ? const Color(0xFF22C55E) : _C.textFaint, shape: BoxShape.circle)),
+              const SizedBox(width: 5),
+              Text('$activas/${desempeno.length} activas', style: GoogleFonts.inter(color: activas > 0 ? _C.greenDark : _C.textFaint, fontSize: 10, fontWeight: FontWeight.w600)),
+            ]),
+          ),
+        ]),
         const SizedBox(height: 4),
         Divider(color: _C.divider),
         const SizedBox(height: 8),
-        ...desempeno.map((t) => _DesempenoRow(t: t)),
+        ...desempeno.map((t) => _SucursalRow(t: t)),
       ]),
     );
   }
 }
 
-class _DesempenoRow extends StatelessWidget {
+class _SucursalRow extends StatelessWidget {
   final Map<String, dynamic> t;
-  const _DesempenoRow({required this.t});
+  const _SucursalRow({required this.t});
 
-  Color  _bg(String e)  => e == 'optimo' ? _C.greenLight  : e == 'estable' ? _C.indigoLight : _C.amberLight;
-  Color  _fg(String e)  => e == 'optimo' ? _C.greenDark   : e == 'estable' ? _C.indigo      : _C.amber;
-  String _lbl(String e) => e == 'optimo' ? 'ÓPTIMO'       : e == 'estable' ? 'ESTABLE'      : 'MODERADO';
+  Color  _estadoBg(String e)  => e == 'optimo' ? _C.greenLight  : e == 'estable' ? _C.indigoLight : _C.amberLight;
+  Color  _estadoFg(String e)  => e == 'optimo' ? _C.greenDark   : e == 'estable' ? _C.indigo      : _C.amber;
+  String _estadoLbl(String e) => e == 'optimo' ? 'ÓPTIMO'       : e == 'estable' ? 'ESTABLE'      : 'MODERADO';
 
   @override
   Widget build(BuildContext context) {
-    final estado      = t['estado'] as String;
-    final ventasHoy   = (t['ventas_hoy'] as num).toDouble();
-    final eficiencia  = t['eficiencia_pct'] as int;
+    final estado       = t['estado'] as String;
+    final cajasActivas = (t['cajas_activas'] as num).toInt();
+    final eficiencia   = t['eficiencia_pct'] as int;
+    final ventasHoy    = (t['ventas_hoy'] as num).toDouble();
+    final isLive       = cajasActivas > 0;
     final label = '\$${ventasHoy.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: _C.bg, borderRadius: BorderRadius.circular(10), border: Border.all(color: _C.border.withOpacity(0.6))),
-      child: Row(children: [
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: _bg(estado), borderRadius: BorderRadius.circular(3), border: Border.all(color: _fg(estado).withOpacity(0.2))), child: Text(_lbl(estado), style: GoogleFonts.inter(color: _fg(estado), fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 0.5))),
-            const SizedBox(width: 8),
-            Flexible(child: Text(t['encargado'] as String, style: GoogleFonts.inter(color: _C.textFaint, fontSize: 10), overflow: TextOverflow.ellipsis)),
-          ]),
-          const SizedBox(height: 5),
-          Text(t['nombre'] as String, style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 12, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 2),
-          Text('${t['cajas_activas']} caja(s) activa(s) · Eficiencia: $eficiencia%', style: GoogleFonts.inter(color: _C.textSecond, fontSize: 11)),
-        ])),
-        const SizedBox(width: 8),
-        Text(label, style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
+      decoration: BoxDecoration(
+        color: _C.bg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: isLive ? _C.border.withOpacity(0.7) : _C.border.withOpacity(0.4)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(width: 8, height: 8, decoration: BoxDecoration(color: isLive ? const Color(0xFF22C55E) : _C.textFaint, shape: BoxShape.circle)),
+          const SizedBox(width: 8),
+          Expanded(child: Text(t['nombre'] as String, style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 12, fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis)),
+          Text(label, style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 13, fontWeight: FontWeight.w800)),
+        ]),
+        const SizedBox(height: 6),
+        Row(children: [
+          const SizedBox(width: 16),
+          Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), decoration: BoxDecoration(color: _estadoBg(estado), borderRadius: BorderRadius.circular(3)), child: Text(_estadoLbl(estado), style: GoogleFonts.inter(color: _estadoFg(estado), fontSize: 8, fontWeight: FontWeight.w700, letterSpacing: 0.5))),
+          const SizedBox(width: 6),
+          Flexible(child: Text('${t['encargado']}${isLive ? ' · $cajasActivas caja${cajasActivas > 1 ? 's' : ''}' : ' · cerrada'}', style: GoogleFonts.inter(color: _C.textFaint, fontSize: 10), overflow: TextOverflow.ellipsis)),
+        ]),
+        const SizedBox(height: 8),
+        Row(children: [
+          const SizedBox(width: 16),
+          Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(3), child: LinearProgressIndicator(value: eficiencia / 100.0, backgroundColor: _C.border, color: isLive ? _C.green : _C.textFaint, minHeight: 4))),
+          const SizedBox(width: 8),
+          Text('$eficiencia%', style: GoogleFonts.inter(color: _C.textSecond, fontSize: 10, fontWeight: FontWeight.w600)),
+        ]),
       ]),
     );
   }

@@ -4,7 +4,6 @@
 // Las carpetas se crean automáticamente en el primer uso.
 
 import 'dart:io';
-import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 
 enum TipoDocumento { venta, separado, abono, cierre, devolucion, reporte, inventario, compra, recepcion }
@@ -147,10 +146,11 @@ class DocumentoService {
     required TipoDocumento   tipo,
     required String          nombre,
   }) async {
-    final now      = DateTime.now();
-    final dir      = await _carpetaMes(tipo, now);
-    final fechaStr = DateFormat('yyyy-MM-dd_HH-mm').format(now);
-    final fileName = '${_sanitizar(nombre)}_$fechaStr.pdf';
+    final dir      = await _carpetaMes(tipo, DateTime.now());
+    // Nombre fijo por ID de documento: si ya existe lo sobreescribe
+    // (evita duplicados al reimprimir la misma factura/devolución/separado).
+    // Para abonos el llamador ya incluye un timestamp en el nombre.
+    final fileName = '${_sanitizar(nombre)}.pdf';
     final file     = File('${dir.path}\\$fileName');
     await file.writeAsBytes(bytes, flush: true);
     return file;

@@ -1,10 +1,22 @@
 // lib/screens/login/login_screen.dart
 // ignore_for_file: deprecated_member_use
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+
+Future<void> _abrirWhatsAppAdmin() async {
+  // Número con código de país Colombia (+57)
+  const url = 'https://wa.me/573167525926';
+  try {
+    if (Platform.isWindows) {
+      await Process.run('cmd', ['/c', 'start', '', url]);
+    }
+  } catch (_) {}
+}
 
 // ─────────────────────────────────────────────────────────────
 // PALETA — consistente con admin_dashboard / cajero_dashboard
@@ -490,21 +502,31 @@ class _FormPanel extends StatelessWidget {
 
                   // Ayuda
                   Center(
-                    child: Text.rich(
-                      TextSpan(
-                        style: GoogleFonts.inter(
-                            fontSize: 12, color: _C.textSecond),
-                        children: [
-                          const TextSpan(text: '¿Problemas para ingresar? '),
-                          TextSpan(
-                            text: 'Contacta al administrador',
-                            style: const TextStyle(
+                    child: Wrap(
+                      alignment: WrapAlignment.center,
+                      children: [
+                        Text(
+                          '¿Problemas para ingresar? ',
+                          style: GoogleFonts.inter(
+                              fontSize: 12, color: _C.textSecond),
+                        ),
+                        MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: GestureDetector(
+                            onTap: _abrirWhatsAppAdmin,
+                            child: Text(
+                              'Contacta al administrador',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
                                 color: _C.greenDark,
-                                fontWeight: FontWeight.w600),
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.underline,
+                                decorationColor: _C.greenDark,
+                              ),
+                            ),
                           ),
-                        ],
-                      ),
-                      textAlign: TextAlign.center,
+                        ),
+                      ],
                     ),
                   ),
                 ],

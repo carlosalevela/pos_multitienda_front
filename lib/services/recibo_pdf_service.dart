@@ -86,6 +86,7 @@ class ReciboPdfService {
     String                     direccion     = '',
     String                     telefono      = '',
     String                     clienteNombre = '',
+    bool                       soloGuardar   = false,
   }) async {
     final fontReg  = await PdfGoogleFonts.interRegular();
     final fontBold = await PdfGoogleFonts.interBold();
@@ -173,6 +174,7 @@ class ReciboPdfService {
     unawaited(DocumentoService.instance.guardarVenta(
       bytes: bytes, numeroFactura: numeroFactura,
     ));
+    if (soloGuardar) return;
     await _abrirPdf(bytes, 'Recibo_$numeroFactura.pdf');
   }
 
@@ -670,6 +672,7 @@ class ReciboPdfService {
   static Future<void> imprimirSeparado({
     required Separado separado,
     required String   empresaNombre,
+    bool              soloGuardar = false,
   }) async {
     final fontReg  = await PdfGoogleFonts.interRegular();
     final fontBold = await PdfGoogleFonts.interBold();
@@ -841,6 +844,7 @@ class ReciboPdfService {
     unawaited(DocumentoService.instance.guardarSeparado(
       bytes: bytes, numeroSeparado: sepId,
     ));
+    if (soloGuardar) return;
     await _abrirPdf(bytes, 'Separado_$sepId.pdf');
   }
 

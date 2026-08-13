@@ -33,6 +33,7 @@ class VentaService {
     required double montoRecibido,
     double          descuento = 0,
     int?            clienteId,
+    bool            aCredito  = false,
     required List<Map<String, dynamic>> detalles,
   }) async {
     try {
@@ -44,12 +45,42 @@ class VentaService {
           'monto_recibido':  montoRecibido,
           'descuento_total': descuento,
           if (clienteId != null) 'cliente': clienteId,
+          if (aCredito) 'a_credito': true,
           'detalles': detalles,
         },
       );
       return {'success': true, 'data': response.data};
     } on DioException catch (e) {
       return {'success': false, 'error': _extractError(e, 'Error al registrar la venta')};
+    } catch (e) {
+      return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
+
+  Future<Map<String, dynamic>> abonarCredito({
+    required int    ventaId,
+    required double monto,
+    String          metodo = 'efectivo',
+  }) async {
+    try {
+      final response = await ApiClient.instance.post(
+        '/ventas/$ventaId/abonar-credito/',
+        data: {'monto': monto, 'metodo': metodo},
+      );
+      return {'success': true, 'data': response.data};
+    } on DioException catch (e) {
+      return {'success': false, 'error': _extractError(e, 'Error al registrar el abono')};
+    } catch (e) {
+      return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
+
+  Future<Map<String, dynamic>> getCreditosCliente(int clienteId) async {
+    try {
+      final response = await ApiClient.instance.get('/clientes/$clienteId/creditos/');
+      return {'success': true, 'data': response.data};
+    } on DioException catch (e) {
+      return {'success': false, 'error': _extractError(e, 'Error al cargar créditos')};
     } catch (e) {
       return {'success': false, 'error': 'Error inesperado'};
     }
@@ -156,6 +187,24 @@ class VentaService {
     }
   }
 
+
+  // ── Cartera (cuentas por cobrar) ──────────────────────────
+
+  Future<Map<String, dynamic>> getCartera({int? tiendaId}) async {
+    try {
+      final r = await ApiClient.instance.get(
+        '/ventas/cartera/',
+        queryParameters: {
+          if (tiendaId != null) 'tienda_id': tiendaId.toString(),
+        },
+      );
+      return {'success': true, 'data': r.data};
+    } on DioException catch (e) {
+      return {'success': false, 'error': _extractError(e, 'Error al cargar cartera')};
+    } catch (e) {
+      return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
 
   // ── Dashboard Admin ────────────────────────────────────
 

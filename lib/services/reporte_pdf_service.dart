@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../providers/reportes_provider.dart';
 import '../models/contabilidad_models.dart';
+import 'documento_service.dart';
 
 
 class ReportePdfService {
@@ -66,8 +68,13 @@ class ReportePdfService {
       ),
     );
 
+    final bytes = await pdf.save();
+    unawaited(DocumentoService.instance.guardarReporte(
+      bytes: bytes,
+      nombre: fecha,           // guardarReporte ya antepone 'reporte_'
+    ));
     await Printing.layoutPdf(
-      onLayout: (_) async => pdf.save(),
+      onLayout: (_) async => bytes,
       name: 'Reporte_$fecha.pdf',
     );
   }
@@ -1106,8 +1113,13 @@ class ReportePdfService {
       ),
     );
 
+    final bytes = await pdf.save();
+    unawaited(DocumentoService.instance.guardarReporte(
+      bytes: bytes,
+      nombre: 'cierre_turno_$fecha',   // → reporte_cierre_turno_YYYY-MM-DD.pdf
+    ));
     await Printing.layoutPdf(
-      onLayout: (_) async => pdf.save(),
+      onLayout: (_) async => bytes,
       name: 'Cierre_turno_$fecha.pdf',
     );
   }

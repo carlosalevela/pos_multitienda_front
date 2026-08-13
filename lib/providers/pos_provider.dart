@@ -388,6 +388,11 @@ class PosProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+    if (_metodoPago == 'credito' && clienteId == null) {
+      _errorMsg = 'Selecciona un cliente para venta a crédito';
+      notifyListeners();
+      return false;
+    }
 
     _procesando = true;
     _errorMsg   = '';
@@ -406,6 +411,7 @@ class PosProvider extends ChangeNotifier {
       montoRecibido: _montoRecibido,
       descuento:     _descuento,
       clienteId:     clienteId,
+      aCredito:      _metodoPago == 'credito',
       detalles:      detalles,
     );
 

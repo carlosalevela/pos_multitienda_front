@@ -542,7 +542,8 @@ class _InventarioScreenState extends State<InventarioScreen>
           _btnSecundario(
             icon:  Icons.table_chart_rounded,
             label: 'Importar Excel',
-            onTap: () => _abrirImportarExcel(inv),
+            // Importar sin tienda crearía productos sin inventario (stock 0)
+            onTap: _tiendaActiva != null ? () => _abrirImportarExcel(inv) : null,
           ),
           const SizedBox(width: 10),
           _btnSecundario(
@@ -926,6 +927,31 @@ class _InventarioScreenState extends State<InventarioScreen>
     );
   }
 
+  void _abrirAjuste(Producto p) {
+    final tiendaId = _tiendaActiva;
+    if (tiendaId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Selecciona una tienda específica para ajustar stock.',
+            style: _t(size: 13, color: Colors.white)),
+        backgroundColor: _danger,
+        behavior: SnackBarBehavior.floating,
+      ));
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _AjusteStockSheet(
+        producto:  p,
+        tiendaId:  tiendaId,
+        onAjustado: () => context
+            .read<InventarioProvider>()
+            .cargarProductos(tiendaId: _tiendaFiltro, activo: _activoFiltro),
+      ),
+    );
+  }
+
   void _abrirKardex(Producto p) {
     final tiendaId = _tiendaActiva;
     if (tiendaId == null) {
@@ -1209,6 +1235,9 @@ class _InventarioScreenState extends State<InventarioScreen>
                               if (v == 'transfer') {
                                 _abrirTransferencia(p);
                               }
+                              if (v == 'adjust') {
+                                _abrirAjuste(p);
+                              }
                               if (v == 'del') {
                                 _confirmarEliminar(context, inv, p);
                               }
@@ -1240,6 +1269,16 @@ class _InventarioScreenState extends State<InventarioScreen>
                                         size: 16, color: _muted),
                                     const SizedBox(width: 10),
                                     Text('Transferir', style: _t(size: 13)),
+                                  ]),
+                                ),
+                              if (!esCajero)
+                                PopupMenuItem(
+                                  value: 'adjust',
+                                  child: Row(children: [
+                                    Icon(Icons.tune_rounded,
+                                        size: 16, color: _muted),
+                                    const SizedBox(width: 10),
+                                    Text('Ajustar stock', style: _t(size: 13)),
                                   ]),
                                 ),
                               PopupMenuItem(
@@ -2623,6 +2662,320 @@ class _TransferenciaSheetState extends State<_TransferenciaSheet> {
           )),
         ]),
       ]),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AJUSTE DE STOCK SHEET
+// ═══════════════════════════════════════════════════════════════
+
+class _AjusteStockSheet extends StatefulWidget {
+  final Producto     producto;
+  final int          tiendaId;
+  final VoidCallback onAjustado;
+
+  const _AjusteStockSheet({
+    required this.producto,
+    required this.tiendaId,
+    required this.onAjustado,
+  });
+
+  @override
+  State<_AjusteStockSheet> createState() => _AjusteStockSheetState();
+}
+
+class _AjusteStockSheetState extends State<_AjusteStockSheet> {
+  final _cantCtrl = TextEditingController();
+  final _obsCtrl  = TextEditingController();
+  final _service  = InventarioService();
+
+  String _tipo     = 'entrada'; // 'entrada' | 'salida' | 'ajuste'
+  bool   _enviando = false;
+  String _error    = '';
+
+  static const _greenDk = Color(0xFF15803D);
+  static const _surface = Color(0xFFF8FAFC);
+  static const _border  = Color(0xFFE2E8F0);
+  static const _text    = Color(0xFF1E293B);
+  static const _muted   = Color(0xFF64748B);
+  static const _red     = Color(0xFFDC2626);
+  static const _indigo  = Color(0xFF3730A3);
+
+  @override
+  void dispose() {
+    _cantCtrl.dispose();
+    _obsCtrl.dispose();
+    super.dispose();
+  }
+
+  // Accent color según el tipo de ajuste
+  Color get _accentColor => switch (_tipo) {
+    'entrada' => _greenDk,
+    'salida'  => _red,
+    'ajuste'  => _indigo,
+    _         => _greenDk,
+  };
+
+  Future<void> _enviar() async {
+    final cant = double.tryParse(_cantCtrl.text.trim()) ?? 0;
+    if (cant <= 0) {
+      setState(() => _error = 'Ingresa una cantidad mayor a cero.');
+      return;
+    }
+    setState(() { _enviando = true; _error = ''; });
+    try {
+      final result = await _service.ajustarStock(
+        productoId:  widget.producto.id,
+        tiendaId:    widget.tiendaId,
+        cantidad:    cant,
+        tipo:        _tipo,
+        observacion: _obsCtrl.text.trim(),
+      );
+      if (!mounted) return;
+      if (result['success'] == true) {
+        final nuevoStock = result['data']?['stock_actual'] ?? '—';
+        widget.onAjustado();
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+            'Stock ajustado · ${widget.producto.nombre} → $nuevoStock u.',
+          ),
+          backgroundColor: _greenDk,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          margin: const EdgeInsets.all(16),
+        ));
+      } else {
+        setState(() {
+          _error   = result['error'] ?? 'Error al ajustar stock.';
+          _enviando = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error    = e.toString().replaceAll('Exception: ', '');
+        _enviando = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = _accentColor;
+    final stockActual = widget.producto.stockActual;
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+          20, 20, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        // Handle
+        Center(child: Container(
+          width: 36, height: 4,
+          decoration: BoxDecoration(
+              color: _border, borderRadius: BorderRadius.circular(2)),
+        )),
+        const SizedBox(height: 16),
+
+        // Título + stock actual
+        Row(children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Icon(Icons.tune_rounded, size: 18, color: accent),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Ajustar stock',
+              style: GoogleFonts.inter(
+                  fontSize: 16, fontWeight: FontWeight.w700, color: _text)),
+            Text(widget.producto.nombre,
+              style: GoogleFonts.inter(fontSize: 12, color: _muted),
+              overflow: TextOverflow.ellipsis),
+          ])),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: _surface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _border),
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text('Stock actual',
+                style: GoogleFonts.inter(fontSize: 9, color: _muted,
+                    fontWeight: FontWeight.w600, letterSpacing: 0.3)),
+              Text('${stockActual.toStringAsFixed(stockActual % 1 == 0 ? 0 : 1)} u.',
+                style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w800,
+                    color: stockActual <= 0 ? _red : _text)),
+            ]),
+          ),
+        ]),
+        const SizedBox(height: 20),
+
+        // Selector de tipo
+        Container(
+          decoration: BoxDecoration(
+            color: _surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _border),
+          ),
+          child: Row(children: [
+            _tipoBtn('entrada', 'Entrada',  Icons.add_circle_outline_rounded,  _greenDk),
+            _tipoBtn('salida',  'Salida',   Icons.remove_circle_outline_rounded, _red),
+            _tipoBtn('ajuste',  'Ajuste',   Icons.swap_vert_rounded,             _indigo),
+          ]),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          switch (_tipo) {
+            'entrada' => 'Suma unidades al stock actual',
+            'salida'  => 'Resta unidades del stock actual',
+            'ajuste'  => 'Reemplaza el stock con el valor exacto',
+            _         => '',
+          },
+          style: GoogleFonts.inter(fontSize: 11, color: _muted),
+        ),
+        const SizedBox(height: 16),
+
+        // Campo cantidad
+        TextField(
+          controller: _cantCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: _tipo == 'ajuste' ? 'Nuevo stock total' : 'Cantidad',
+            labelStyle: GoogleFonts.inter(fontSize: 13, color: _muted),
+            prefixIcon: Icon(
+              _tipo == 'entrada'
+                ? Icons.add_rounded
+                : _tipo == 'salida' ? Icons.remove_rounded : Icons.sync_rounded,
+              size: 18, color: accent),
+            suffixText: 'u.',
+            filled: true,
+            fillColor: _surface,
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: _border)),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: _border)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: accent, width: 1.5)),
+          ),
+          style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600),
+          autofocus: true,
+        ),
+        const SizedBox(height: 10),
+
+        // Campo observación
+        TextField(
+          controller: _obsCtrl,
+          maxLines: 2,
+          decoration: InputDecoration(
+            labelText: 'Motivo / observación (opcional)',
+            labelStyle: GoogleFonts.inter(fontSize: 13, color: _muted),
+            prefixIcon: const Icon(Icons.notes_rounded, size: 18, color: Color(0xFF94A3B8)),
+            filled: true,
+            fillColor: _surface,
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: _border)),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: _border)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: accent, width: 1.5)),
+          ),
+          style: GoogleFonts.inter(fontSize: 13),
+        ),
+        const SizedBox(height: 10),
+
+        // Error
+        if (_error.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFDAD6),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _red.withValues(alpha: 0.3)),
+            ),
+            child: Row(children: [
+              const Icon(Icons.error_outline, size: 15, color: _red),
+              const SizedBox(width: 8),
+              Expanded(child: Text(_error,
+                  style: GoogleFonts.inter(fontSize: 12, color: _red))),
+            ]),
+          ),
+
+        // Botones
+        Row(children: [
+          Expanded(child: OutlinedButton(
+            onPressed: () => Navigator.pop(context),
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: _border),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('Cancelar',
+                style: GoogleFonts.inter(fontSize: 13, color: _muted)),
+          )),
+          const SizedBox(width: 10),
+          Expanded(child: ElevatedButton(
+            onPressed: _enviando ? null : _enviar,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accent,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: _enviando
+              ? const SizedBox(width: 18, height: 18,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white))
+              : Text('Confirmar ajuste',
+                  style: GoogleFonts.inter(
+                      fontSize: 13, fontWeight: FontWeight.w700)),
+          )),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _tipoBtn(String value, String label, IconData icon, Color color) {
+    final active = _tipo == value;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() { _tipo = value; _error = ''; }),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          margin: const EdgeInsets.all(4),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: active ? color.withValues(alpha: 0.12) : Colors.transparent,
+            borderRadius: BorderRadius.circular(7),
+            border: active ? Border.all(color: color.withValues(alpha: 0.4)) : null,
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 18, color: active ? color : _muted),
+            const SizedBox(height: 3),
+            Text(label, style: GoogleFonts.inter(
+                fontSize: 11, fontWeight: FontWeight.w600,
+                color: active ? color : _muted)),
+          ]),
+        ),
+      ),
     );
   }
 }

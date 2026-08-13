@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../models/sesion_historial.dart';
+import '../../../services/caja_service.dart';
 import 'pdf/cierre_pdf.dart';
 
 // ── Palette (Enterprise POS – DESIGN.md) ─────────────────
@@ -92,9 +93,36 @@ List<_Mov> _buildMovs(SesionHistorial s) {
 // MAIN WIDGET
 // ═════════════════════════════════════════════════════════
 
-class DetalleCierreSheet extends StatelessWidget {
+class DetalleCierreSheet extends StatefulWidget {
   final SesionHistorial sesion;
   const DetalleCierreSheet({super.key, required this.sesion});
+
+  @override
+  State<DetalleCierreSheet> createState() => _DetalleCierreSheetState();
+}
+
+class _DetalleCierreSheetState extends State<DetalleCierreSheet> {
+  SesionHistorial? _full;
+  bool _loadingFull = true;
+
+  SesionHistorial get sesion => _full ?? widget.sesion;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarDetalle();
+  }
+
+  Future<void> _cargarDetalle() async {
+    final result = await CajaService().getDetalleSesion(widget.sesion.id);
+    if (!mounted) return;
+    setState(() {
+      _loadingFull = false;
+      if (result['success'] == true) {
+        _full = SesionHistorial.fromJson(result['data'] as Map<String, dynamic>);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -111,6 +139,13 @@ class DetalleCierreSheet extends StatelessWidget {
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(children: [
+          // Indicador de carga mientras llegan datos completos
+          if (_loadingFull)
+            const LinearProgressIndicator(
+              backgroundColor: _cSurfHigh,
+              color: _cGreen,
+              minHeight: 2,
+            ),
           // Drag handle
           const Padding(
             padding: EdgeInsets.only(top: 12, bottom: 6),

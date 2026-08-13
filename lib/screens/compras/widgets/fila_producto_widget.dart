@@ -133,7 +133,7 @@ class _FilaProductoWidgetState extends State<FilaProductoWidget> {
   });
 
   double get _subtotal =>
-      (double.tryParse(_cantCtrl.text) ?? 0) *
+      (widget.multiTienda ? _totalDistribuido : (double.tryParse(_cantCtrl.text) ?? 0)) *
       (double.tryParse(_precioCtrl.text) ?? 0);
 
   @override

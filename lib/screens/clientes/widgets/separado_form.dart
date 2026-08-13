@@ -233,6 +233,11 @@ class _SeparadoFormState extends State<SeparadoForm> {
     if (_abono > _total) {
       _snack('El abono no puede superar el total', isError: true); return;
     }
+    // Ítems manuales (sin productoId) no están soportados por el backend todavía
+    if (_items.any((i) => i.productoId == null)) {
+      _snack('Solo puedes agregar productos del catálogo o escáner', isError: true);
+      return;
+    }
     FocusScope.of(context).unfocus();
 
     // Sincronizar ítems manuales
@@ -289,6 +294,13 @@ class _SeparadoFormState extends State<SeparadoForm> {
       if (imprimir == true) {
         await _imprimirSeparado(creado);
         if (!mounted) return;
+      } else {
+        final empNombre = context.read<AuthProvider>().empresaNombre;
+        unawaited(ReciboPdfService.imprimirSeparado(
+          separado: creado,
+          empresaNombre: empNombre.isNotEmpty ? empNombre : creado.tiendaNombre,
+          soloGuardar: true,
+        ));
       }
 
       // Guardar el messenger ANTES del pop para evitar usar contexto desactivado
@@ -321,6 +333,9 @@ class _SeparadoFormState extends State<SeparadoForm> {
           final bytes = await ThermalPrinterService.buildSeparadoRecibo(
               separado, empresaNombre: nombre);
           await ThermalPrinterService.printBytes(dev, bytes);
+          unawaited(ReciboPdfService.imprimirSeparado(
+            separado: separado, empresaNombre: nombre, soloGuardar: true,
+          ));
           return;
         }
       } catch (_) {}
@@ -329,6 +344,9 @@ class _SeparadoFormState extends State<SeparadoForm> {
         final bytes = await ThermalPrinterService.buildSeparadoRecibo(
             separado, empresaNombre: nombre);
         await WindowsPrinterService.printRaw(bytes);
+        unawaited(ReciboPdfService.imprimirSeparado(
+          separado: separado, empresaNombre: nombre, soloGuardar: true,
+        ));
         return;
       } catch (_) {}
     }

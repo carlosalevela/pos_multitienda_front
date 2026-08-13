@@ -31,6 +31,7 @@ class Cliente {
   final DateTime  createdAt;
   final TierInfo? tierInfo;
   final double    totalAcumulado;
+  final double    limiteCredito;
 
   Cliente({
     required this.id,
@@ -44,6 +45,7 @@ class Cliente {
     required this.createdAt,
     this.tierInfo,
     this.totalAcumulado = 0,
+    this.limiteCredito  = 0,
   });
 
   factory Cliente.fromJson(Map<String, dynamic> j) => Cliente(
@@ -63,6 +65,8 @@ class Cliente {
         : null,
     totalAcumulado: double.parse(
         (j['total_acumulado'] ?? '0').toString()),
+    limiteCredito: double.parse(
+        (j['limite_credito'] ?? '0').toString()),
   );
 
   // Para crear / editar
@@ -90,6 +94,7 @@ class Cliente {
     DateTime? createdAt,
     TierInfo? tierInfo,
     double?   totalAcumulado,
+    double?   limiteCredito,
   }) =>
       Cliente(
         id:             id             ?? this.id,
@@ -103,6 +108,7 @@ class Cliente {
         createdAt:      createdAt      ?? this.createdAt,
         tierInfo:       tierInfo       ?? this.tierInfo,
         totalAcumulado: totalAcumulado ?? this.totalAcumulado,
+        limiteCredito:  limiteCredito  ?? this.limiteCredito,
       );
 
   // ✅ Nombre completo sin espacio doble cuando no hay apellido
