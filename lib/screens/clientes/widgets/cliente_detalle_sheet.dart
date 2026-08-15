@@ -2126,6 +2126,7 @@ class _AbonarCreditoSheetState extends State<_AbonarCreditoSheet> {
   }
 
   Future<void> _confirmar() async {
+    if (_loading) return;
     final monto = double.tryParse(_montoCtrl.text.trim());
     if (monto == null || monto <= 0) return;
     if (monto > widget.saldoPendiente) return;

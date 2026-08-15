@@ -14,6 +14,7 @@ import '../../models/separado.dart';
 import '../../services/empleado_service.dart';
 import '../../services/inventario_service.dart';
 import '../../services/barcode_service.dart';
+import 'package:dio/dio.dart';
 import '../../core/api_client.dart';
 import '../../services/cliente_service.dart';
 import 'widgets/producto_form_dialog.dart';
@@ -2494,9 +2495,17 @@ class _TransferenciaSheetState extends State<_TransferenciaSheet> {
         ));
       }
     } catch (e) {
-      final msg = (e is Exception) ? e.toString() : 'Error al transferir.';
+      String msg = 'Error al transferir.';
+      if (e is DioException) {
+        final data = e.response?.data;
+        if (data is Map && data['error'] != null) {
+          msg = data['error'].toString();
+        }
+      } else if (e is Exception) {
+        msg = e.toString().replaceAll('Exception: ', '');
+      }
       setState(() {
-        _error    = msg.replaceAll('Exception: ', '');
+        _error    = msg;
         _enviando = false;
       });
     }
