@@ -301,8 +301,9 @@ class SeparadoCard extends StatelessWidget {
                       const SizedBox(width: 4),
                       Text(
                         separado.fechaLimite != null
-                            ? DateFormat('dd/MM/yyyy')
-                                .format(DateTime.parse(separado.fechaLimite!))
+                            ? DateFormat('dd/MM/yyyy').format(
+                                DateTime.tryParse(separado.fechaLimite!) ??
+                                separado.createdAt)
                             : DateFormat('dd/MM/yy')
                                 .format(separado.createdAt),
                         style: GoogleFonts.poppins(

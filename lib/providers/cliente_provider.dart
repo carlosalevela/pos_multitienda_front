@@ -187,7 +187,7 @@ class ClienteProvider extends ChangeNotifier {
         _service.getSeparados(clienteId: clienteId, estado: 'activo'),
         _service.getSeparados(
             clienteId: clienteId,
-            estados:   ['completado', 'cancelado']),
+            estados:   ['pagado', 'cancelado']),
       ]);
 
       separadosActivos = results[0];
@@ -201,6 +201,14 @@ class ClienteProvider extends ChangeNotifier {
     } finally {
       cargandoDetalle = false;
       notifyListeners();
+    }
+  }
+
+  Future<Separado?> cargarSeparadoPorId(int id) async {
+    try {
+      return await _service.getSeparado(id);
+    } catch (_) {
+      return null;
     }
   }
 

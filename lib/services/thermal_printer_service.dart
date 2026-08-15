@@ -837,10 +837,10 @@ class ThermalPrinterService {
           PosColumn(text: '\$${fmt.format(sesion.ventasTransferencia)}', width: 5,
             styles: PosStyles(align: PosAlign.right)),
         ]),
-      if (sesion.ventasMixto > 0)
+      if (sesion.ventasMixtoEfectivo > 0)
         ...gen.row([
-          PosColumn(text: '  Mixto:', width: 7, styles: const PosStyles()),
-          PosColumn(text: '\$${fmt.format(sesion.ventasMixto)}', width: 5,
+          PosColumn(text: '  Mixto (ef.):', width: 7, styles: const PosStyles()),
+          PosColumn(text: '\$${fmt.format(sesion.ventasMixtoEfectivo)}', width: 5,
             styles: PosStyles(align: PosAlign.right)),
         ]),
       ...gen.row([
@@ -876,6 +876,17 @@ class ThermalPrinterService {
           PosColumn(text: 'TOTAL APARTADOS:', width: 7, styles: PosStyles(bold: true)),
           PosColumn(text: '\$${fmt.format(sesion.abonosTotal)}', width: 5,
             styles: PosStyles(bold: true, align: PosAlign.right)),
+        ]),
+        ...gen.hr(),
+      ],
+
+      // ── Abonos Cartera (crédito) ───────────────────────────
+      if (sesion.abonosCreditoEfectivo > 0) ...[
+        ...gen.text('ABONOS CARTERA', styles: PosStyles(bold: true)),
+        ...gen.row([
+          PosColumn(text: '  Efectivo:', width: 7, styles: const PosStyles()),
+          PosColumn(text: '\$${fmt.format(sesion.abonosCreditoEfectivo)}', width: 5,
+            styles: PosStyles(align: PosAlign.right)),
         ]),
         ...gen.hr(),
       ],

@@ -335,16 +335,21 @@ pw.Widget _metricCard(String label, String value, {
 
 pw.Widget _desgloseTable(SesionHistorial sesion) {
   // Totales por columna
-  final totalEf = sesion.ventasEfectivo + sesion.abonosEfectivo
-                - sesion.gastosTotal    - sesion.devolucionesEfectivo;
+  final totalEf = sesion.ventasEfectivo
+                + sesion.ventasMixtoEfectivo
+                + sesion.abonosEfectivo
+                + sesion.abonosCreditoEfectivo
+                - sesion.gastosTotal
+                - sesion.devolucionesEfectivo;
   final totalTa = sesion.ventasTarjeta     + sesion.abonosTarjeta;
   final totalTr = sesion.ventasTransferencia + sesion.abonosTransferencia;
 
   // Filas condicionales
-  final hasAbonos = sesion.abonosTotal > 0;
-  final hasGastos = sesion.gastosTotal > 0;
-  final hasDev    = sesion.devolucionesEfectivo > 0;
-  final hasMixto  = sesion.ventasMixto > 0;
+  final hasAbonos       = sesion.abonosTotal > 0;
+  final hasAbonosCartera = sesion.abonosCreditoEfectivo > 0;
+  final hasGastos       = sesion.gastosTotal > 0;
+  final hasDev          = sesion.devolucionesEfectivo != 0;
+  final hasMixto        = sesion.ventasMixtoEfectivo > 0;
 
   final tableBorder = pw.TableBorder(
     top:              pw.BorderSide(color: _pNavy,   width: 1.0),
@@ -380,19 +385,22 @@ pw.Widget _desgloseTable(SesionHistorial sesion) {
           // Ventas directas (siempre visible)
           _tRow('Ventas Directas',
               sesion.ventasEfectivo, sesion.ventasTarjeta, sesion.ventasTransferencia),
-          // Ventas mixto (condicional)
+          // Ventas mixto — solo la parte en efectivo
           if (hasMixto)
-            _tRow('Ventas Mixto (comb.)', sesion.ventasMixto, null, null),
-          // Abonos
+            _tRow('Ventas Mixto (ef.)', sesion.ventasMixtoEfectivo, null, null),
+          // Abonos separados
           if (hasAbonos)
-            _tRow('Abonos / Creditos',
+            _tRow('Abonos Separados',
                 sesion.abonosEfectivo, sesion.abonosTarjeta, sesion.abonosTransferencia),
+          // Abonos cartera (crédito) — solo efectivo
+          if (hasAbonosCartera)
+            _tRow('Abonos Cartera', sesion.abonosCreditoEfectivo, null, null),
           // Gastos
           if (hasGastos)
             _tRow('Gastos de Operacion', -sesion.gastosTotal, null, null),
-          // Devoluciones efectivo
+          // Devoluciones efectivo (puede ser negativo si cobros > devoluciones)
           if (hasDev)
-            _tRow('Devoluciones (Efectivo)', -sesion.devolucionesEfectivo, null, null),
+            _tRow('Devoluciones (ef.)', -sesion.devolucionesEfectivo, null, null),
           // Fila total (destacada)
           pw.TableRow(
             decoration: const pw.BoxDecoration(color: _pSurfLow),
@@ -409,7 +417,7 @@ pw.Widget _desgloseTable(SesionHistorial sesion) {
       if (hasMixto) pw.Padding(
         padding: const pw.EdgeInsets.only(top: 5, left: 2),
         child: pw.Text(
-          '* Ventas Mixto: pago combinado entre metodos, no desglosable individualmente.',
+          '* Ventas Mixto: se registra el efectivo recibido; el resto fue por transferencia o tarjeta.',
           style: pw.TextStyle(fontSize: 7, color: _pOutline,
               fontStyle: pw.FontStyle.italic),
         ),

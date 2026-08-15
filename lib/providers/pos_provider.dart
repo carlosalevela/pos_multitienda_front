@@ -15,6 +15,8 @@ class TicketParkado {
   final double            montoRecibido;
   final double            descuento;
   final int               numero;
+  final double            mixtoEfectivo;
+  final String            mixtoOtroMetodo;
 
   const TicketParkado({
     required this.carrito,
@@ -22,20 +24,24 @@ class TicketParkado {
     required this.montoRecibido,
     required this.descuento,
     required this.numero,
+    this.mixtoEfectivo   = 0,
+    this.mixtoOtroMetodo = 'transferencia',
   });
 
   double get total => carrito.fold(0, (s, i) => s + i.subtotal);
   int    get items => carrito.fold(0, (s, i) => s + i.cantidad);
 
   Map<String, dynamic> toJson() => {
-    'numero':         numero,
-    'metodoPago':     metodoPago,
-    'montoRecibido':  montoRecibido,
-    'descuento':      descuento,
+    'numero':          numero,
+    'metodoPago':      metodoPago,
+    'montoRecibido':   montoRecibido,
+    'descuento':       descuento,
+    'mixtoEfectivo':   mixtoEfectivo,
+    'mixtoOtroMetodo': mixtoOtroMetodo,
     'items': carrito.map((i) => {
-      'producto':           i.producto.toJson(),
-      'cantidad':           i.cantidad,
-      'descuento':          i.descuento,
+      'producto':            i.producto.toJson(),
+      'cantidad':            i.cantidad,
+      'descuento':           i.descuento,
       'precioPersonalizado': i.precioPersonalizado,
     }).toList(),
   };
@@ -53,11 +59,13 @@ class TicketParkado {
       return item;
     }).toList();
     return TicketParkado(
-      numero:        (j['numero'] as num).toInt(),
-      metodoPago:    j['metodoPago'] as String,
-      montoRecibido: (j['montoRecibido'] as num).toDouble(),
-      descuento:     (j['descuento'] as num).toDouble(),
-      carrito:       items,
+      numero:          (j['numero'] as num).toInt(),
+      metodoPago:      j['metodoPago'] as String,
+      montoRecibido:   (j['montoRecibido'] as num).toDouble(),
+      descuento:       (j['descuento'] as num).toDouble(),
+      mixtoEfectivo:   (j['mixtoEfectivo'] as num?)?.toDouble()  ?? 0,
+      mixtoOtroMetodo: (j['mixtoOtroMetodo'] as String?) ?? 'transferencia',
+      carrito:         items,
     );
   }
 }
@@ -80,6 +88,8 @@ class PosProvider extends ChangeNotifier {
   String _metodoPago    = 'efectivo';
   double _montoRecibido = 0;
   double _descuento     = 0;
+  double _mixtoEfectivo   = 0;
+  String _mixtoOtroMetodo = 'transferencia';
 
   // ── Tickets parkados ──────────────────────────────────
   static const _kStorageKey = 'pos_tickets_parkados';
@@ -112,11 +122,25 @@ class PosProvider extends ChangeNotifier {
   double get total             => _carrito.fold(0, (sum, item) => sum + item.subtotal);
   double get totalConDescuento => (total - _descuento).clamp(0, double.infinity);
   double get vuelto            => (_montoRecibido - totalConDescuento).clamp(0, double.infinity);
+  double get mixtoEfectivo     => _mixtoEfectivo;
+  String get mixtoOtroMetodo   => _mixtoOtroMetodo;
+  double get mixtoOtroMonto    => (totalConDescuento - _mixtoEfectivo).clamp(0, double.infinity);
 
   // ── Setters ───────────────────────────────────────────
 
   void setMetodoPago(String metodo) {
     _metodoPago = metodo;
+    if (metodo == 'mixto') _mixtoEfectivo = 0;
+    notifyListeners();
+  }
+
+  void setMixtoEfectivo(double monto) {
+    _mixtoEfectivo = monto.clamp(0, totalConDescuento);
+    notifyListeners();
+  }
+
+  void setMixtoOtroMetodo(String metodo) {
+    _mixtoOtroMetodo = metodo;
     notifyListeners();
   }
 
@@ -251,13 +275,15 @@ class PosProvider extends ChangeNotifier {
   }
 
   void limpiarCarrito() {
-    _carrito       = [];
-    _montoRecibido = 0;
-    _metodoPago    = 'efectivo';
-    _errorMsg      = '';
-    _successMsg    = '';
-    _descuento     = 0;
-    _numeroActual  = null;
+    _carrito         = [];
+    _montoRecibido   = 0;
+    _metodoPago      = 'efectivo';
+    _errorMsg        = '';
+    _successMsg      = '';
+    _descuento       = 0;
+    _numeroActual    = null;
+    _mixtoEfectivo   = 0;
+    _mixtoOtroMetodo = 'transferencia';
     notifyListeners();
   }
 
@@ -268,19 +294,23 @@ class PosProvider extends ChangeNotifier {
   bool parquearTicket() {
     if (_carrito.isEmpty) return false;
     _ticketsParkados.add(TicketParkado(
-      carrito:       List.from(_carrito),
-      metodoPago:    _metodoPago,
-      montoRecibido: _montoRecibido,
-      descuento:     _descuento,
-      numero:        _numeroActual ?? _contadorTickets++,
+      carrito:         List.from(_carrito),
+      metodoPago:      _metodoPago,
+      montoRecibido:   _montoRecibido,
+      descuento:       _descuento,
+      numero:          _numeroActual ?? _contadorTickets++,
+      mixtoEfectivo:   _mixtoEfectivo,
+      mixtoOtroMetodo: _mixtoOtroMetodo,
     ));
-    _carrito       = [];
-    _montoRecibido = 0;
-    _metodoPago    = 'efectivo';
-    _descuento     = 0;
-    _errorMsg      = '';
-    _successMsg    = '';
-    _numeroActual  = null;
+    _carrito         = [];
+    _montoRecibido   = 0;
+    _metodoPago      = 'efectivo';
+    _descuento       = 0;
+    _mixtoEfectivo   = 0;
+    _mixtoOtroMetodo = 'transferencia';
+    _errorMsg        = '';
+    _successMsg      = '';
+    _numeroActual    = null;
     _guardarTickets();
     notifyListeners();
     return true;
@@ -292,21 +322,25 @@ class PosProvider extends ChangeNotifier {
     if (index < 0 || index >= _ticketsParkados.length) return;
     if (_carrito.isNotEmpty) {
       _ticketsParkados.add(TicketParkado(
-        carrito:       List.from(_carrito),
-        metodoPago:    _metodoPago,
-        montoRecibido: _montoRecibido,
-        descuento:     _descuento,
-        numero:        _numeroActual ?? _contadorTickets++,
+        carrito:         List.from(_carrito),
+        metodoPago:      _metodoPago,
+        montoRecibido:   _montoRecibido,
+        descuento:       _descuento,
+        numero:          _numeroActual ?? _contadorTickets++,
+        mixtoEfectivo:   _mixtoEfectivo,
+        mixtoOtroMetodo: _mixtoOtroMetodo,
       ));
     }
-    final snap    = _ticketsParkados.removeAt(index);
-    _carrito       = List.from(snap.carrito);
-    _metodoPago    = snap.metodoPago;
-    _montoRecibido = snap.montoRecibido;
-    _descuento     = snap.descuento;
-    _numeroActual  = snap.numero;
-    _errorMsg      = '';
-    _successMsg    = '';
+    final snap       = _ticketsParkados.removeAt(index);
+    _carrito         = List.from(snap.carrito);
+    _metodoPago      = snap.metodoPago;
+    _montoRecibido   = snap.montoRecibido;
+    _descuento       = snap.descuento;
+    _mixtoEfectivo   = snap.mixtoEfectivo;
+    _mixtoOtroMetodo = snap.mixtoOtroMetodo;
+    _numeroActual    = snap.numero;
+    _errorMsg        = '';
+    _successMsg      = '';
     _guardarTickets();
     notifyListeners();
   }
@@ -393,6 +427,18 @@ class PosProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+    if (_metodoPago == 'mixto') {
+      if (_mixtoEfectivo <= 0) {
+        _errorMsg = 'Ingresa el monto en efectivo para el pago mixto';
+        notifyListeners();
+        return false;
+      }
+      if (_mixtoEfectivo >= totalConDescuento) {
+        _errorMsg = 'El efectivo debe ser menor al total (el resto va en $_mixtoOtroMetodo)';
+        notifyListeners();
+        return false;
+      }
+    }
 
     _procesando = true;
     _errorMsg   = '';
@@ -405,6 +451,13 @@ class PosProvider extends ChangeNotifier {
       'descuento':       item.descuento.toString(),
     }).toList();
 
+    final List<Map<String, dynamic>> pagos = _metodoPago == 'mixto'
+        ? [
+            {'metodo': 'efectivo',       'monto': _mixtoEfectivo},
+            {'metodo': _mixtoOtroMetodo, 'monto': totalConDescuento - _mixtoEfectivo},
+          ]
+        : [];
+
     final result = await _ventaService.crearVenta(
       tiendaId:      tiendaId,
       metodoPago:    _metodoPago,
@@ -413,6 +466,7 @@ class PosProvider extends ChangeNotifier {
       clienteId:     clienteId,
       aCredito:      _metodoPago == 'credito',
       detalles:      detalles,
+      pagos:         pagos,
     );
 
     _procesando = false;

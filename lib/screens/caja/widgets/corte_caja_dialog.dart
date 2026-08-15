@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/caja_provider.dart';
 import '../../../providers/config_provider.dart';
 import '../../../models/resumen_cierre.dart';
@@ -366,9 +367,15 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                       _MontoRow('Dif. devuelta',  r.devoluciones.cambiosDevolver, isNeg: true),
                     if (r.devoluciones.cambiosCobrar > 0)
                       _MontoRow('Dif. cobrada',   r.devoluciones.cambiosCobrar,   isNeg: false),
-                    if (r.devoluciones.netoEfectivo > 0) ...[
+                    if (r.devoluciones.netoEfectivo != 0) ...[
                       const _CardDiv(),
-                      _TotalRow('NETO EFECTIVO', '-${_f(r.devoluciones.netoEfectivo)}', _cRed),
+                      _TotalRow(
+                        'NETO EFECTIVO',
+                        r.devoluciones.netoEfectivo > 0
+                            ? '-${_f(r.devoluciones.netoEfectivo)}'
+                            : '+${_f(-r.devoluciones.netoEfectivo)}',
+                        r.devoluciones.netoEfectivo > 0 ? _cRed : _cGreen,
+                      ),
                     ],
                     const SizedBox(height: 4),
                     Align(
@@ -420,14 +427,22 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
               alignment: WrapAlignment.center,
               spacing: 10, runSpacing: 6,
               children: [
-                _EsperadoChip('Inicial',     _f(r.montoInicial)),
-                _EsperadoChip('Ventas ef.',  _f(r.ventas.efectivo)),
+                _EsperadoChip('Inicial',       _f(r.montoInicial)),
+                _EsperadoChip('Ventas ef.',    _f(r.ventas.efectivo)),
+                if (r.ventas.mixtoEfectivo > 0)
+                  _EsperadoChip('Mixto ef.',   _f(r.ventas.mixtoEfectivo)),
                 if (r.abonos.efectivo > 0)
-                  _EsperadoChip('Abonos ef.', _f(r.abonos.efectivo)),
+                  _EsperadoChip('Abonos sep.', _f(r.abonos.efectivo)),
+                if (r.abonos.creditoEfectivo > 0)
+                  _EsperadoChip('Cartera ef.', _f(r.abonos.creditoEfectivo)),
                 if (r.gastos.efectivo > 0)
-                  _EsperadoChip('- Gastos',   _f(r.gastos.efectivo),  isNeg: true),
-                if (r.devoluciones.netoEfectivo > 0)
-                  _EsperadoChip('- Devoluc.', _f(r.devoluciones.netoEfectivo), isNeg: true),
+                  _EsperadoChip('- Gastos',    _f(r.gastos.efectivo),  isNeg: true),
+                if (r.devoluciones.netoEfectivo != 0)
+                  _EsperadoChip(
+                    r.devoluciones.netoEfectivo > 0 ? '- Devoluc.' : '+ Devoluc.',
+                    _f(r.devoluciones.netoEfectivo.abs()),
+                    isNeg: r.devoluciones.netoEfectivo > 0,
+                  ),
               ],
             ),
           ]),
@@ -701,7 +716,11 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
         _tFila('Efectivo',      _f(r.ventas.efectivo)),
         _tFila('Tarjeta',       _f(r.ventas.tarjeta)),
         _tFila('Transferencia', _f(r.ventas.transferencia)),
-        if (r.ventas.mixto > 0) _tFila('Mixto', _f(r.ventas.mixto)),
+        if (r.ventas.mixto > 0) ...[
+          _tFila('Mixto (total)',   _f(r.ventas.mixto)),
+          if (r.ventas.mixtoEfectivo > 0)
+            _tFila('  Mixto ef.', _f(r.ventas.mixtoEfectivo)),
+        ],
         _tDiv(),
         _tFila('TOTAL',         _f(r.ventas.total), bold: true),
         _tFila('Transacciones', '${r.ventas.numTransacciones}'),
@@ -715,6 +734,12 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
           _tDiv(),
           _tFila('TOTAL',  _f(r.abonos.total),      bold: true),
           _tFila('Abonos', '${r.abonos.cantidad}'),
+        ],
+
+        if (r.abonos.creditoEfectivo > 0) ...[
+          const SizedBox(height: 2),
+          _tSec('ABONOS CARTERA'),
+          _tFila('Efectivo', _f(r.abonos.creditoEfectivo)),
         ],
 
         const SizedBox(height: 2),
@@ -739,7 +764,13 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
           if (r.devoluciones.cambiosCobrar > 0)
             _tFila('Dif. cobrada',    '+${_f(r.devoluciones.cambiosCobrar)}'),
           _tDiv(),
-          _tFila('NETO EF.', '-${_f(r.devoluciones.netoEfectivo)}', bold: true),
+          _tFila(
+            'NETO EF.',
+            r.devoluciones.netoEfectivo >= 0
+                ? '-${_f(r.devoluciones.netoEfectivo)}'
+                : '+${_f(-r.devoluciones.netoEfectivo)}',
+            bold: true,
+          ),
         ],
 
         const SizedBox(height: 2),
@@ -824,6 +855,7 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                 observaciones:  obs,
               );
               if (ok && mounted) {
+                final auth = context.read<AuthProvider>();
                 Navigator.pop(context);
                 if (r != null) {
                   unawaited(exportarCierrePDF(SesionHistorial(
@@ -835,17 +867,19 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                     estado:               'cerrada',
                     observaciones:        obs,
                     saldoInicial:         r.montoInicial,
-                    ventasEfectivo:       r.ventas.efectivo,
-                    ventasTarjeta:        r.ventas.tarjeta,
-                    ventasTransferencia:  r.ventas.transferencia,
-                    ventasMixto:          r.ventas.mixto,
-                    ventasTotal:          r.ventas.total,
-                    gastosTotal:          r.gastos.total,
-                    abonosEfectivo:       r.abonos.efectivo,
-                    abonosTarjeta:        r.abonos.tarjeta,
-                    abonosTransferencia:  r.abonos.transferencia,
-                    abonosTotal:          r.abonos.total,
-                    numAbonos:            r.abonos.cantidad,
+                    ventasEfectivo:          r.ventas.efectivo,
+                    ventasTarjeta:           r.ventas.tarjeta,
+                    ventasTransferencia:     r.ventas.transferencia,
+                    ventasMixto:             r.ventas.mixto,
+                    ventasMixtoEfectivo:     r.ventas.mixtoEfectivo,
+                    ventasTotal:             r.ventas.total,
+                    gastosTotal:             r.gastos.total,
+                    abonosEfectivo:          r.abonos.efectivo,
+                    abonosTarjeta:           r.abonos.tarjeta,
+                    abonosTransferencia:     r.abonos.transferencia,
+                    abonosTotal:             r.abonos.total,
+                    abonosCreditoEfectivo:   r.abonos.creditoEfectivo,
+                    numAbonos:               r.abonos.cantidad,
                     devolucionesEfectivo: r.devoluciones.netoEfectivo,
                     numDevoluciones:      r.devoluciones.cantidad,
                     numCambiosProducto:   r.devoluciones.cambiosProducto,
@@ -855,6 +889,8 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                     numTransacciones:     r.ventas.numTransacciones,
                   ), tipoPapel: tipoPapel));
                 }
+                await Future.delayed(const Duration(milliseconds: 600));
+                auth.logout();
               }
             }
           },
@@ -1285,13 +1321,24 @@ class _CajaEsperadaCard extends StatelessWidget {
         ]),
         const SizedBox(height: 14),
 
-        _CalcLine('Saldo inicial',    f(r.montoInicial),          Colors.white70,  '+'),
-        _CalcLine('Ventas efectivo',  f(r.ventas.efectivo),       Colors.white,    '+'),
+        _CalcLine('Saldo inicial',      f(r.montoInicial),                Colors.white70,          '+'),
+        _CalcLine('Ventas efectivo',    f(r.ventas.efectivo),             Colors.white,            '+'),
+        if (r.ventas.mixtoEfectivo > 0)
+          _CalcLine('Ventas mixto (ef.)', f(r.ventas.mixtoEfectivo),     Colors.white,            '+'),
         if (r.abonos.efectivo > 0)
-          _CalcLine('Abonos efectivo', f(r.abonos.efectivo),     const Color(0xFF7DD3FC), '+'),
-        _CalcLine('Gastos efectivo',  f(r.gastos.efectivo),      const Color(0xFFFFB4AB), '-'),
-        if (r.devoluciones.netoEfectivo > 0)
-          _CalcLine('Devoluciones ef.', f(r.devoluciones.netoEfectivo), const Color(0xFFFFB4AB), '-'),
+          _CalcLine('Abonos separados',   f(r.abonos.efectivo),          const Color(0xFF7DD3FC), '+'),
+        if (r.abonos.creditoEfectivo > 0)
+          _CalcLine('Abonos cartera',     f(r.abonos.creditoEfectivo),   const Color(0xFF7DD3FC), '+'),
+        _CalcLine('Gastos efectivo',    f(r.gastos.efectivo),             const Color(0xFFFFB4AB), '-'),
+        if (r.devoluciones.netoEfectivo != 0)
+          _CalcLine(
+            'Devoluciones ef.',
+            f(r.devoluciones.netoEfectivo.abs()),
+            r.devoluciones.netoEfectivo > 0
+                ? const Color(0xFFFFB4AB)
+                : const Color(0xFF86EFAC),
+            r.devoluciones.netoEfectivo > 0 ? '-' : '+',
+          ),
 
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 10),
@@ -1325,8 +1372,9 @@ class _CajaEsperadaCard extends StatelessWidget {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                'Tarjeta ${f(r.ventas.tarjeta)} y transferencia '
-                '${f(r.ventas.transferencia)} se depositan al banco.',
+                'Tarjeta, transferencia'
+                '${r.ventas.mixto > 0 ? " y parte no-efectivo de mixto" : ""}'
+                ' se depositan al banco.',
                 style: GoogleFonts.inter(fontSize: 10, color: Colors.white60),
               ),
             ),

@@ -170,6 +170,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _buildScreenByKey(String screen, String rol, String userName) {
+    if (!_buildNavItems(rol).any((n) => n.screen == screen)) {
+      if (rol == 'cajero') return CajeroDashboard(onNavigate: _navigate);
+      return _DashboardBody(userName: userName.split(' ').first, onNavigate: _navigate);
+    }
     switch (screen) {
       case 'dashboard':
         if (rol == 'cajero') return CajeroDashboard(onNavigate: _navigate);

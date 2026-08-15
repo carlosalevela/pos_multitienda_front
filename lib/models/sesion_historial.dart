@@ -14,6 +14,7 @@ class SesionHistorial {
   final double ventasTarjeta;
   final double ventasTransferencia;
   final double ventasMixto;
+  final double ventasMixtoEfectivo;
   final double ventasTotal;
   // Gastos
   final double gastosTotal;
@@ -22,6 +23,7 @@ class SesionHistorial {
   final double abonosTarjeta;
   final double abonosTransferencia;
   final double abonosTotal;
+  final double abonosCreditoEfectivo;
   final int    numAbonos;
   // Devoluciones
   final double devolucionesEfectivo;
@@ -47,6 +49,7 @@ class SesionHistorial {
     required this.ventasTarjeta,
     required this.ventasTransferencia,
     required this.ventasMixto,
+    required this.ventasMixtoEfectivo,
     required this.ventasTotal,
     required this.gastosTotal,
     // Abonos ← NUEVO
@@ -54,6 +57,7 @@ class SesionHistorial {
     required this.abonosTarjeta,
     required this.abonosTransferencia,
     required this.abonosTotal,
+    required this.abonosCreditoEfectivo,
     required this.numAbonos,
     //
     required this.devolucionesEfectivo,
@@ -78,6 +82,7 @@ class SesionHistorial {
     ventasTarjeta:         double.tryParse(j['ventas_tarjeta']?.toString()             ?? '0') ?? 0.0,
     ventasTransferencia:   double.tryParse(j['ventas_transferencia']?.toString()       ?? '0') ?? 0.0,
     ventasMixto:           double.tryParse(j['ventas_mixto']?.toString()               ?? '0') ?? 0.0,
+    ventasMixtoEfectivo:   double.tryParse(j['ventas_mixto_efectivo']?.toString()    ?? '0') ?? 0.0,
     ventasTotal:           double.tryParse(j['ventas_total']?.toString()               ?? '0') ?? 0.0,
     gastosTotal:           double.tryParse(j['gastos_total']?.toString()               ?? '0') ?? 0.0,
     // Abonos ← NUEVO
@@ -85,6 +90,7 @@ class SesionHistorial {
     abonosTarjeta:         double.tryParse(j['abonos_tarjeta']?.toString()             ?? '0') ?? 0.0,
     abonosTransferencia:   double.tryParse(j['abonos_transferencia']?.toString()       ?? '0') ?? 0.0,
     abonosTotal:           double.tryParse(j['abonos_total']?.toString()               ?? '0') ?? 0.0,
+    abonosCreditoEfectivo: double.tryParse(j['abonos_credito_efectivo']?.toString() ?? '0') ?? 0.0,
     numAbonos:             (j['num_abonos']        as num?)?.toInt() ?? 0,
     //
     devolucionesEfectivo:  double.tryParse(j['devoluciones_efectivo']?.toString()      ?? '0') ?? 0.0,

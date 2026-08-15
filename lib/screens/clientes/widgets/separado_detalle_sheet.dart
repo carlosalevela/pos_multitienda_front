@@ -425,8 +425,13 @@ class SeparadoDetalleSheet extends StatelessWidget {
                               DateFormat('dd/MM/yyyy HH:mm')
                                   .format(separado.createdAt)),
                           if (separado.fechaLimite != null)
-                            _infoRow(Icons.event_outlined,
-                                'Límite', separado.fechaLimite!),
+                            _infoRow(
+                              Icons.event_outlined,
+                              'Límite',
+                              DateFormat('dd/MM/yyyy').format(
+                                  DateTime.tryParse(separado.fechaLimite!) ??
+                                  DateTime.now()),
+                            ),
                         ],
                       ),
                     ),

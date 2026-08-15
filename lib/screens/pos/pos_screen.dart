@@ -55,9 +55,10 @@ class PosScreen extends StatefulWidget {
 }
 
 class _PosScreenState extends State<PosScreen> {
-  final _searchCtrl        = TextEditingController();
-  final _montoCtrl         = TextEditingController();
-  final _descuentoCtrl     = TextEditingController();
+  final _searchCtrl          = TextEditingController();
+  final _montoCtrl           = TextEditingController();
+  final _descuentoCtrl       = TextEditingController();
+  final _mixtoEfectivoCtrl   = TextEditingController();
 
   // Categories
   List<Map<String, dynamic>> _categorias   = [];
@@ -108,6 +109,7 @@ class _PosScreenState extends State<PosScreen> {
     _searchCtrl.dispose();
     _montoCtrl.dispose();
     _descuentoCtrl.dispose();
+    _mixtoEfectivoCtrl.dispose();
     _debounceSearch?.cancel();
     _notifOverlay?.remove();
     super.dispose();
@@ -1451,6 +1453,10 @@ class _PosScreenState extends State<PosScreen> {
         const SizedBox(height: 10),
         _buildEfectivoSection(pos),
       ],
+      if (pos.metodoPago == 'mixto') ...[
+        const SizedBox(height: 10),
+        _buildMixtoSection(pos),
+      ],
       if (pos.metodoPago == 'credito') ...[
         const SizedBox(height: 10),
         _buildCreditoInfo(),
@@ -1768,10 +1774,11 @@ class _PosScreenState extends State<PosScreen> {
 
   Widget _buildMetodosPago(PosProvider pos) {
     const metodos = [
-      ('efectivo',      Icons.payments_rounded,       'Efectivo'),
-      ('tarjeta',       Icons.credit_card_rounded,     'Tarjeta'),
-      ('transferencia', Icons.account_balance_rounded, 'Transf.'),
-      ('credito',       Icons.handshake_rounded,       'Fiado'),
+      ('efectivo',      Icons.payments_rounded,        'Efectivo'),
+      ('tarjeta',       Icons.credit_card_rounded,      'Tarjeta'),
+      ('transferencia', Icons.account_balance_rounded,  'Transf.'),
+      ('mixto',         Icons.call_split_rounded,       'Mixto'),
+      ('credito',       Icons.handshake_rounded,        'Fiado'),
     ];
     final tieneCredito = (_clienteSeleccionado?.limiteCredito ?? 0) > 0;
 
@@ -1827,8 +1834,9 @@ class _PosScreenState extends State<PosScreen> {
               pos.setMetodoPago(value);
               if (value != 'efectivo') {
                 _montoCtrl.clear();
-                pos.setMontoRecibido(pos.total);
+                pos.setMontoRecibido(pos.totalConDescuento);
               }
+              if (value != 'mixto') _mixtoEfectivoCtrl.clear();
               setState(() {});
             },
             child: chip,
@@ -1917,6 +1925,111 @@ class _PosScreenState extends State<PosScreen> {
       ),
     ],
   ]);
+
+  // ── Sección mixto (efectivo + otro método) ───────────────
+
+  Widget _buildMixtoSection(PosProvider pos) {
+    final fmt = (double v) =>
+        '\$${v.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},')}';
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      // Selector: tarjeta vs transferencia
+      Row(children: [
+        Text('Otro método:',
+            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: _kTextMuted)),
+        const SizedBox(width: 8),
+        _mixtoChip(pos, 'transferencia', 'Transferencia'),
+        const SizedBox(width: 6),
+        _mixtoChip(pos, 'tarjeta', 'Tarjeta'),
+      ]),
+      const SizedBox(height: 8),
+
+      // Campo efectivo
+      TextField(
+        controller: _mixtoEfectivoCtrl,
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: _kText),
+        decoration: InputDecoration(
+          labelText: 'Monto en efectivo',
+          labelStyle: GoogleFonts.inter(fontSize: 12, color: _kTextMuted),
+          prefixText: '\$ ',
+          filled: true, fillColor: _kSurfaceLow,
+          border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: _kBorder)),
+          enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: _kBorder)),
+          focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: _kGreen, width: 2)),
+        ),
+        onChanged: (v) {
+          pos.setMixtoEfectivo(double.tryParse(v) ?? 0);
+          setState(() {});
+        },
+      ),
+
+      // Desglose automático
+      if (pos.mixtoEfectivo > 0 && pos.mixtoEfectivo < pos.totalConDescuento) ...[
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: _kGreenLight,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _kGreenDark.withValues(alpha: 0.3)),
+          ),
+          child: Column(children: [
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text('Efectivo',
+                  style: GoogleFonts.inter(fontSize: 12, color: _kTextSub, fontWeight: FontWeight.w600)),
+              Text(fmt(pos.mixtoEfectivo),
+                  style: GoogleFonts.inter(fontSize: 13, color: _kGreenDark, fontWeight: FontWeight.w700)),
+            ]),
+            const SizedBox(height: 4),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text(pos.mixtoOtroMetodo == 'tarjeta' ? 'Tarjeta' : 'Transferencia',
+                  style: GoogleFonts.inter(fontSize: 12, color: _kTextSub, fontWeight: FontWeight.w600)),
+              Text(fmt(pos.mixtoOtroMonto),
+                  style: GoogleFonts.inter(fontSize: 13, color: _kGreenDark, fontWeight: FontWeight.w700)),
+            ]),
+          ]),
+        ),
+      ],
+
+      // Advertencia si efectivo >= total
+      if (pos.mixtoEfectivo >= pos.totalConDescuento && pos.mixtoEfectivo > 0)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            'El efectivo cubre el total completo — usa "Efectivo" directamente',
+            style: GoogleFonts.inter(fontSize: 11, color: _kError),
+          ),
+        ),
+    ]);
+  }
+
+  Widget _mixtoChip(PosProvider pos, String metodo, String label) {
+    final selected = pos.mixtoOtroMetodo == metodo;
+    return GestureDetector(
+      onTap: () => pos.setMixtoOtroMetodo(metodo),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: selected ? _kGreenDark.withValues(alpha: 0.1) : _kSurfaceLow,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: selected ? _kGreenDark : _kBorder, width: selected ? 1.5 : 1),
+        ),
+        child: Text(label,
+            style: GoogleFonts.inter(
+                fontSize: 11, fontWeight: FontWeight.w600,
+                color: selected ? _kGreenDark : _kTextMuted)),
+      ),
+    );
+  }
 
   // ══════════════════════════════════════════════════════════
   // ACCIONES

@@ -1109,47 +1109,26 @@ class _SeparadosScreenState extends State<SeparadosScreen> {
   }
 
   void _verDetalle(Separado s) {
-    SeparadoDetalleSheet.mostrar(context, separado: s, fmt: _fmt);
+    SeparadoDetalleSheet.mostrar(context, separado: s, fmt: _fmt,
+        mostrarAcciones: s.esActivo);
   }
 
   void _abrirAbono(Separado s) {
     AbonarSheet.mostrar(context,
         separado:  s,
         fmt:       _fmt,
-        onAbonado: () {
-          _cargarTab();
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Abono registrado correctamente',
-                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-            backgroundColor: _kGreenDark,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
-            margin: const EdgeInsets.all(16),
-          ));
-        });
+        onAbonado: _cargarTab);
   }
 
-  void _abrirAbonoDeAlerta(AlertaSeparado a) {
+  Future<void> _abrirAbonoDeAlerta(AlertaSeparado a) async {
     final prov = context.read<ClienteProvider>();
-    final sep = prov.separados.firstWhere(
-      (s) => s.id == a.id,
-      orElse: () => Separado(
-        id:             a.id,
-        tienda:         0,
-        tiendaNombre:   a.tienda,
-        cliente:        0,
-        clienteNombre:  a.cliente,
-        total:          a.saldoPendiente,
-        abonoAcumulado: 0,
-        saldoPendiente: a.saldoPendiente,
-        estado:         'activo',
-        createdAt:      DateTime.now(),
-        detalles:       [],
-        abonos:         [],
-      ),
+    // Busca en la lista local; si no está, carga desde API para tener total real
+    Separado? sep = prov.separados.cast<Separado?>().firstWhere(
+      (s) => s!.id == a.id,
+      orElse: () => null,
     );
+    sep ??= await prov.cargarSeparadoPorId(a.id);
+    if (sep == null || !mounted) return;
     _abrirAbono(sep);
   }
 
