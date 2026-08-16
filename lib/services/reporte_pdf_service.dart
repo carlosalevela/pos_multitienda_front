@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -1150,8 +1151,6 @@ class ReportePdfService {
 
   // ── Formato números ────────────────────────────────
 
-  static String _fmt(double v) => v.abs()
-      .toStringAsFixed(0)
-      .replaceAllMapped(
-          RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]}.');
+  static final _nf = NumberFormat('#,##0', 'es_CO');
+  static String _fmt(double v) => _nf.format(v.abs());
 }

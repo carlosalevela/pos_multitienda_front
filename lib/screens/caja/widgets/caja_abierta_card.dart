@@ -794,7 +794,8 @@ class _RegistrarGastoDialogState extends State<_RegistrarGastoDialog> {
   final _formKey   = GlobalKey<FormState>();
   final _montoCtrl = TextEditingController();
   final _descCtrl  = TextEditingController();
-  bool _guardando  = false;
+  bool    _guardando = false;
+  String? _error;
 
   String _categoria  = 'Insumos';
   String _metodoPago = 'efectivo';
@@ -838,7 +839,7 @@ class _RegistrarGastoDialogState extends State<_RegistrarGastoDialog> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _guardando = true);
+    setState(() { _guardando = true; _error = null; });
 
     final monto = double.tryParse(
         _montoCtrl.text.trim().replaceAll(',', '')) ?? 0;
@@ -855,7 +856,14 @@ class _RegistrarGastoDialogState extends State<_RegistrarGastoDialog> {
     );
 
     if (mounted) {
-      setState(() => _guardando = false);
+      setState(() {
+        _guardando = false;
+        if (!ok) {
+          _error = widget.caja.errorMsg.isNotEmpty
+              ? widget.caja.errorMsg
+              : 'Error al registrar gasto';
+        }
+      });
       if (ok) Navigator.pop(context);
     }
   }
@@ -973,6 +981,14 @@ class _RegistrarGastoDialogState extends State<_RegistrarGastoDialog> {
                   onChanged: (v) { if (v != null) _metodoPago = v; },
                 ),
                 const SizedBox(height: 24),
+
+                // ── Error servidor ─────────────────────
+                if (_error != null) ...[
+                  Text(_error!,
+                      style: GoogleFonts.inter(
+                          fontSize: 12, color: _C.error)),
+                  const SizedBox(height: 10),
+                ],
 
                 // ── Botón ──────────────────────────────
                 SizedBox(
