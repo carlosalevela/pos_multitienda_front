@@ -20,7 +20,8 @@ class CajaScreen extends StatefulWidget {
 
 class _CajaScreenState extends State<CajaScreen>
     with SingleTickerProviderStateMixin {
-  final _saldoCtrl = TextEditingController();
+  final _saldoCtrl    = TextEditingController();
+  bool  _cargandoCierre = false;
 
   late AnimationController _fadeCtrl;
   late Animation<double>   _fadeAnim;
@@ -193,8 +194,12 @@ class _CajaScreenState extends State<CajaScreen>
 
   // ── Abrir diálogo de corte ───────────────────────────────────
   Future<void> _abrirCorteCaja(CajaProvider caja) async {
-    await caja.cargarResumenCierre();
-    if (!mounted) return;
+    if (_cargandoCierre) return;
+    setState(() => _cargandoCierre = true);
+    final ok = await caja.cargarResumenCierre();
+    if (!mounted) { _cargandoCierre = false; return; }
+    setState(() => _cargandoCierre = false);
+    if (!ok) return;
     await showDialog(
       context: context,
       barrierDismissible: false,

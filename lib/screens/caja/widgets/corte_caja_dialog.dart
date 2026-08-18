@@ -778,7 +778,7 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
         _tFila('Contado',  _f(_montoIngresado)),
         _tFila('Esperado', _f(r.montoEsperadoCaja)),
         _tDiv(),
-        _tFila(resultado,  '${dif >= 0 ? '+' : ''}${_f(dif)}',
+        _tFila(resultado,  '${dif >= 0 ? '+' : '-'}${_f(dif.abs())}',
             bold: true, color: color),
 
         if (_obsCtrl.text.isNotEmpty) ...[

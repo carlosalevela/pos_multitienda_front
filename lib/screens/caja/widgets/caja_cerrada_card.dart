@@ -105,8 +105,8 @@ class CajaCerradaCard extends StatelessWidget {
                 Expanded(
                   child: TextField(
                     controller: saldoCtrl,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
                     style: GoogleFonts.inter(
                         fontSize: 20, fontWeight: FontWeight.w700,
                         color: _textPrimary),

@@ -92,8 +92,6 @@ class ProveedoresProvider extends ChangeNotifier {
       final res = await _proveedorService.crear(data);
       if (res['success'] == true) {
         successMsg = '✅ Proveedor creado correctamente';
-        guardando  = false;
-        notifyListeners();
         await cargarProveedores();
         return true;
       }
@@ -116,8 +114,6 @@ class ProveedoresProvider extends ChangeNotifier {
       final res = await _proveedorService.editar(id, data);
       if (res['success'] == true) {
         successMsg = '✅ Proveedor actualizado';
-        guardando  = false;
-        notifyListeners();
         await cargarProveedores();
         return true;
       }

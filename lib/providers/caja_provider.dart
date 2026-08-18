@@ -60,12 +60,19 @@ class CajaProvider extends ChangeNotifier {
 
   // ── Resumen pre-cierre ─────────────────────────────────
 
-  Future<void> cargarResumenCierre() async {
-    if (_sesionActiva == null) return;
+  Future<bool> cargarResumenCierre() async {
+    if (_sesionActiva == null) return false;
     _resumenCierre = null;
     notifyListeners();
-    _resumenCierre = await _service.getResumenCierre(_sesionActiva!.id);
+    try {
+      _resumenCierre = await _service.getResumenCierre(_sesionActiva!.id);
+    } catch (_) {
+      _errorMsg = 'No se pudo cargar el resumen de cierre.';
+      notifyListeners();
+      return false;
+    }
     notifyListeners();
+    return true;
   }
 
   // ── Abrir caja ─────────────────────────────────────────
