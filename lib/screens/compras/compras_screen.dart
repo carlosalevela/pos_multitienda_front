@@ -80,6 +80,31 @@ class _ComprasScreenState extends State<ComprasScreen> {
       backgroundColor: AppColors.surfaceContainerLow,
       body: Column(children: [
         _buildHeader(auth),
+        if (prov.errorCompras != null && !prov.cargandoCompras)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF1F2),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFBE123C).withOpacity(0.3)),
+            ),
+            child: Row(children: [
+              const Icon(Icons.error_outline_rounded,
+                  color: Color(0xFFBE123C), size: 16),
+              const SizedBox(width: 10),
+              Expanded(child: Text(prov.errorCompras!,
+                  style: AppTextStyles.bodySm.copyWith(
+                      color: const Color(0xFFBE123C),
+                      fontWeight: FontWeight.w600))),
+              GestureDetector(
+                onTap: _cargar,
+                child: const Icon(Icons.refresh_rounded,
+                    size: 16, color: Color(0xFFBE123C)),
+              ),
+            ]),
+          ),
         Expanded(
           child: prov.cargandoCompras
               ? const Center(
