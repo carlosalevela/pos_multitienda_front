@@ -238,109 +238,115 @@ class _EmpresasScreenState extends State<EmpresasScreen> {
           // ── KPIs globales ────────────────────────────
           Row(
             children: [
-              StatCard(
+              Expanded(child: StatCard(
                 label: 'Total empresas',
                 value: '${prov.totalEmpresas}',
                 icon: Icons.business_rounded,
                 color: Colors.blue,
-              ),
+              )),
               const SizedBox(width: 12),
-              StatCard(
+              Expanded(child: StatCard(
                 label: 'Activas',
                 value: '${prov.totalActivas}',
                 icon: Icons.check_circle_rounded,
                 color: Colors.green,
-              ),
+              )),
               const SizedBox(width: 12),
-              StatCard(
+              Expanded(child: StatCard(
                 label: 'Inactivas',
                 value: '${prov.totalInactivas}',
                 icon: Icons.cancel_rounded,
                 color: Colors.red,
-              ),
+              )),
             ],
           ),
           const SizedBox(height: 16),
 
           // ── Layout maestro-detalle ───────────────────
           Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Panel izquierdo — lista de empresas
-                SizedBox(
-                  width: 320,
-                  child: EmpresasListPanel(
-                    empresas: prov.empresas,
-                    cargando: prov.cargando,
-                    empresaSeleccionada: _empresaSeleccionada,
-                    onSeleccionar: _seleccionarEmpresa,
-                    onEditar: (e) => EmpresaFormDialog.show(
-                      context,
-                      empresa: e,
-                    ).then((_) async {
-                      await context
-                          .read<EmpresaProvider>()
-                          .cargarEmpresas();
-                      // Si editamos la empresa activa, refrescar detalle
-                      if (_empresaSeleccionada?.id == e.id) {
+            child: LayoutBuilder(builder: (_, c) {
+              final isNarrow = c.maxWidth < 640;
+
+              Widget buildList() => EmpresasListPanel(
+                empresas: prov.empresas,
+                cargando: prov.cargando,
+                empresaSeleccionada: _empresaSeleccionada,
+                onSeleccionar: _seleccionarEmpresa,
+                onEditar: (e) => EmpresaFormDialog.show(
+                  context,
+                  empresa: e,
+                ).then((_) async {
+                  await context.read<EmpresaProvider>().cargarEmpresas();
+                  if (_empresaSeleccionada?.id == e.id) {
+                    final actualizada = context
+                        .read<EmpresaProvider>()
+                        .empresas
+                        .firstWhere((em) => em.id == e.id, orElse: () => e);
+                    setState(() => _empresaSeleccionada = actualizada);
+                  }
+                }),
+                onRefresh: prov.cargarEmpresas,
+              );
+
+              Widget buildDetail() => EmpresaDetailPanel(
+                empresaSeleccionada: _empresaSeleccionada,
+                tiendas: _tiendas,
+                cargandoTiendas: _cargandoTiendas,
+                onEditarEmpresa: () => _empresaSeleccionada == null
+                    ? null
+                    : EmpresaFormDialog.show(
+                        context,
+                        empresa: _empresaSeleccionada,
+                      ).then((_) async {
+                        await context.read<EmpresaProvider>().cargarEmpresas();
                         final actualizada = context
                             .read<EmpresaProvider>()
                             .empresas
-                            .firstWhere((em) => em.id == e.id,
-                                orElse: () => e);
-                        setState(
-                            () => _empresaSeleccionada = actualizada);
-                      }
-                    }),
-                    onRefresh: prov.cargarEmpresas,
-                  ),
-                ),
-                const SizedBox(width: 16),
+                            .firstWhere(
+                                (e) => e.id == _empresaSeleccionada!.id,
+                                orElse: () => _empresaSeleccionada!);
+                        setState(() => _empresaSeleccionada = actualizada);
+                      }),
+                onNuevaTienda: () => TiendaFormDialog.show(
+                  context,
+                  empresaId: _empresaSeleccionada?.id.toString(),
+                ).then((_) => _recargarTiendas()),
+                onEditarTienda: (t) => TiendaFormDialog.show(
+                  context,
+                  tienda: t,
+                ).then((_) => _recargarTiendas()),
+                onVerEmpleados: _verEmpleados,
+                onDesactivarTienda: (t) =>
+                    ConfirmarDesactivarTiendaDialog.show(context, tienda: t)
+                        .then((_) => _recargarTiendas()),
+              );
 
-                // Panel derecho — detalle de empresa
-                Expanded(
-                  child: EmpresaDetailPanel(
-                    empresaSeleccionada: _empresaSeleccionada,
-                    tiendas: _tiendas,
-                    cargandoTiendas: _cargandoTiendas,
-                    onEditarEmpresa: () => _empresaSeleccionada == null
-                        ? null
-                        : EmpresaFormDialog.show(
-                            context,
-                            empresa: _empresaSeleccionada,
-                          ).then((_) async {
-                            await context
-                                .read<EmpresaProvider>()
-                                .cargarEmpresas();
-                            final actualizada = context
-                                .read<EmpresaProvider>()
-                                .empresas
-                                .firstWhere(
-                                    (e) =>
-                                        e.id == _empresaSeleccionada!.id,
-                                    orElse: () => _empresaSeleccionada!);
-                            setState(
-                                () => _empresaSeleccionada = actualizada);
-                          }),
-                    onNuevaTienda: () => TiendaFormDialog.show(
-                      context,
-                      empresaId: _empresaSeleccionada?.id.toString(),
-                    ).then((_) => _recargarTiendas()),
-                    onEditarTienda: (t) => TiendaFormDialog.show(
-                      context,
-                      tienda: t,
-                    ).then((_) => _recargarTiendas()),
-                    onVerEmpleados: _verEmpleados,
-                    onDesactivarTienda: (t) =>
-                        ConfirmarDesactivarTiendaDialog.show(
-                      context,
-                      tienda: t,
-                    ).then((_) => _recargarTiendas()),
-                  ),
-                ),
-              ],
-            ),
+              if (isNarrow) {
+                if (_empresaSeleccionada != null) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextButton.icon(
+                        icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 16),
+                        label: const Text('Lista de empresas'),
+                        onPressed: () => setState(() => _empresaSeleccionada = null),
+                      ),
+                      Expanded(child: buildDetail()),
+                    ],
+                  );
+                }
+                return buildList();
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(width: 320, child: buildList()),
+                  const SizedBox(width: 16),
+                  Expanded(child: buildDetail()),
+                ],
+              );
+            }),
           ),
         ],
       ),

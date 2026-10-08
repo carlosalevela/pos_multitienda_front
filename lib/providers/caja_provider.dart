@@ -84,26 +84,30 @@ class CajaProvider extends ChangeNotifier {
     _procesando = true;
     _errorMsg   = '';
     notifyListeners();
+    try {
+      final result = await _service.abrirCaja(saldoInicial: saldoInicial);
 
-    final result = await _service.abrirCaja(saldoInicial: saldoInicial);
-    _procesando  = false;
-
-    if (result['success'] == true) {
-      final data = result['data'];
-      if (data != null) {
-        _sesionActiva = SesionCaja.fromJson(data);
-        _successMsg   = '✅ Caja abierta correctamente';
-      } else {
+      if (result['success'] == true) {
+        final data = result['data'];
+        if (data != null) {
+          _sesionActiva = SesionCaja.fromJson(data);
+          _successMsg   = '✅ Caja abierta correctamente';
+        } else {
+          await verificarSesion(tiendaId);
+        }
+      } else if (result['ya_abierta'] == true) {
         await verificarSesion(tiendaId);
+        if (_sesionActiva != null) _successMsg = 'ℹ️ Caja ya estaba abierta';
+      } else {
+        _errorMsg = result['error'] ?? 'Error desconocido';
       }
-    } else if (result['ya_abierta'] == true) {
-      await verificarSesion(tiendaId);
-      if (_sesionActiva != null) _successMsg = 'ℹ️ Caja ya estaba abierta';
-    } else {
-      _errorMsg = result['error'] ?? 'Error desconocido';
+    } catch (e) {
+      _errorMsg = 'Error al abrir caja';
+      debugPrint('❌ abrirCaja: $e');
+    } finally {
+      _procesando = false;
+      notifyListeners();
     }
-
-    notifyListeners();
     return _sesionActiva != null;
   }
 
@@ -118,26 +122,31 @@ class CajaProvider extends ChangeNotifier {
     _procesando = true;
     _errorMsg   = '';
     notifyListeners();
+    bool exito = false;
+    try {
+      final result = await _service.cerrarCaja(
+        _sesionActiva!.id,
+        montoFinalReal: montoFinalReal,
+        observaciones:  observaciones,
+      );
 
-    final result = await _service.cerrarCaja(
-      _sesionActiva!.id,
-      montoFinalReal: montoFinalReal,
-      observaciones:  observaciones,
-    );
-
-    _procesando = false;
-
-    if (result['success'] == true) {
-      _ultimaSesionCerrada = _sesionActiva; // guarda antes de limpiar
-      _sesionActiva  = null;
-      _resumenCierre = null;
-      _successMsg    = '✅ Caja cerrada correctamente';
-    } else {
-      _errorMsg = result['error'] ?? 'Error desconocido';
+      if (result['success'] == true) {
+        _ultimaSesionCerrada = _sesionActiva;
+        _sesionActiva  = null;
+        _resumenCierre = null;
+        _successMsg    = '✅ Caja cerrada correctamente';
+        exito          = true;
+      } else {
+        _errorMsg = result['error'] ?? 'Error desconocido';
+      }
+    } catch (e) {
+      _errorMsg = 'Error al cerrar caja';
+      debugPrint('❌ cerrarCaja: $e');
+    } finally {
+      _procesando = false;
+      notifyListeners();
     }
-
-    notifyListeners();
-    return result['success'] == true;
+    return exito;
   }
 
   // ── Historial de sesiones ──────────────────────────────
@@ -181,20 +190,25 @@ class CajaProvider extends ChangeNotifier {
   Future<void> cargarGastosSesion(int sesionId) async {
     _cargandoGastos = true;
     notifyListeners();
-
-    final result = await _service.getGastosSesion(sesionId);
-    if (result['success'] == true) {
-      final data = result['data'];
-      _gastosSesion     = List<Map<String, dynamic>>.from(data['gastos'] ?? []);
-      _gastosTotalSesion = double.tryParse(
-          data['resumen']?['total']?.toString() ?? '0') ?? 0;
-    } else {
-      _gastosSesion     = [];
+    try {
+      final result = await _service.getGastosSesion(sesionId);
+      if (result['success'] == true) {
+        final data = result['data'];
+        _gastosSesion      = List<Map<String, dynamic>>.from(data['gastos'] ?? []);
+        _gastosTotalSesion = double.tryParse(
+            data['resumen']?['total']?.toString() ?? '0') ?? 0;
+      } else {
+        _gastosSesion      = [];
+        _gastosTotalSesion = 0;
+      }
+    } catch (e) {
+      _gastosSesion      = [];
       _gastosTotalSesion = 0;
+      debugPrint('❌ cargarGastosSesion: $e');
+    } finally {
+      _cargandoGastos = false;
+      notifyListeners();
     }
-
-    _cargandoGastos = false;
-    notifyListeners();
   }
 
   Future<bool> registrarGasto({
@@ -207,26 +221,31 @@ class CajaProvider extends ChangeNotifier {
   }) async {
     _procesando = true;
     notifyListeners();
+    bool exito = false;
+    try {
+      final result = await _service.registrarGasto(
+        sesionId:    sesionId,
+        tiendaId:    tiendaId,
+        categoria:   categoria,
+        descripcion: descripcion,
+        monto:       monto,
+        metodoPago:  metodoPago,
+      );
 
-    final result = await _service.registrarGasto(
-      sesionId:    sesionId,
-      tiendaId:    tiendaId,
-      categoria:   categoria,
-      descripcion: descripcion,
-      monto:       monto,
-      metodoPago:  metodoPago,
-    );
-
-    _procesando = false;
-
-    if (result['success'] == true) {
-      _successMsg = '✅ Gasto registrado';
-      await cargarGastosSesion(sesionId);
-    } else {
-      _errorMsg = result['error'] ?? 'Error al registrar gasto';
+      if (result['success'] == true) {
+        _successMsg = '✅ Gasto registrado';
+        exito       = true;
+        await cargarGastosSesion(sesionId);
+      } else {
+        _errorMsg = result['error'] ?? 'Error al registrar gasto';
+      }
+    } catch (e) {
+      _errorMsg = 'Error al registrar gasto';
+      debugPrint('❌ registrarGasto: $e');
+    } finally {
+      _procesando = false;
       notifyListeners();
     }
-
-    return result['success'] == true;
+    return exito;
   }
 }

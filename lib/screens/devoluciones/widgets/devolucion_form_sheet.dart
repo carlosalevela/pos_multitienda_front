@@ -339,7 +339,9 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
         productoReemplazoId:  _productoNuevo!.producto.id,
         cantidadReemplazo:    _productoNuevo!.cantidad,
         observaciones:        _obsCtrl.text.trim(),
-        metodoPagoDiferencia: _saldoPendiente > 0 ? _metodoPagoDiferencia : null,
+        metodoPagoDiferencia: (_saldoPendiente > 0 || _saldoADevolver > 0)
+            ? _metodoPagoDiferencia
+            : null,
         montoRecibido:        _saldoPendiente > 0 ? montoRecibido : null,
       );
     } else {
@@ -681,6 +683,7 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
 
   Widget _seccionMetodoPago() {
     final esCambioConDiferencia = _tipoOperacion == 'cambio' && _saldoPendiente > 0;
+    final esCambioConSobrante   = _tipoOperacion == 'cambio' && _saldoADevolver > 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -720,6 +723,27 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
             );
           }).toList(),
         ),
+
+        // Para cambio con sobrante a devolver: método de devolución
+        if (esCambioConSobrante) ...[
+          const SizedBox(height: 20),
+          _FormLabel(
+            label: 'Método de devolución del sobrante',
+            child: DropdownButtonFormField<String>(
+              value: _metodoPagoDiferencia,
+              isDense: true,
+              decoration: _inputDeco(null),
+              style: GoogleFonts.inter(fontSize: 14, color: _kText),
+              items: _metodos
+                  .map((m) => DropdownMenuItem<String>(
+                        value: m.$1,
+                        child: Text(m.$2, style: GoogleFonts.inter(fontSize: 14)),
+                      ))
+                  .toList(),
+              onChanged: (v) => setState(() => _metodoPagoDiferencia = v!),
+            ),
+          ),
+        ],
 
         // Para cambio con diferencia a cobrar: método de la diferencia
         if (esCambioConDiferencia) ...[

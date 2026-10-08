@@ -27,7 +27,15 @@ class SesionHistorial {
   final int    numAbonos;
   // Devoluciones
   final double devolucionesEfectivo;
+  final double devolucionesDirectasEf;
+  final double cambiosCobrarEf;
+  final double cambiosDevEf;
   final int    numDevoluciones;
+  // Movimientos adicionales
+  final double cancelacionesEfectivo;
+  final double ingresosManual;
+  // Gastos detalle
+  final List<Map<String, dynamic>> gastosDetalle;
   // Cuadre
   final double montoFinalSistema;
   final double montoFinalReal;
@@ -61,8 +69,14 @@ class SesionHistorial {
     required this.numAbonos,
     //
     required this.devolucionesEfectivo,
+    this.devolucionesDirectasEf = 0,
+    this.cambiosCobrarEf = 0,
+    this.cambiosDevEf = 0,
     required this.numDevoluciones,
     required this.numCambiosProducto,
+    this.cancelacionesEfectivo = 0,
+    this.ingresosManual = 0,
+    this.gastosDetalle = const [],
     required this.montoFinalSistema,
     required this.montoFinalReal,
     required this.diferencia,
@@ -93,9 +107,17 @@ class SesionHistorial {
     abonosCreditoEfectivo: double.tryParse(j['abonos_credito_efectivo']?.toString() ?? '0') ?? 0.0,
     numAbonos:             (j['num_abonos']        as num?)?.toInt() ?? 0,
     //
-    devolucionesEfectivo:  double.tryParse(j['devoluciones_efectivo']?.toString()      ?? '0') ?? 0.0,
-    numDevoluciones:       (j['num_devoluciones']       as num?)?.toInt() ?? 0,
-    numCambiosProducto:    (j['num_cambios_producto']   as num?)?.toInt() ?? 0,
+    devolucionesEfectivo:    double.tryParse(j['devoluciones_efectivo']?.toString()      ?? '0') ?? 0.0,
+    devolucionesDirectasEf:  double.tryParse(j['devoluciones_directas_ef']?.toString()  ?? '0') ?? 0.0,
+    cambiosCobrarEf:         double.tryParse(j['cambios_cobrar_ef']?.toString()          ?? '0') ?? 0.0,
+    cambiosDevEf:            double.tryParse(j['cambios_devolver_ef']?.toString()        ?? '0') ?? 0.0,
+    numDevoluciones:         (j['num_devoluciones']       as num?)?.toInt() ?? 0,
+    numCambiosProducto:      (j['num_cambios_producto']   as num?)?.toInt() ?? 0,
+    cancelacionesEfectivo:   double.tryParse(j['cancelaciones_efectivo']?.toString()     ?? '0') ?? 0.0,
+    ingresosManual:          double.tryParse(j['ingresos_manual']?.toString()            ?? '0') ?? 0.0,
+    gastosDetalle:           (j['gastos_detalle'] as List<dynamic>?)
+        ?.map((e) => Map<String, dynamic>.from(e as Map))
+        .toList() ?? const [],
     montoFinalSistema:     double.tryParse(
                              (j['monto_esperado'] ?? j['monto_final_sistema'])?.toString() ?? '0') ?? 0.0,
     montoFinalReal:        double.tryParse(j['monto_final_real']?.toString()           ?? '0') ?? 0.0,

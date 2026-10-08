@@ -274,29 +274,135 @@ class _PosScreenState extends State<PosScreen> {
 
     return Container(
       color: _kSurface,
-      child: Column(children: [
+      child: LayoutBuilder(builder: (ctx, constraints) {
+        final isMobile = constraints.maxWidth < 600;
+        if (isMobile) return _buildMobileLayout(pos, auth, notif);
 
-        // Contenido principal
-        Expanded(
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        return Column(children: [
+          Expanded(
+            child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Expanded(
+                child: Column(children: [
+                  _buildSearchBar(pos, auth, notif),
+                  _buildCategoryTabs(),
+                  Expanded(child: _buildProductGrid(pos, auth)),
+                ]),
+              ),
+              SizedBox(
+                width: min(420, constraints.maxWidth * 0.34),
+                child: _buildTicketPanel(pos, auth),
+              ),
+            ]),
+          ),
+        ]);
+      }),
+    );
+  }
 
-            // ── Panel izquierdo: catálogo ──────────────────
+  // ── Layout móvil (< 600 px) ──────────────────────────────
+
+  Widget _buildMobileLayout(PosProvider pos, AuthProvider auth, NotificacionesProvider notif) {
+    final totalItems = pos.carrito.fold(0, (s, i) => s + i.cantidad);
+    return Column(children: [
+      _buildSearchBar(pos, auth, notif, isMobile: true),
+      _buildCategoryTabs(),
+      Expanded(child: _buildProductGrid(pos, auth, isMobile: true)),
+
+      // Barra inferior — resumen del carrito
+      GestureDetector(
+        onTap: () => _abrirCarritoSheet(pos, auth),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          decoration: const BoxDecoration(
+            color: _kCard,
+            border: Border(top: BorderSide(color: _kBorder)),
+          ),
+          child: Row(children: [
+            Stack(clipBehavior: Clip.none, children: [
+              Container(
+                width: 40, height: 40,
+                decoration: BoxDecoration(
+                  color: _kGreenDark,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.shopping_cart_rounded, size: 20, color: Colors.white),
+              ),
+              if (totalItems > 0)
+                Positioned(
+                  top: -5, right: -5,
+                  child: Container(
+                    width: 17, height: 17,
+                    decoration: const BoxDecoration(color: _kAmber, shape: BoxShape.circle),
+                    child: Center(child: Text('$totalItems',
+                        style: const TextStyle(color: Colors.white, fontSize: 9,
+                            fontWeight: FontWeight.w800))),
+                  ),
+                ),
+            ]),
+            const SizedBox(width: 12),
             Expanded(
-              child: Column(children: [
-                _buildSearchBar(pos, auth, notif),
-                _buildCategoryTabs(),
-                Expanded(child: _buildProductGrid(pos, auth)),
-              ]),
+              child: pos.carrito.isEmpty
+                  ? Text('Carrito vacío',
+                        style: GoogleFonts.inter(fontSize: 13, color: _kTextMuted))
+                  : Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('$totalItems artículo${totalItems != 1 ? 's' : ''}',
+                            style: GoogleFonts.inter(fontSize: 10, color: _kTextMuted)),
+                        Text('\$${pos.totalConDescuento.toStringAsFixed(0)}',
+                            style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w800,
+                                color: _kText)),
+                      ]),
             ),
-
-            // ── Panel derecho: ticket ──────────────────────
-            SizedBox(
-              width: min(420, MediaQuery.of(context).size.width * 0.34),
-              child: _buildTicketPanel(pos, auth),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+              decoration: BoxDecoration(
+                color: pos.carrito.isEmpty ? _kSurfaceMid : _kGreenDark,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                pos.carrito.isEmpty ? 'Ver ticket' : 'Cobrar',
+                style: GoogleFonts.inter(
+                    fontSize: 13, fontWeight: FontWeight.w700,
+                    color: pos.carrito.isEmpty ? _kTextMuted : Colors.white),
+              ),
             ),
           ]),
         ),
-      ]),
+      ),
+    ]);
+  }
+
+  void _abrirCarritoSheet(PosProvider _, AuthProvider __) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      // Usar Consumer2 para que el sheet se reconstruya cuando cambia el provider
+      builder: (sheetCtx) => Consumer2<PosProvider, AuthProvider>(
+        builder: (ctx, pos, auth, child) => DraggableScrollableSheet(
+          initialChildSize: 0.88,
+          minChildSize: 0.45,
+          maxChildSize: 0.97,
+          expand: false,
+          builder: (dsCtx, scrollCtrl) => Container(
+            decoration: const BoxDecoration(
+              color: _kCard,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(children: [
+              Container(
+                margin: const EdgeInsets.only(top: 10, bottom: 6),
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: _kBorder,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Expanded(child: _buildTicketPanel(pos, auth)),
+            ]),
+          ),
+        ),
+      ),
     );
   }
 
@@ -494,8 +600,9 @@ class _PosScreenState extends State<PosScreen> {
   // BARRA DE BÚSQUEDA
   // ══════════════════════════════════════════════════════════
 
-  Widget _buildSearchBar(PosProvider pos, AuthProvider auth, NotificacionesProvider notif) => Container(
-    padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+  Widget _buildSearchBar(PosProvider pos, AuthProvider auth, NotificacionesProvider notif,
+      {bool isMobile = false}) => Container(
+    padding: EdgeInsets.fromLTRB(isMobile ? 12 : 20, 12, isMobile ? 12 : 20, 10),
     color: _kCard,
     child: Row(children: [
       // Search field
@@ -508,10 +615,10 @@ class _PosScreenState extends State<PosScreen> {
           ),
           child: TextField(
             controller: _searchCtrl,
-            autofocus: true,
+            autofocus: !isMobile,
             style: GoogleFonts.inter(fontSize: 14, color: _kText),
             decoration: InputDecoration(
-              hintText: 'Buscar productos por nombre o código de barras…',
+              hintText: isMobile ? 'Buscar…' : 'Buscar productos por nombre o código de barras…',
               hintStyle: GoogleFonts.inter(color: _kTextMuted, fontSize: 14),
               prefixIcon: const Icon(Icons.search_rounded, color: _kGreenDark, size: 20),
               suffixIcon: _searchCtrl.text.isNotEmpty
@@ -542,12 +649,12 @@ class _PosScreenState extends State<PosScreen> {
         ),
       ),
 
-      const SizedBox(width: 10),
+      const SizedBox(width: 8),
 
       // Nuevo ticket
       _headerBtn(
         icon: Icons.add_rounded,
-        label: 'Nuevo ticket',
+        label: isMobile ? '' : 'Nuevo ticket',
         color: _kGreenDark,
         onTap: () {
           final ok = pos.parquearTicket();
@@ -662,8 +769,10 @@ class _PosScreenState extends State<PosScreen> {
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(icon, size: 15, color: color),
-          const SizedBox(width: 6),
-          Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
+          if (label.isNotEmpty) ...[
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
+          ],
           if (badge > 0) ...[
             const SizedBox(width: 5),
             Container(
@@ -771,7 +880,7 @@ class _PosScreenState extends State<PosScreen> {
   // GRID DE PRODUCTOS
   // ══════════════════════════════════════════════════════════
 
-  Widget _buildProductGrid(PosProvider pos, AuthProvider auth) {
+  Widget _buildProductGrid(PosProvider pos, AuthProvider auth, {bool isMobile = false}) {
     if (pos.buscando) {
       return const Center(child: CircularProgressIndicator(color: _kGreen, strokeWidth: 2.5));
     }
@@ -786,22 +895,30 @@ class _PosScreenState extends State<PosScreen> {
     }
     if (_viewMode == _ViewMode.list) {
       return ListView.separated(
-        padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
         itemCount: pos.resultados.length,
         separatorBuilder: (_, _) => const SizedBox(height: 8),
         itemBuilder: (_, i) => _buildProductCardList(pos.resultados[i], pos),
       );
     }
 
-    final (cols, ratio) = switch (_viewMode) {
-      _ViewMode.gridLarge  => (2, 0.72),
-      _ViewMode.gridMedium => (3, 0.82),
-      _ViewMode.gridSmall  => (5, 0.88),
-      _ViewMode.list       => (3, 0.82),
-    };
+    final (cols, ratio) = isMobile
+        ? switch (_viewMode) {
+            _ViewMode.gridLarge  => (2, 0.82),
+            _ViewMode.gridMedium => (2, 0.82),
+            _ViewMode.gridSmall  => (3, 0.90),
+            _ViewMode.list       => (2, 0.82),
+          }
+        : switch (_viewMode) {
+            _ViewMode.gridLarge  => (2, 0.72),
+            _ViewMode.gridMedium => (3, 0.82),
+            _ViewMode.gridSmall  => (5, 0.88),
+            _ViewMode.list       => (3, 0.82),
+          };
 
+    final pad = isMobile ? 12.0 : 20.0;
     return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+      padding: EdgeInsets.fromLTRB(pad, 12, pad, 20),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount:   cols,
         crossAxisSpacing: 10,

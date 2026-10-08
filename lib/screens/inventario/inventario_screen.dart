@@ -458,37 +458,40 @@ class _InventarioScreenState extends State<InventarioScreen>
                 _banner(inv.errorMsg!,
                     isError: true, onClose: inv.limpiarMensajes),
               Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ── Tabla principal ──────────────────
-                    Expanded(
-                      flex: 3,
-                      child: inv.cargando
-                          ? _loadingState()
-                          : inv.productos.isEmpty
-                              ? _emptyState(esCajero)
-                              : _buildTabla(
-                                  inv.productos, esCajero, esAdmin, inv),
-                    ),
-                    // ── Panel insights (admin/supervisor) ─
-                    if (puedeGestionar) ...[
-                      const SizedBox(width: 16),
-                      SizedBox(
-                        width: 280,
-                        child: _buildInsightsPanel(),
+                child: LayoutBuilder(builder: (_, constraints) {
+                  final mostrarPanel = constraints.maxWidth >= 780;
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ── Tabla principal ──────────────────
+                      Expanded(
+                        flex: 3,
+                        child: inv.cargando
+                            ? _loadingState()
+                            : inv.productos.isEmpty
+                                ? _emptyState(esCajero)
+                                : _buildTabla(
+                                    inv.productos, esCajero, esAdmin, inv),
                       ),
+                      // ── Panel insights (admin/supervisor) ─
+                      if (puedeGestionar && mostrarPanel) ...[
+                        const SizedBox(width: 16),
+                        SizedBox(
+                          width: 280,
+                          child: _buildInsightsPanel(),
+                        ),
+                      ],
+                      // ── Panel turno (cajero) ──────────────
+                      if (esCajero && mostrarPanel) ...[
+                        const SizedBox(width: 16),
+                        SizedBox(
+                          width: 280,
+                          child: _buildCajeroPanel(inv.productos),
+                        ),
+                      ],
                     ],
-                    // ── Panel turno (cajero) ──────────────
-                    if (esCajero) ...[
-                      const SizedBox(width: 16),
-                      SizedBox(
-                        width: 280,
-                        child: _buildCajeroPanel(inv.productos),
-                      ),
-                    ],
-                  ],
-                ),
+                  );
+                }),
               ),
               const SizedBox(height: 16),
             ],
@@ -503,64 +506,127 @@ class _InventarioScreenState extends State<InventarioScreen>
   // ══════════════════════════════════════════════════════
   Widget _buildHeader(
       bool esCajero, bool esAdmin, InventarioProvider inv) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Container(
-          width: 46, height: 46,
-          decoration: BoxDecoration(
-            color: const Color(0xFF131B2E),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Icon(Icons.inventory_2_rounded,
-              color: Colors.white, size: 22),
+    return LayoutBuilder(builder: (_, c) {
+      final iconBox = Container(
+        width: 46, height: 46,
+        decoration: BoxDecoration(
+          color: const Color(0xFF131B2E),
+          borderRadius: BorderRadius.circular(12),
         ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Control de Inventario',
-                  style: _t(size: 20, weight: FontWeight.w700,
-                      letterSpacing: -0.3)),
-              const SizedBox(height: 2),
-              Text(
-                esAdmin
-                    ? 'Vista general · ${_tiendas.isEmpty ? 'Cargando…' : _nombreTiendaActual()}'
-                    : 'Supervisa existencias, precios y disponibilidad',
-                style: _t(size: 13, color: _muted),
-              ),
-            ],
-          ),
+        child: const Icon(Icons.inventory_2_rounded,
+            color: Colors.white, size: 22),
+      );
+
+      final titleCol = Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Control de Inventario',
+                style: _t(size: 20, weight: FontWeight.w700,
+                    letterSpacing: -0.3)),
+            const SizedBox(height: 2),
+            Text(
+              esAdmin
+                  ? 'Vista general · ${_tiendas.isEmpty ? 'Cargando…' : _nombreTiendaActual()}'
+                  : 'Supervisa existencias, precios y disponibilidad',
+              style: _t(size: 13, color: _muted),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
-        if (!esCajero) ...[
-          _btnSecundario(
-            icon:  Icons.download_rounded,
-            label: _exportando ? 'Exportando…' : 'Exportar Excel',
-            onTap: _exportando ? null : _exportarExcel,
-          ),
-          const SizedBox(width: 10),
-          _btnSecundario(
-            icon:  Icons.table_chart_rounded,
-            label: 'Importar Excel',
-            // Importar sin tienda crearía productos sin inventario (stock 0)
-            onTap: _tiendaActiva != null ? () => _abrirImportarExcel(inv) : null,
-          ),
-          const SizedBox(width: 10),
-          _btnSecundario(
-            icon:  Icons.warning_amber_rounded,
-            label: 'Averías',
-            onTap: () => _abrirAverias(),
-          ),
-          const SizedBox(width: 10),
-          _btnPrimario(
-            icon:  Icons.add_rounded,
-            label: 'Nuevo producto',
-            onTap: () => _abrirFormulario(context, inv),
-          ),
+      );
+
+      // En móvil (< 600px) los botones colapsan a un PopupMenuButton
+      if (!esCajero && c.maxWidth < 600) {
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            iconBox,
+            const SizedBox(width: 14),
+            titleCol,
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert_rounded),
+              onSelected: (v) {
+                if (v == 'exportar' && !_exportando) _exportarExcel();
+                if (v == 'importar' && _tiendaActiva != null) _abrirImportarExcel(inv);
+                if (v == 'averias') _abrirAverias();
+                if (v == 'nuevo') _abrirFormulario(context, inv);
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'exportar',
+                  child: Row(children: [
+                    Icon(Icons.download_rounded, size: 16,
+                        color: _exportando ? Colors.grey : null),
+                    const SizedBox(width: 8),
+                    Text(_exportando ? 'Exportando…' : 'Exportar Excel'),
+                  ]),
+                ),
+                PopupMenuItem(
+                  value: 'importar',
+                  child: Row(children: [
+                    Icon(Icons.table_chart_rounded, size: 16,
+                        color: _tiendaActiva == null ? Colors.grey : null),
+                    const SizedBox(width: 8),
+                    const Text('Importar Excel'),
+                  ]),
+                ),
+                const PopupMenuItem(
+                  value: 'averias',
+                  child: Row(children: [
+                    Icon(Icons.warning_amber_rounded, size: 16),
+                    SizedBox(width: 8),
+                    Text('Averías'),
+                  ]),
+                ),
+                const PopupMenuItem(
+                  value: 'nuevo',
+                  child: Row(children: [
+                    Icon(Icons.add_rounded, size: 16),
+                    SizedBox(width: 8),
+                    Text('Nuevo producto'),
+                  ]),
+                ),
+              ],
+            ),
+          ],
+        );
+      }
+
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          iconBox,
+          const SizedBox(width: 14),
+          titleCol,
+          if (!esCajero) ...[
+            _btnSecundario(
+              icon:  Icons.download_rounded,
+              label: _exportando ? 'Exportando…' : 'Exportar Excel',
+              onTap: _exportando ? null : _exportarExcel,
+            ),
+            const SizedBox(width: 10),
+            _btnSecundario(
+              icon:  Icons.table_chart_rounded,
+              label: 'Importar Excel',
+              onTap: _tiendaActiva != null ? () => _abrirImportarExcel(inv) : null,
+            ),
+            const SizedBox(width: 10),
+            _btnSecundario(
+              icon:  Icons.warning_amber_rounded,
+              label: 'Averías',
+              onTap: () => _abrirAverias(),
+            ),
+            const SizedBox(width: 10),
+            _btnPrimario(
+              icon:  Icons.add_rounded,
+              label: 'Nuevo producto',
+              onTap: () => _abrirFormulario(context, inv),
+            ),
+          ],
         ],
-      ],
-    );
+      );
+    });
   }
 
   // ══════════════════════════════════════════════════════

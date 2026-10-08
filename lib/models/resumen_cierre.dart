@@ -23,25 +23,29 @@ class VentasCierre {
 
 class AbonosCierre {
   final double total, efectivo, transferencia, tarjeta, creditoEfectivo;
+  final double cancelacionesEfectivo, ingresosManual;
   final int    cantidad;
 
   AbonosCierre({
     required this.total, required this.efectivo,
     required this.transferencia, required this.tarjeta,
     required this.creditoEfectivo, required this.cantidad,
+    this.cancelacionesEfectivo = 0, this.ingresosManual = 0,
   });
 
   factory AbonosCierre.fromJson(Map<String, dynamic> j) => AbonosCierre(
-    total:           double.tryParse(j['total']?.toString()            ?? '0') ?? 0.0,
-    efectivo:        double.tryParse(j['efectivo']?.toString()         ?? '0') ?? 0.0,
-    transferencia:   double.tryParse(j['transferencia']?.toString()    ?? '0') ?? 0.0,
-    tarjeta:         double.tryParse(j['tarjeta']?.toString()          ?? '0') ?? 0.0,
-    creditoEfectivo: double.tryParse(j['credito_efectivo']?.toString() ?? '0') ?? 0.0,
-    cantidad:        j['cantidad'] ?? 0,
+    total:                  double.tryParse(j['total']?.toString()                  ?? '0') ?? 0.0,
+    efectivo:               double.tryParse(j['efectivo']?.toString()               ?? '0') ?? 0.0,
+    transferencia:          double.tryParse(j['transferencia']?.toString()           ?? '0') ?? 0.0,
+    tarjeta:                double.tryParse(j['tarjeta']?.toString()                ?? '0') ?? 0.0,
+    creditoEfectivo:        double.tryParse(j['credito_efectivo']?.toString()       ?? '0') ?? 0.0,
+    cancelacionesEfectivo:  double.tryParse(j['cancelaciones_efectivo']?.toString() ?? '0') ?? 0.0,
+    ingresosManual:         double.tryParse(j['ingresos_manual']?.toString()        ?? '0') ?? 0.0,
+    cantidad:               j['cantidad'] ?? 0,
   );
 
-  factory AbonosCierre.vacio() =>
-      AbonosCierre(total: 0, efectivo: 0, transferencia: 0, tarjeta: 0, creditoEfectivo: 0, cantidad: 0);
+  factory AbonosCierre.vacio() => AbonosCierre(
+      total: 0, efectivo: 0, transferencia: 0, tarjeta: 0, creditoEfectivo: 0, cantidad: 0);
 }
 
 

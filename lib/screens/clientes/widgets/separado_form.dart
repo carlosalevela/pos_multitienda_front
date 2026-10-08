@@ -78,7 +78,7 @@ class SeparadoForm extends StatefulWidget {
       pageBuilder: (ctx, _, _) => Align(
         alignment: Alignment.centerRight,
         child: SizedBox(
-          width:  min(580, MediaQuery.of(ctx).size.width * 0.68),
+          width:  min(580, max(300, MediaQuery.of(ctx).size.width * 0.95)),
           height: double.infinity,
           child: SeparadoForm(
             tiendaId:       tiendaId,

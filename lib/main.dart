@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'services/barcode_service.dart';
@@ -21,6 +22,11 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Mantener barra de estado visible con iconos oscuros
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.dark,
+  ));
   BarcodeService.instance.init();
   runApp(
     MultiProvider(
@@ -67,6 +73,11 @@ class MyApp extends StatelessWidget {
           seedColor: const Color(Constants.primaryColor),
         ),
         useMaterial3: true,
+      ),
+      // SafeArea global con fondo blanco: evita el borde negro en el área de la barra de estado
+      builder: (context, child) => ColoredBox(
+        color: Colors.white,
+        child: SafeArea(child: child!),
       ),
       home: const AuthGate(),
     );

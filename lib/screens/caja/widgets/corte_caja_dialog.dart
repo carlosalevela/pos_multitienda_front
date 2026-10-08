@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import '../../../providers/auth_provider.dart';
 import '../../../providers/caja_provider.dart';
 import '../../../providers/config_provider.dart';
 import '../../../models/resumen_cierre.dart';
@@ -855,7 +854,6 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                 observaciones:  obs,
               );
               if (ok && mounted) {
-                final auth = context.read<AuthProvider>();
                 Navigator.pop(context);
                 if (r != null) {
                   unawaited(exportarCierrePDF(SesionHistorial(
@@ -874,15 +872,23 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                     ventasMixtoEfectivo:     r.ventas.mixtoEfectivo,
                     ventasTotal:             r.ventas.total,
                     gastosTotal:             r.gastos.total,
+                    gastosDetalle:           r.gastos.detalle
+                        .map((g) => {'categoria': g.categoria, 'descripcion': '', 'monto': g.monto, 'metodo_pago': g.metodoPago})
+                        .toList(),
                     abonosEfectivo:          r.abonos.efectivo,
                     abonosTarjeta:           r.abonos.tarjeta,
                     abonosTransferencia:     r.abonos.transferencia,
                     abonosTotal:             r.abonos.total,
                     abonosCreditoEfectivo:   r.abonos.creditoEfectivo,
+                    cancelacionesEfectivo:   r.abonos.cancelacionesEfectivo,
+                    ingresosManual:          r.abonos.ingresosManual,
                     numAbonos:               r.abonos.cantidad,
-                    devolucionesEfectivo: r.devoluciones.netoEfectivo,
-                    numDevoluciones:      r.devoluciones.cantidad,
-                    numCambiosProducto:   r.devoluciones.cambiosProducto,
+                    devolucionesEfectivo:    r.devoluciones.netoEfectivo,
+                    devolucionesDirectasEf:  r.devoluciones.efectivo,
+                    cambiosCobrarEf:         r.devoluciones.cambiosCobrar,
+                    cambiosDevEf:            r.devoluciones.cambiosDevolver,
+                    numDevoluciones:         r.devoluciones.cantidad,
+                    numCambiosProducto:      r.devoluciones.cambiosProducto,
                     montoFinalSistema:    r.montoEsperadoCaja,
                     montoFinalReal:       montoFinal,
                     diferencia:           montoFinal - r.montoEsperadoCaja,
@@ -890,7 +896,6 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                   ), tipoPapel: tipoPapel));
                 }
                 await Future.delayed(const Duration(milliseconds: 600));
-                auth.logout();
               }
             }
           },

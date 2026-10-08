@@ -109,17 +109,35 @@ Future<void> exportarCierrePDF(SesionHistorial sesion, {String tipoPapel = '80mm
       _topMetrics(sesion),
       pw.SizedBox(height: 22),
 
-      // 2. Tabla de desglose por metodo de pago
+      // 2. Desglose por metodo de pago
       _sectionLabel('Desglose por Metodo de Pago'),
       pw.SizedBox(height: 8),
       _desgloseTable(sesion),
       pw.SizedBox(height: 22),
 
-      // 3. Abonos (izquierda) + Arqueo (derecha)
-      _lowerSection(sesion, difColor, difBg, difLabel, difStr),
+      // 3. Resumen flujo de caja (formato físico)
+      _sectionLabel('Resumen de Flujo de Caja'),
+      pw.SizedBox(height: 8),
+      _flujoCajaCard(sesion, difColor, difBg, difLabel, difStr),
       pw.SizedBox(height: 22),
 
-      // 4. Detalle de devoluciones (condicional)
+      // 4. Abonos separados (si hay)
+      if (sesion.abonosTotal > 0) ...[
+        _sectionLabel('Recaudacion de Separados'),
+        pw.SizedBox(height: 8),
+        _abonosCard(sesion),
+        pw.SizedBox(height: 22),
+      ],
+
+      // 5. Detalle de gastos (si hay)
+      if (sesion.gastosTotal > 0) ...[
+        _sectionLabel('Detalle de Gastos'),
+        pw.SizedBox(height: 8),
+        _gastosDetalleTable(sesion),
+        pw.SizedBox(height: 22),
+      ],
+
+      // 6. Detalle de devoluciones (si hay)
       if (sesion.numDevoluciones > 0) ...[
         _sectionLabel('Detalle de Devoluciones'),
         pw.SizedBox(height: 8),
@@ -127,7 +145,7 @@ Future<void> exportarCierrePDF(SesionHistorial sesion, {String tipoPapel = '80mm
         pw.SizedBox(height: 22),
       ],
 
-      // 5. Observaciones (condicional)
+      // 7. Observaciones (si hay)
       if (sesion.observaciones.isNotEmpty) ...[
         _sectionLabel('OBSERVACIONES'),
         pw.SizedBox(height: 8),
@@ -135,7 +153,7 @@ Future<void> exportarCierrePDF(SesionHistorial sesion, {String tipoPapel = '80mm
         pw.SizedBox(height: 22),
       ],
 
-      // 6. Firmas
+      // 8. Firmas
       pw.SizedBox(height: 20),
       _firmaRow(sesion.empleadoNombre),
     ],
@@ -339,17 +357,21 @@ pw.Widget _desgloseTable(SesionHistorial sesion) {
                 + sesion.ventasMixtoEfectivo
                 + sesion.abonosEfectivo
                 + sesion.abonosCreditoEfectivo
+                + sesion.ingresosManual
+                - sesion.cancelacionesEfectivo
                 - sesion.gastosTotal
                 - sesion.devolucionesEfectivo;
   final totalTa = sesion.ventasTarjeta     + sesion.abonosTarjeta;
   final totalTr = sesion.ventasTransferencia + sesion.abonosTransferencia;
 
   // Filas condicionales
-  final hasAbonos       = sesion.abonosTotal > 0;
+  final hasAbonos        = sesion.abonosTotal > 0;
   final hasAbonosCartera = sesion.abonosCreditoEfectivo > 0;
-  final hasGastos       = sesion.gastosTotal > 0;
-  final hasDev          = sesion.devolucionesEfectivo != 0;
-  final hasMixto        = sesion.ventasMixtoEfectivo > 0;
+  final hasCancelaciones = sesion.cancelacionesEfectivo > 0;
+  final hasIngManual     = sesion.ingresosManual > 0;
+  final hasGastos        = sesion.gastosTotal > 0;
+  final hasDev           = sesion.devolucionesEfectivo != 0;
+  final hasMixto         = sesion.ventasMixtoEfectivo > 0;
 
   final tableBorder = pw.TableBorder(
     top:              pw.BorderSide(color: _pNavy,   width: 1.0),
@@ -395,6 +417,12 @@ pw.Widget _desgloseTable(SesionHistorial sesion) {
           // Abonos cartera (crédito) — solo efectivo
           if (hasAbonosCartera)
             _tRow('Abonos Cartera', sesion.abonosCreditoEfectivo, null, null),
+          // Ingresos manuales
+          if (hasIngManual)
+            _tRow('Ingresos Manuales', sesion.ingresosManual, null, null),
+          // Cancelaciones separados (salida de efectivo)
+          if (hasCancelaciones)
+            _tRow('Cancelaciones Separados', -sesion.cancelacionesEfectivo, null, null),
           // Gastos
           if (hasGastos)
             _tRow('Gastos de Operacion', -sesion.gastosTotal, null, null),
@@ -480,26 +508,169 @@ pw.Widget _tdNum(double? v, {bool bold = false}) {
 }
 
 // ════════════════════════════════════════════════════════
-// 3. SECCION INFERIOR: Abonos + Arqueo (2 columnas)
+// 3. RESUMEN FLUJO DE CAJA (estilo reporte físico)
 // ════════════════════════════════════════════════════════
 
-pw.Widget _lowerSection(
-  SesionHistorial sesion,
+pw.Widget _flujoCajaCard(
+  SesionHistorial s,
   PdfColor difColor, PdfColor difBg,
   String difLabel, String difStr,
 ) {
-  final arqueo = _arqueoCard(sesion, difColor, difBg, difLabel, difStr);
-  if (sesion.abonosTotal <= 0) return arqueo;
+  pw.Widget fila(String label, double v, {bool suma = true, bool total = false, bool bold = false}) {
+    final signo  = suma ? '+' : '-';
+    final color  = total ? _pGreen : (suma ? _pOnSurf : _pRed);
+    final weight = (total || bold) ? pw.FontWeight.bold : pw.FontWeight.normal;
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 3),
+      child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+        pw.Text(label, style: pw.TextStyle(fontSize: 9, color: color, fontWeight: weight)),
+        pw.Text('$signo ${_m(v)}',
+            style: pw.TextStyle(fontSize: 9, color: color, fontWeight: weight)),
+      ]),
+    );
+  }
 
-  return pw.Row(
-    crossAxisAlignment: pw.CrossAxisAlignment.start,
+  return pw.Container(
+    decoration: pw.BoxDecoration(
+      border:       pw.Border.all(color: _pOutVar, width: 0.8),
+      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+    ),
+    child: pw.Column(children: [
+      _cardTitle('Cuadre de Efectivo'),
+      pw.Padding(
+        padding: const pw.EdgeInsets.fromLTRB(16, 10, 16, 14),
+        child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [
+          // ── Ingresos ──
+          fila('(+) Base inicial de caja',    s.saldoInicial),
+          fila('(+) Ventas en efectivo',       s.ventasEfectivo),
+          if (s.ventasMixtoEfectivo > 0)
+            fila('(+) Ventas mixto (efectivo)', s.ventasMixtoEfectivo),
+          if (s.abonosEfectivo > 0)
+            fila('(+) Ingresos separados',     s.abonosEfectivo),
+          if (s.abonosCreditoEfectivo > 0)
+            fila('(+) Abonos pagos clientes',  s.abonosCreditoEfectivo),
+          if (s.ingresosManual > 0)
+            fila('(+) Ingresos manuales',      s.ingresosManual),
+          // ── Egresos ──
+          if (s.devolucionesEfectivo > 0)
+            fila('(-) Devoluciones (neto ef.)', s.devolucionesEfectivo, suma: false),
+          if (s.cancelacionesEfectivo > 0)
+            fila('(-) Cancelaciones separados', s.cancelacionesEfectivo, suma: false),
+          if (s.gastosTotal > 0)
+            fila('(-) Gastos del turno',        s.gastosTotal, suma: false),
+          // ── Divisor ──
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(vertical: 6),
+            child: pw.Divider(color: _pNavy, thickness: 0.8),
+          ),
+          // ── Total esperado ──
+          pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+            pw.Text('(=) EFECTIVO ESPERADO',
+                style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: _pOnSurf)),
+            pw.Text(_m(s.montoFinalSistema),
+                style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: _pGreen)),
+          ]),
+          pw.SizedBox(height: 6),
+          pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+            pw.Text('(=) EFECTIVO CONTADO',
+                style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: _pOnSurf)),
+            pw.Text(_m(s.montoFinalReal),
+                style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: _pOnSurf)),
+          ]),
+          pw.SizedBox(height: 10),
+          // ── Resultado ──
+          pw.Container(
+            width: double.infinity,
+            padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: pw.BoxDecoration(
+              color: difBg,
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+            ),
+            child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+              pw.Text('DIFERENCIA ($difLabel)',
+                  style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: difColor)),
+              pw.Text(difStr,
+                  style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: difColor)),
+            ]),
+          ),
+        ]),
+      ),
+    ]),
+  );
+}
+
+// ════════════════════════════════════════════════════════
+// 4b. DETALLE DE GASTOS
+// ════════════════════════════════════════════════════════
+
+pw.Widget _gastosDetalleTable(SesionHistorial sesion) {
+  final detalle = sesion.gastosDetalle;
+  final tableBorder = pw.TableBorder(
+    top:              pw.BorderSide(color: _pNavy,   width: 1.0),
+    bottom:           pw.BorderSide(color: _pOutVar, width: 0.8),
+    left:             pw.BorderSide(color: _pOutVar, width: 0.8),
+    right:            pw.BorderSide(color: _pOutVar, width: 0.8),
+    horizontalInside: pw.BorderSide(color: _pOutVar, width: 0.4),
+    verticalInside:   pw.BorderSide(color: _pOutVar, width: 0.4),
+  );
+
+  String fmtMetodo(String m) {
+    if (m == 'efectivo') return 'Efectivo';
+    if (m == 'tarjeta')  return 'Datáfono';
+    return 'Transf.';
+  }
+
+  return pw.Table(
+    border: tableBorder,
+    columnWidths: const {
+      0: pw.FlexColumnWidth(2.0),
+      1: pw.FlexColumnWidth(3.0),
+      2: pw.FlexColumnWidth(1.2),
+      3: pw.FlexColumnWidth(1.4),
+    },
     children: [
-      pw.Expanded(child: _abonosCard(sesion)),
-      pw.SizedBox(width: 14),
-      pw.Expanded(child: arqueo),
+      pw.TableRow(
+        decoration: const pw.BoxDecoration(color: _pNavy),
+        children: [
+          _th('CATEGORIA'),
+          _th('DESCRIPCION'),
+          _th('METODO',  align: pw.TextAlign.center),
+          _th('MONTO',   align: pw.TextAlign.right),
+        ],
+      ),
+      if (detalle.isEmpty)
+        pw.TableRow(children: [
+          _tdLabel('Sin detalle disponible'),
+          _tdLabel(''), _tdLabel(''), _tdLabel(''),
+        ])
+      else
+        ...detalle.map((g) => pw.TableRow(children: [
+          _tdLabel((g['categoria'] ?? '').toString()),
+          _tdLabel((g['descripcion'] ?? '').toString()),
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            child: pw.Text(fmtMetodo((g['metodo_pago'] ?? '').toString()),
+                textAlign: pw.TextAlign.center,
+                style: pw.TextStyle(fontSize: 9, color: _pOnVar)),
+          ),
+          _tdNum(double.tryParse(g['monto']?.toString() ?? '0') ?? 0.0),
+        ])),
+      pw.TableRow(
+        decoration: const pw.BoxDecoration(color: _pSurfLow),
+        children: [
+          _tdLabel('TOTAL GASTOS', bold: true),
+          _tdLabel('', bold: false),
+          _tdLabel('', bold: false),
+          _tdNum(sesion.gastosTotal, bold: true),
+        ],
+      ),
     ],
   );
 }
+
+// ════════════════════════════════════════════════════════
+// SECCION INFERIOR: solo Abonos (Arqueo movido a FlujoCaja)
+// ════════════════════════════════════════════════════════
 
 // ─── Abonos card ──────────────────────────────────────
 
@@ -547,131 +718,71 @@ pw.Widget _abonosCard(SesionHistorial sesion) => pw.Container(
   ]),
 );
 
-// ─── Arqueo card ──────────────────────────────────────
-
-pw.Widget _arqueoCard(
-  SesionHistorial sesion,
-  PdfColor difColor, PdfColor difBg,
-  String difLabel, String difStr,
-) => pw.Container(
-  decoration: pw.BoxDecoration(
-    border:       pw.Border.all(color: _pOutVar, width: 0.8),
-    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
-  ),
-  child: pw.Column(children: [
-    _cardTitle('Auditoria de Arqueo'),
-    pw.Padding(
-      padding: const pw.EdgeInsets.fromLTRB(12, 8, 12, 12),
-      child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-        _kvRow('Efectivo en Sistema', _m(sesion.montoFinalSistema)),
-        pw.SizedBox(height: 4),
-        pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-          pw.Text('Efectivo Contado',
-              style: pw.TextStyle(
-                  fontSize: 9, fontWeight: pw.FontWeight.bold, color: _pOnSurf)),
-          pw.Text(_m(sesion.montoFinalReal),
-              style: pw.TextStyle(
-                  fontSize: 10, fontWeight: pw.FontWeight.bold, color: _pOnSurf)),
-        ]),
-        pw.SizedBox(height: 10),
-        pw.Container(
-          width: double.infinity,
-          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: pw.BoxDecoration(
-            color: difBg,
-            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
-          ),
-          child: pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Text('DIFERENCIA ($difLabel)',
-                  style: pw.TextStyle(
-                      fontSize: 8, fontWeight: pw.FontWeight.bold,
-                      color: difColor)),
-              pw.Text(difStr,
-                  style: pw.TextStyle(
-                      fontSize: 11, fontWeight: pw.FontWeight.bold,
-                      color: difColor)),
-            ],
-          ),
-        ),
-      ]),
-    ),
-  ]),
-);
-
 // ════════════════════════════════════════════════════════
-// 4. DETALLE DE DEVOLUCIONES
+// 6. DETALLE DE DEVOLUCIONES
 // ════════════════════════════════════════════════════════
 
 pw.Widget _devolucionesDetail(SesionHistorial sesion) {
-  final devEfectivo   = sesion.numDevoluciones - sesion.numCambiosProducto;
-  final tieneEfectivo = sesion.devolucionesEfectivo > 0;
-  final tieneCambios  = sesion.numCambiosProducto > 0;
+  final tieneDirectas  = sesion.devolucionesDirectasEf > 0;
+  final tieneCobrar    = sesion.cambiosCobrarEf > 0;
+  final tieneDevolver  = sesion.cambiosDevEf > 0;
+  final tieneCambiosSinEf = sesion.numCambiosProducto > 0 && !tieneDevolver && !tieneCobrar;
+  final netoMostrar    = sesion.devolucionesEfectivo;
 
-  return pw.Container(
-    decoration: pw.BoxDecoration(
-      border:       pw.Border.all(color: _pOutVar, width: 0.8),
-      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+  const colWidths = {
+    0: pw.FlexColumnWidth(3.2),
+    1: pw.FlexColumnWidth(1.3),
+    2: pw.FlexColumnWidth(1.5),
+  };
+
+  pw.TableRow fila(String label, String cant, double v) => pw.TableRow(children: [
+    _tdLabel(label),
+    _tdNumRight(cant),
+    _tdNum(v),
+  ]);
+
+  return pw.Table(
+    border: pw.TableBorder(
+      top:              pw.BorderSide(color: _pNavy,   width: 1.0),
+      bottom:           pw.BorderSide(color: _pOutVar, width: 0.8),
+      left:             pw.BorderSide(color: _pOutVar, width: 0.8),
+      right:            pw.BorderSide(color: _pOutVar, width: 0.8),
+      horizontalInside: pw.BorderSide(color: _pOutVar, width: 0.4),
+      verticalInside:   pw.BorderSide(color: _pOutVar, width: 0.4),
     ),
-    child: pw.Column(children: [
-      // Cabecera de tabla interna
-      pw.Container(
-        decoration: const pw.BoxDecoration(
-          color: _pSurfLow,
-          borderRadius: pw.BorderRadius.only(
-            topLeft:  pw.Radius.circular(8),
-            topRight: pw.Radius.circular(8),
-          ),
-        ),
-        child: pw.Table(
-          columnWidths: const {
-            0: pw.FlexColumnWidth(3.0),
-            1: pw.FlexColumnWidth(1.5),
-            2: pw.FlexColumnWidth(1.5),
-          },
-          children: [
-            pw.TableRow(children: [
-              _th('TIPO DE DEVOLUCION', align: pw.TextAlign.left),
-              _th('CANTIDAD',           align: pw.TextAlign.right),
-              _th('IMPACTO EFECTIVO',   align: pw.TextAlign.right),
-            ]),
-          ],
-        ),
-      ),
-      // Filas
-      pw.Table(
-        border: pw.TableBorder(
-          horizontalInside: pw.BorderSide(color: _pOutVar, width: 0.4),
-          verticalInside:   pw.BorderSide(color: _pOutVar, width: 0.4),
-        ),
-        columnWidths: const {
-          0: pw.FlexColumnWidth(3.0),
-          1: pw.FlexColumnWidth(1.5),
-          2: pw.FlexColumnWidth(1.5),
-        },
+    columnWidths: colWidths,
+    children: [
+      pw.TableRow(
+        decoration: const pw.BoxDecoration(color: _pNavy),
         children: [
-          if (tieneEfectivo)
-            pw.TableRow(children: [
-              _tdLabel('Devolucion en efectivo\n(dinero devuelto al cliente)'),
-              _tdNumRight('$devEfectivo'),
-              _tdNum(-sesion.devolucionesEfectivo),
-            ]),
-          if (tieneCambios)
-            pw.TableRow(children: [
-              _tdLabel('Cambio de producto\n(sin impacto en efectivo)'),
-              _tdNumRight('${sesion.numCambiosProducto}'),
-              _tdNum(0),
-            ]),
-          // Total
-          pw.TableRow(children: [
-            _tdLabel('TOTAL DEVOLUCIONES', bold: true),
-            _tdNumRight('${sesion.numDevoluciones}', bold: true),
-            _tdNum(-sesion.devolucionesEfectivo, bold: true),
-          ]),
+          _th('TIPO DE DEVOLUCION'),
+          _th('CANT',           align: pw.TextAlign.right),
+          _th('IMPACTO EF.',    align: pw.TextAlign.right),
         ],
       ),
-    ]),
+      if (tieneDirectas)
+        fila('Devolucion directa en efectivo\n(dinero devuelto al cliente)',
+            '${sesion.numDevoluciones - sesion.numCambiosProducto}',
+            -sesion.devolucionesDirectasEf),
+      if (tieneDevolver)
+        fila('Cambio con sobrante\n(se devuelve diferencia al cliente)',
+            '—', -sesion.cambiosDevEf),
+      if (tieneCobrar)
+        fila('Cambio con cobro adicional\n(cliente pagó la diferencia)',
+            '—', sesion.cambiosCobrarEf),
+      if (tieneCambiosSinEf)
+        fila('Cambio de producto\n(sin impacto en efectivo)',
+            '${sesion.numCambiosProducto}', 0),
+      // Total neto
+      pw.TableRow(
+        decoration: const pw.BoxDecoration(color: _pSurfLow),
+        children: [
+          _tdLabel('NETO EFECTIVO DEVOLUCIONES', bold: true),
+          _tdNumRight('${sesion.numDevoluciones}', bold: true),
+          _tdNum(-netoMostrar, bold: true),
+        ],
+      ),
+    ],
   );
 }
 

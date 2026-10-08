@@ -173,11 +173,14 @@ class _EstadoCard extends StatelessWidget {
                     color: _C.textFaint, letterSpacing: 0.5)),
             const SizedBox(height: 6),
             Row(children: [
-              Text(turno,
-                  style: GoogleFonts.inter(
-                      fontSize: 20, fontWeight: FontWeight.w600,
-                      color: _C.textPrimary)),
-              const SizedBox(width: 10),
+              Flexible(
+                child: Text(turno,
+                    style: GoogleFonts.inter(
+                        fontSize: 20, fontWeight: FontWeight.w600,
+                        color: _C.textPrimary),
+                    overflow: TextOverflow.ellipsis),
+              ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
@@ -204,8 +207,10 @@ class _EstadoCard extends StatelessWidget {
             Row(children: [
               const Icon(Icons.schedule_rounded, size: 14, color: _C.textFaint),
               const SizedBox(width: 4),
-              Text('Iniciado hoy a las $hora  •  $elapsed',
-                  style: GoogleFonts.inter(fontSize: 13, color: _C.textSecond)),
+              Flexible(
+              child: Text('Iniciado hoy a las $hora  •  $elapsed',
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(fontSize: 13, color: _C.textSecond))),
             ]),
           ]),
         ),
@@ -236,7 +241,61 @@ class _KpiRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final hayGastos = sesion.gastosTotal > 0;
 
-    return Row(children: [
+    // Usar MediaQuery en vez de LayoutBuilder: SingleChildScrollView pasa ancho
+    // infinito a sus hijos, lo que hace que LayoutBuilder nunca active el modo móvil.
+    final screenW = MediaQuery.of(context).size.width;
+    if (screenW < 480) return _buildMobileKpi(hayGastos);
+    return _buildRow(hayGastos);
+  }
+
+  Widget _buildMobileKpi(bool hayGastos) => Column(children: [
+    Row(children: [
+      Expanded(child: _KpiCard(
+        icon: Icons.payments_rounded,
+        iconBg: _C.greenContainer,
+        iconColor: _C.green,
+        topRight: '${sesion.numTransacciones} ventas',
+        topRightBg: _C.greenContainer.withValues(alpha: 0.5),
+        topRightColor: _C.greenOn,
+        label: 'Ventas del Turno',
+        value: _cur(sesion.ventasTotal),
+        valueColor: _C.textPrimary,
+        cardBg: _C.surface,
+        leftBorder: _C.green,
+      )),
+      const SizedBox(width: 12),
+      Expanded(child: _KpiCard(
+        icon: Icons.swap_horiz_rounded,
+        iconBg: _C.surfaceHigh,
+        iconColor: _C.textSecond,
+        topRight: 'Egresos',
+        topRightBg: _C.surfaceHigh,
+        topRightColor: _C.textFaint,
+        label: 'Gastos / Egresos',
+        value: hayGastos ? '-${_cur(sesion.gastosTotal)}' : _cur(0),
+        valueColor: hayGastos ? _C.error : _C.textPrimary,
+        cardBg: _C.surface,
+        leftBorder: _C.textFaint,
+      )),
+    ]),
+    const SizedBox(height: 12),
+    _KpiCard(
+      icon: Icons.account_balance_wallet_rounded,
+      iconBg: Colors.white.withValues(alpha: 0.12),
+      iconColor: _C.navyText,
+      topRight: 'Base + ventas',
+      topRightBg: Colors.white.withValues(alpha: 0.1),
+      topRightColor: _C.navyText,
+      label: 'Efectivo Esperado',
+      value: _cur(sesion.montoEsperado),
+      valueColor: Colors.white,
+      labelColor: _C.navyText,
+      cardBg: _C.navy,
+      leftBorder: _C.navy,
+    ),
+  ]);
+
+  Widget _buildRow(bool hayGastos) => Row(children: [
       // Ventas del Turno
       Expanded(child: _KpiCard(
         icon: Icons.payments_rounded,
@@ -283,7 +342,6 @@ class _KpiRow extends StatelessWidget {
         leftBorder: _C.navy,
       )),
     ]);
-  }
 }
 
 class _KpiCard extends StatelessWidget {
@@ -340,7 +398,8 @@ class _KpiCard extends StatelessWidget {
             child: Text(topRight,
                 style: GoogleFonts.inter(
                     fontSize: 10, fontWeight: FontWeight.w600,
-                    color: topRightColor)),
+                    color: topRightColor),
+                maxLines: 1, overflow: TextOverflow.ellipsis),
           ),
         ]),
         const SizedBox(height: 12),
@@ -397,6 +456,8 @@ class _CierrePanel extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         _CierreRow('Ventas Totales',   _cur(sesion.ventasTotal)),
+        if (sesion.abonosTotal > 0)
+          _CierreRow('Abonos (${sesion.numAbonos})', _cur(sesion.abonosTotal)),
         _CierreRow('Efectivo Sistema', _cur(sesion.montoEsperado)),
         const SizedBox(height: 20),
         SizedBox(
@@ -553,14 +614,16 @@ class _GastosSectionState extends State<_GastosSection> {
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Gastos del Turno',
-              style: GoogleFonts.inter(
-                  fontSize: 20, fontWeight: FontWeight.w600, color: _C.textPrimary)),
-          Text('Egresos registrados en este turno',
-              style: GoogleFonts.inter(fontSize: 13, color: _C.textFaint)),
-        ]),
-        const Spacer(),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Gastos del Turno',
+                style: GoogleFonts.inter(
+                    fontSize: 20, fontWeight: FontWeight.w600, color: _C.textPrimary)),
+            Text('Egresos registrados en este turno',
+                style: GoogleFonts.inter(fontSize: 13, color: _C.textFaint)),
+          ]),
+        ),
+        const SizedBox(width: 12),
         ElevatedButton.icon(
           icon: const Icon(Icons.add_rounded, size: 16),
           label: Text('Registrar Gasto',

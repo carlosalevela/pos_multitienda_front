@@ -459,8 +459,8 @@ class _EtiquetasScreenState extends State<EtiquetasScreen> {
 
   Future<(double, double)> _cargarPaginaDriver() async {
     final prefs = await SharedPreferences.getInstance();
-    final w = prefs.getDouble(_kPrefsPgAncho) ?? 101.6;
-    final h = prefs.getDouble(_kPrefsPgAlto)  ?? 101.6;
+    final w = prefs.getDouble(_kPrefsPgAncho) ?? 32.0;
+    final h = prefs.getDouble(_kPrefsPgAlto)  ?? 15.0;
     return (w, h);
   }
 
@@ -1096,8 +1096,8 @@ class _EtiquetasScreenState extends State<EtiquetasScreen> {
     int cantidad, {
     bool   modoHoja       = false,
     String papelHoja      = 'a4',
-    double pgAncho        = 101.6,   // mm — tamaño de página configurado en el driver
-    double pgAlto         = 101.6,
+    double pgAncho        = 32.0,   // mm — tamaño de página configurado en el driver
+    double pgAlto         = 15.0,
     bool   negritaForzada = false,
   }) async {
     final producto = _producto ?? _placeholderProducto();
@@ -1111,7 +1111,7 @@ class _EtiquetasScreenState extends State<EtiquetasScreen> {
       // ── Modo Driver: configura el DEVMODE del driver y usa PDF normal ──
       if (lang == 'Driver') {
         try {
-          // Ancho = ancho total del rollo (pgAncho, ej. 101.6mm para 3-across).
+          // Ancho = ancho total del rollo (pgAncho, ej. 32mm para SAT TT448-2).
           // Alto  = alto de UNA etiqueta (altoMm), no el alto total del rollo.
           // Así el driver avanza exactamente 1 fila por página.
           RawLabelPrinter.setDriverPaperSize(
@@ -1233,11 +1233,14 @@ class _EtiquetasScreenState extends State<EtiquetasScreen> {
       backgroundColor: _kBg,
       body: Column(children: [
         _buildHeader(),
-        Expanded(child: Row(children: [
-          SizedBox(width: 260, child: _buildPanelIzq()),
-          const VerticalDivider(width: 1, color: _kBorder),
-          Expanded(child: _buildPanelDer()),
-        ])),
+        Expanded(child: LayoutBuilder(builder: (_, c) {
+          if (c.maxWidth < 600) return _buildPanelIzq();
+          return Row(children: [
+            SizedBox(width: 260, child: _buildPanelIzq()),
+            const VerticalDivider(width: 1, color: _kBorder),
+            Expanded(child: _buildPanelDer()),
+          ]);
+        })),
       ]),
     );
   }
@@ -1251,40 +1254,8 @@ class _EtiquetasScreenState extends State<EtiquetasScreen> {
         color: _kSurface,
         border: Border(bottom: BorderSide(color: _kBorder)),
       ),
-      child: Row(children: [
-        const Icon(Icons.label_rounded, color: _kPurple, size: 20),
-        const SizedBox(width: 10),
-        Text('Etiquetas de productos', style: AppTextStyles.headlineSm),
-        const Spacer(),
-        // Botón guardar plantilla
-        OutlinedButton.icon(
-          onPressed: _guardarComoPlantilla,
-          icon: const Icon(Icons.bookmark_add_rounded, size: 16),
-          label: const Text('Guardar plantilla'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: _kMuted,
-            side: const BorderSide(color: _kBorder),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10)),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          ),
-        ),
-        const SizedBox(width: 8),
-        // Botón lote
-        OutlinedButton.icon(
-          onPressed: _abrirLote,
-          icon: const Icon(Icons.checklist_rounded, size: 16),
-          label: const Text('Imprimir lote'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: _kPurple,
-            side: const BorderSide(color: _kPurple),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10)),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          ),
-        ),
-        const SizedBox(width: 10),
-        AnimatedContainer(
+      child: LayoutBuilder(builder: (_, c) {
+        final scanWidget = AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
@@ -1306,8 +1277,81 @@ class _EtiquetasScreenState extends State<EtiquetasScreen> {
                       color: _kGreen, fontWeight: FontWeight.w700)),
             ],
           ]),
-        ),
-      ]),
+        );
+
+        if (c.maxWidth < 520) {
+          return Row(children: [
+            const Icon(Icons.label_rounded, color: _kPurple, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text('Etiquetas',
+                  style: AppTextStyles.headlineSm,
+                  overflow: TextOverflow.ellipsis),
+            ),
+            const SizedBox(width: 8),
+            scanWidget,
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert_rounded),
+              onSelected: (v) {
+                if (v == 'plantilla') _guardarComoPlantilla();
+                if (v == 'lote') _abrirLote();
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'plantilla',
+                  child: Row(children: [
+                    Icon(Icons.bookmark_add_rounded, size: 16),
+                    SizedBox(width: 8),
+                    Text('Guardar plantilla'),
+                  ]),
+                ),
+                PopupMenuItem(
+                  value: 'lote',
+                  child: Row(children: [
+                    Icon(Icons.checklist_rounded, size: 16),
+                    SizedBox(width: 8),
+                    Text('Imprimir lote'),
+                  ]),
+                ),
+              ],
+            ),
+          ]);
+        }
+
+        return Row(children: [
+          const Icon(Icons.label_rounded, color: _kPurple, size: 20),
+          const SizedBox(width: 10),
+          Text('Etiquetas de productos', style: AppTextStyles.headlineSm),
+          const Spacer(),
+          OutlinedButton.icon(
+            onPressed: _guardarComoPlantilla,
+            icon: const Icon(Icons.bookmark_add_rounded, size: 16),
+            label: const Text('Guardar plantilla'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _kMuted,
+              side: const BorderSide(color: _kBorder),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            ),
+          ),
+          const SizedBox(width: 8),
+          OutlinedButton.icon(
+            onPressed: _abrirLote,
+            icon: const Icon(Icons.checklist_rounded, size: 16),
+            label: const Text('Imprimir lote'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _kPurple,
+              side: const BorderSide(color: _kPurple),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            ),
+          ),
+          const SizedBox(width: 10),
+          scanWidget,
+        ]);
+      }),
     );
   }
 

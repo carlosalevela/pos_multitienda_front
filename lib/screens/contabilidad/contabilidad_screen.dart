@@ -171,7 +171,10 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
                     _cargandoTiendas
                         ? _storeSelectorSkeleton()
                         : _tiendas.isNotEmpty
-                            ? _storeSelector()
+                            ? ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 165),
+                                child: _storeSelector(),
+                              )
                             : const SizedBox.shrink(),
 
                 ]),
