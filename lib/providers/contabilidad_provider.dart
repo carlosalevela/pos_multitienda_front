@@ -62,25 +62,28 @@ class ContabilidadProvider extends ChangeNotifier {
 
   Future<void> cargarResumenDiario({int? tiendaId, DateTime? fecha}) async {
     _cargando = true;
+    _errorMsg = '';
     notifyListeners();
 
     final fechaStr = _fechaStr(fecha);
-
-    // ✅ Llamadas independientes tipadas — más seguro que Future.wait + cast
-    final results = await Future.wait([
-      _service.getResumenDiario(tiendaId: tiendaId, fecha: fechaStr),
-      _service.getAbonosDia(fechaStr, tiendaId),
-      _service.getSeparadosDia(fechaStr, tiendaId),
-      _service.getTopClientes(tiendaId: tiendaId, fecha: fechaStr),
-    ]);
-
-    resumenDiario = results[0] as ResumenDiario?;
-    abonosDia     = results[1] as List<Map<String, dynamic>>;
-    separadosDia  = results[2] as List<Map<String, dynamic>>;
-    topClientes   = results[3] as List<TopCliente>;
-
-    _cargando = false;
-    notifyListeners();
+    try {
+      final results = await Future.wait([
+        _service.getResumenDiario(tiendaId: tiendaId, fecha: fechaStr),
+        _service.getAbonosDia(fechaStr, tiendaId),
+        _service.getSeparadosDia(fechaStr, tiendaId),
+        _service.getTopClientes(tiendaId: tiendaId, fecha: fechaStr),
+      ]);
+      resumenDiario = results[0] as ResumenDiario?;
+      abonosDia     = results[1] as List<Map<String, dynamic>>;
+      separadosDia  = results[2] as List<Map<String, dynamic>>;
+      topClientes   = results[3] as List<TopCliente>;
+    } catch (e) {
+      _errorMsg = 'Error al cargar resumen del día';
+      debugPrint('❌ cargarResumenDiario: $e');
+    } finally {
+      _cargando = false;
+      notifyListeners();
+    }
   }
 
   // ── Resumen mensual ───────────────────────────────────
@@ -89,12 +92,19 @@ class ContabilidadProvider extends ChangeNotifier {
     int? tiendaId, int? anio, int? mes,
   }) async {
     _cargando = true;
+    _errorMsg = '';
     notifyListeners();
-    resumenMensual = await _service.getResumenMensual(
-      tiendaId: tiendaId, anio: anio, mes: mes,
-    );
-    _cargando = false;
-    notifyListeners();
+    try {
+      resumenMensual = await _service.getResumenMensual(
+        tiendaId: tiendaId, anio: anio, mes: mes,
+      );
+    } catch (e) {
+      _errorMsg = 'Error al cargar resumen mensual';
+      debugPrint('❌ cargarResumenMensual: $e');
+    } finally {
+      _cargando = false;
+      notifyListeners();
+    }
   }
 
   // ── Resumen anual ─────────────────────────────────────
@@ -103,12 +113,19 @@ class ContabilidadProvider extends ChangeNotifier {
     int? tiendaId, required int anio,
   }) async {
     _cargando = true;
+    _errorMsg = '';
     notifyListeners();
-    resumenAnual = await _service.getResumenAnual(
-      tiendaId: tiendaId, anio: anio,
-    );
-    _cargando = false;
-    notifyListeners();
+    try {
+      resumenAnual = await _service.getResumenAnual(
+        tiendaId: tiendaId, anio: anio,
+      );
+    } catch (e) {
+      _errorMsg = 'Error al cargar resumen anual';
+      debugPrint('❌ cargarResumenAnual: $e');
+    } finally {
+      _cargando = false;
+      notifyListeners();
+    }
   }
 
   // ── Top productos ─────────────────────────────────────
@@ -117,14 +134,21 @@ class ContabilidadProvider extends ChangeNotifier {
     int? tiendaId, DateTime? fechaIni, DateTime? fechaFin,
   }) async {
     _cargando = true;
+    _errorMsg = '';
     notifyListeners();
-    topProductos = await _service.getTopProductos(
-      tiendaId: tiendaId,
-      fechaIni: fechaIni != null ? _fechaStr(fechaIni) : null,
-      fechaFin: fechaFin != null ? _fechaStr(fechaFin) : null,
-    );
-    _cargando = false;
-    notifyListeners();
+    try {
+      topProductos = await _service.getTopProductos(
+        tiendaId: tiendaId,
+        fechaIni: fechaIni != null ? _fechaStr(fechaIni) : null,
+        fechaFin: fechaFin != null ? _fechaStr(fechaFin) : null,
+      );
+    } catch (e) {
+      _errorMsg = 'Error al cargar top productos';
+      debugPrint('❌ cargarTopProductos: $e');
+    } finally {
+      _cargando = false;
+      notifyListeners();
+    }
   }
 
   // ── Gastos ────────────────────────────────────────────
@@ -138,17 +162,24 @@ class ContabilidadProvider extends ChangeNotifier {
     String? visibilidad,
   }) async {
     _cargando = true;
+    _errorMsg = '';
     notifyListeners();
-    gastos = await _service.getGastos(
-      tiendaId:    tiendaId,
-      fecha:       fecha,
-      fechaIni:    fechaIni,
-      fechaFin:    fechaFin,
-      categoria:   categoria,
-      visibilidad: visibilidad,
-    );
-    _cargando = false;
-    notifyListeners();
+    try {
+      gastos = await _service.getGastos(
+        tiendaId:    tiendaId,
+        fecha:       fecha,
+        fechaIni:    fechaIni,
+        fechaFin:    fechaFin,
+        categoria:   categoria,
+        visibilidad: visibilidad,
+      );
+    } catch (e) {
+      _errorMsg = 'Error al cargar gastos';
+      debugPrint('❌ cargarGastos: $e');
+    } finally {
+      _cargando = false;
+      notifyListeners();
+    }
   }
 
   // ── Resumen gastos por rango ──────────────────────────
@@ -160,15 +191,22 @@ class ContabilidadProvider extends ChangeNotifier {
     String? categoria,
   }) async {
     _cargando = true;
+    _errorMsg = '';
     notifyListeners();
-    gastosResumenRango = await _service.getGastosResumenRango(
-      fechaIni:  _fechaStr(fechaIni),
-      fechaFin:  _fechaStr(fechaFin),
-      tiendaId:  tiendaId,
-      categoria: categoria,
-    );
-    _cargando = false;
-    notifyListeners();
+    try {
+      gastosResumenRango = await _service.getGastosResumenRango(
+        fechaIni:  _fechaStr(fechaIni),
+        fechaFin:  _fechaStr(fechaFin),
+        tiendaId:  tiendaId,
+        categoria: categoria,
+      );
+    } catch (e) {
+      _errorMsg = 'Error al cargar resumen de gastos';
+      debugPrint('❌ cargarGastosResumenRango: $e');
+    } finally {
+      _cargando = false;
+      notifyListeners();
+    }
   }
 
   // ── Crear gasto ───────────────────────────────────────
@@ -221,37 +259,42 @@ class ContabilidadProvider extends ChangeNotifier {
     int? tiendaId,
   }) async {
     _cargandoPl = true;
+    _errorMsg   = '';
     notifyListeners();
+    try {
+      final results = await Future.wait([
+        _service.getEstadoResultados(fechaIni: fechaIni, fechaFin: fechaFin, tiendaId: tiendaId),
+        _service.getPuntoEquilibrio(fechaIni: fechaIni, fechaFin: fechaFin, tiendaId: tiendaId),
+        _service.getComparativoTiendas(fechaIni: fechaIni, fechaFin: fechaFin),
+        _service.getVentasPorEmpleado(fechaIni: fechaIni, fechaFin: fechaFin, tiendaId: tiendaId),
+        _service.getTopClientes(fechaIni: fechaIni, fechaFin: fechaFin, tiendaId: tiendaId),
+      ]);
 
-    final results = await Future.wait([
-      _service.getEstadoResultados(fechaIni: fechaIni, fechaFin: fechaFin, tiendaId: tiendaId),
-      _service.getPuntoEquilibrio(fechaIni: fechaIni, fechaFin: fechaFin, tiendaId: tiendaId),
-      _service.getComparativoTiendas(fechaIni: fechaIni, fechaFin: fechaFin),
-      _service.getVentasPorEmpleado(fechaIni: fechaIni, fechaFin: fechaFin, tiendaId: tiendaId),
-      _service.getTopClientes(fechaIni: fechaIni, fechaFin: fechaFin, tiendaId: tiendaId),
-    ]);
+      estadoResultados   = results[0] as EstadoResultados?;
+      puntoEquilibrio    = results[1] as PuntoEquilibrio?;
 
-    estadoResultados   = results[0] as EstadoResultados?;
-    puntoEquilibrio    = results[1] as PuntoEquilibrio?;
+      final compData     = results[2] as Map<String, dynamic>?;
+      comparativo        = compData != null
+          ? (compData['tiendas'] as List<dynamic>)
+              .map((e) => TiendaComparativo.fromJson(e as Map<String, dynamic>))
+              .toList()
+          : [];
+      comparativoTotales = compData?['totales'] as Map<String, dynamic>?;
 
-    final compData     = results[2] as Map<String, dynamic>?;
-    comparativo        = compData != null
-        ? (compData['tiendas'] as List<dynamic>)
-            .map((e) => TiendaComparativo.fromJson(e as Map<String, dynamic>))
-            .toList()
-        : [];
-    comparativoTotales = compData?['totales'] as Map<String, dynamic>?;
-
-    final empData = results[3] as Map<String, dynamic>?;
-    vendedores    = empData != null
-        ? (empData['empleados'] as List<dynamic>)
-            .map((e) => VentaEmpleado.fromJson(e as Map<String, dynamic>))
-            .toList()
-        : [];
-    topClientes   = results[4] as List<TopCliente>;
-
-    _cargandoPl = false;
-    notifyListeners();
+      final empData = results[3] as Map<String, dynamic>?;
+      vendedores    = empData != null
+          ? (empData['empleados'] as List<dynamic>)
+              .map((e) => VentaEmpleado.fromJson(e as Map<String, dynamic>))
+              .toList()
+          : [];
+      topClientes   = results[4] as List<TopCliente>;
+    } catch (e) {
+      _errorMsg = 'Error al cargar análisis P&L';
+      debugPrint('❌ cargarPL: $e');
+    } finally {
+      _cargandoPl = false;
+      notifyListeners();
+    }
   }
 
   // ── Flujo de Caja ─────────────────────────────────────
@@ -262,14 +305,19 @@ class ContabilidadProvider extends ChangeNotifier {
     int? tiendaId,
   }) async {
     _cargandoFlujo = true;
+    _errorMsg      = '';
     notifyListeners();
-
-    flujoCaja = await _service.getFlujoCaja(
-      fechaIni: fechaIni, fechaFin: fechaFin, tiendaId: tiendaId,
-    );
-
-    _cargandoFlujo = false;
-    notifyListeners();
+    try {
+      flujoCaja = await _service.getFlujoCaja(
+        fechaIni: fechaIni, fechaFin: fechaFin, tiendaId: tiendaId,
+      );
+    } catch (e) {
+      _errorMsg = 'Error al cargar flujo de caja';
+      debugPrint('❌ cargarFlujoCaja: $e');
+    } finally {
+      _cargandoFlujo = false;
+      notifyListeners();
+    }
   }
 
   // ── Exportar Excel ────────────────────────────────────

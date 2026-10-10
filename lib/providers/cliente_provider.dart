@@ -96,43 +96,57 @@ class ClienteProvider extends ChangeNotifier {
     _guardando = true;
     error      = null;
     notifyListeners();
+    try {
+      final result = await _service.crearCliente(data);
 
-    final result = await _service.crearCliente(data);
-    _guardando   = false;
+      if (result['success'] == true) {
+        final nuevo = result['data'] as Cliente;
+        clientes    = [nuevo, ...clientes];
+        notifyListeners();
+        return true;
+      }
 
-    if (result['success'] == true) {
-      final nuevo = result['data'] as Cliente;
-      clientes    = [nuevo, ...clientes];
+      error = result['error'] ?? 'No se pudo crear el cliente';
       notifyListeners();
-      return true;
+      return false;
+    } catch (e) {
+      error = 'Error al crear el cliente';
+      debugPrint('❌ crearCliente: $e');
+      notifyListeners();
+      return false;
+    } finally {
+      _guardando = false;
     }
-
-    error = result['error'] ?? 'No se pudo crear el cliente';
-    notifyListeners();
-    return false;
   }
 
   Future<bool> editarCliente(int id, Map<String, dynamic> data) async {
     _guardando = true;
     error      = null;
     notifyListeners();
+    try {
+      final result = await _service.editarCliente(id, data);
 
-    final result = await _service.editarCliente(id, data);
-    _guardando   = false;
+      if (result['success'] == true) {
+        final actualizado = result['data'] as Cliente;
+        clientes = clientes
+            .map((c) => c.id == id ? actualizado : c)
+            .toList();
+        if (clienteSeleccionado?.id == id) clienteSeleccionado = actualizado;
+        notifyListeners();
+        return true;
+      }
 
-    if (result['success'] == true) {
-      final actualizado = result['data'] as Cliente;
-      clientes = clientes
-          .map((c) => c.id == id ? actualizado : c)
-          .toList();
-      if (clienteSeleccionado?.id == id) clienteSeleccionado = actualizado;
+      error = result['error'] ?? 'No se pudo editar el cliente';
       notifyListeners();
-      return true;
+      return false;
+    } catch (e) {
+      error = 'Error al editar el cliente';
+      debugPrint('❌ editarCliente: $e');
+      notifyListeners();
+      return false;
+    } finally {
+      _guardando = false;
     }
-
-    error = result['error'] ?? 'No se pudo editar el cliente';
-    notifyListeners();
-    return false;
   }
 
   Future<bool> desactivarCliente(int id) async {
@@ -273,90 +287,106 @@ class ClienteProvider extends ChangeNotifier {
     _guardando = true;
     error      = null;
     notifyListeners();
+    try {
+      final result = await _service.crearSeparado(data);
 
-    final result = await _service.crearSeparado(data);
-    _guardando   = false;
+      if (result['success'] == true) {
+        final nuevo = result['data'] as Separado;
+        separados   = [nuevo, ...separados];
+        notifyListeners();
+        await _refrescarDetalleCliente();
+        return nuevo;
+      }
 
-    if (result['success'] == true) {
-      final nuevo = result['data'] as Separado;
-      separados   = [nuevo, ...separados];
+      error = result['error'] ?? 'No se pudo crear el separado';
       notifyListeners();
-      // Refrescar detalle del cliente para que aparezca el nuevo separado
-      await _refrescarDetalleCliente();
-      return nuevo;
+      return null;
+    } catch (e) {
+      error = 'Error al crear el separado';
+      debugPrint('❌ crearSeparado: $e');
+      notifyListeners();
+      return null;
+    } finally {
+      _guardando = false;
     }
-
-    error = result['error'] ?? 'No se pudo crear el separado';
-    notifyListeners();
-    return null;
   }
 
   Future<bool> abonarSeparado(int id, double monto, String metodoPago) async {
     _guardando = true;
     error      = null;
     notifyListeners();
+    try {
+      final result = await _service.abonarSeparado(id, monto, metodoPago);
 
-    final result = await _service.abonarSeparado(id, monto, metodoPago);
+      if (result['success'] == true) {
+        final data = result['data'] as Map<String, dynamic>;
 
-    if (result['success'] == true) {
-      final data = result['data'] as Map<String, dynamic>;
+        separados = separados.map((s) {
+          if (s.id != id) return s;
+          return s.copyWith(
+            abonoAcumulado: (data['abono_acumulado'] as num).toDouble(),
+            saldoPendiente: (data['saldo_pendiente'] as num).toDouble(),
+            estado:          data['estado'] as String,
+          );
+        }).toList();
 
-      separados = separados.map((s) {
-        if (s.id != id) return s;
-        return s.copyWith(
-          abonoAcumulado: (data['abono_acumulado'] as num).toDouble(),
-          saldoPendiente: (data['saldo_pendiente'] as num).toDouble(),
-          estado:          data['estado'] as String,
-        );
-      }).toList();
+        if (separadoSeleccionado?.id == id) {
+          separadoSeleccionado = separados.firstWhere((s) => s.id == id);
+        }
 
-      if (separadoSeleccionado?.id == id) {
-        separadoSeleccionado = separados.firstWhere((s) => s.id == id);
+        await Future.wait([
+          _refrescarDetalleCliente(),
+          cargarAlertas(tiendaId: _tiendaIdAlertas),
+        ]);
+
+        return true;
       }
 
-      await Future.wait([
-        _refrescarDetalleCliente(),
-        cargarAlertas(tiendaId: _tiendaIdAlertas),
-      ]);
-
+      error = result['error'] ?? 'Error al registrar abono';
+      return false;
+    } catch (e) {
+      error = 'Error al registrar abono';
+      debugPrint('❌ abonarSeparado: $e');
+      return false;
+    } finally {
       _guardando = false;
       notifyListeners();
-      return true;
     }
-
-    error      = result['error'] ?? 'Error al registrar abono';
-    _guardando = false;
-    notifyListeners();
-    return false;
   }
 
   Future<bool> cancelarSeparado(int id) async {
     _guardando = true;
     error      = null;
     notifyListeners();
+    bool exito = false;
+    try {
+      final result = await _service.cancelarSeparado(id);
 
-    final result = await _service.cancelarSeparado(id);
+      if (result['success'] == true) {
+        separados = separados
+            .map((s) => s.id == id ? s.copyWith(estado: 'cancelado') : s)
+            .toList();
 
-    if (result['success'] == true) {
-      separados = separados
-          .map((s) => s.id == id ? s.copyWith(estado: 'cancelado') : s)
-          .toList();
+        if (separadoSeleccionado?.id == id) {
+          separadoSeleccionado = separados.firstWhere((s) => s.id == id);
+        }
 
-      if (separadoSeleccionado?.id == id) {
-        separadoSeleccionado = separados.firstWhere((s) => s.id == id);
+        await Future.wait([
+          _refrescarDetalleCliente(),
+          cargarAlertas(tiendaId: _tiendaIdAlertas),
+        ]);
+        exito = true;
+      } else {
+        error = result['error'] ?? 'Error al cancelar separado';
       }
-
-      await Future.wait([
-        _refrescarDetalleCliente(),
-        cargarAlertas(tiendaId: _tiendaIdAlertas),
-      ]);
-    } else {
-      error = result['error'] ?? 'Error al cancelar separado';
+    } catch (e) {
+      error = 'Error al cancelar separado';
+      debugPrint('❌ cancelarSeparado: $e');
+    } finally {
+      _guardando = false;
+      notifyListeners();
     }
-
-    _guardando = false;
-    notifyListeners();
-    return result['success'] == true;
+    return exito;
   }
 
 

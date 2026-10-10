@@ -1,6 +1,5 @@
 // lib/providers/auth_provider.dart
 
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
@@ -96,51 +95,25 @@ class AuthProvider extends ChangeNotifier {
     final loggedIn = await _authService.isLoggedIn();
     if (!loggedIn) return;
 
+    final valid = await _authService.verificarTokenBackend();
+    if (!valid) {
+      await _authService.logout();
+      return;
+    }
+
     final data = await _authService.getUsuarioLocal();
 
-    // ✅ FIX: AuthService ya guarda nombre+apellido combinado en 'nombre'
-    //        no hay campo 'apellido' separado en SharedPreferences
     _nombre        = data['nombre']?.toString()         ?? '';
     _rol           = data['rol']?.toString()            ?? '';
     _empleadoId    = data['id']                         ?? 0;
-    // ✅ FIX: parsing consistente con login()
     _tiendaId      = int.tryParse(data['tienda_id']?.toString()  ?? '') ?? 0;
     _tiendaNombre  = data['tienda_nombre']?.toString()  ?? '';
     _empresaId     = data['empresa_id']?.toString()     ?? '';
     _empresaNombre = data['empresa_nombre']?.toString() ?? '';
 
-    // Si tienda_nombre no estaba guardado en SharedPreferences (sesión anterior
-    // a que se añadiera ese campo), lo extraemos de las claims del JWT.
-    if (_tiendaNombre.isEmpty) {
-      final fromJwt = await _tiendaNombreDesdeJwt();
-      if (fromJwt.isNotEmpty) {
-        _tiendaNombre = fromJwt;
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('tienda_nombre', _tiendaNombre);
-      }
-    }
-
     _isLoggedIn = true;
     _sincronizarDocumentoService();
     notifyListeners();
-  }
-
-  // ── Decodifica las claims del JWT para recuperar tienda_nombre ──────────
-  Future<String> _tiendaNombreDesdeJwt() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('access_token') ?? '';
-      if (token.isEmpty) return '';
-      final parts = token.split('.');
-      if (parts.length != 3) return '';
-      final payload = utf8.decode(
-        base64Url.decode(base64Url.normalize(parts[1])),
-      );
-      final claims = json.decode(payload) as Map<String, dynamic>;
-      return claims['tienda_nombre']?.toString() ?? '';
-    } catch (_) {
-      return '';
-    }
   }
 
   // ── Actualiza la tienda activa desde cualquier pantalla ─────────────────

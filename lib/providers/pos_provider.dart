@@ -186,22 +186,27 @@ class PosProvider extends ChangeNotifier {
   }) async {
     _buscando = true;
     notifyListeners();
+    try {
+      final result = await _inventarioService.getProductos(
+        q:           q,
+        tiendaId:    tiendaId,
+        categoriaId: categoriaId,
+      );
 
-    final result = await _inventarioService.getProductos(
-      q:           q,
-      tiendaId:    tiendaId,
-      categoriaId: categoriaId,
-    );
-
-    if (result['success'] == true) {
-      _resultados = result['data'] as List<Producto>;
-    } else {
+      if (result['success'] == true) {
+        _resultados = result['data'] as List<Producto>;
+      } else {
+        _resultados = [];
+        _errorMsg   = result['error'] ?? 'Error al cargar productos';
+      }
+    } catch (e) {
       _resultados = [];
-      _errorMsg   = result['error'] ?? 'Error al cargar productos';
+      _errorMsg   = 'Error al cargar productos';
+      debugPrint('❌ cargarProductos: $e');
+    } finally {
+      _buscando = false;
+      notifyListeners();
     }
-
-    _buscando = false;
-    notifyListeners();
   }
 
   // ── Carrito ───────────────────────────────────────────
@@ -443,53 +448,57 @@ class PosProvider extends ChangeNotifier {
     _procesando = true;
     _errorMsg   = '';
     notifyListeners();
+    try {
+      final detalles = _carrito.map((item) => {
+        'producto':        item.producto.id,
+        'cantidad':        item.cantidad.toString(),
+        'precio_unitario': item.precioUnitario.toString(),
+        'descuento':       item.descuento.toString(),
+      }).toList();
 
-    final detalles = _carrito.map((item) => {
-      'producto':        item.producto.id,
-      'cantidad':        item.cantidad.toString(),
-      'precio_unitario': item.precioUnitario.toString(),
-      'descuento':       item.descuento.toString(),
-    }).toList();
+      final List<Map<String, dynamic>> pagos = _metodoPago == 'mixto'
+          ? [
+              {'metodo': 'efectivo',       'monto': _mixtoEfectivo},
+              {'metodo': _mixtoOtroMetodo, 'monto': totalConDescuento - _mixtoEfectivo},
+            ]
+          : [];
 
-    final List<Map<String, dynamic>> pagos = _metodoPago == 'mixto'
-        ? [
-            {'metodo': 'efectivo',       'monto': _mixtoEfectivo},
-            {'metodo': _mixtoOtroMetodo, 'monto': totalConDescuento - _mixtoEfectivo},
-          ]
-        : [];
+      final result = await _ventaService.crearVenta(
+        tiendaId:      tiendaId,
+        metodoPago:    _metodoPago,
+        montoRecibido: _montoRecibido,
+        descuento:     _descuento,
+        clienteId:     clienteId,
+        aCredito:      _metodoPago == 'credito',
+        detalles:      detalles,
+        pagos:         pagos,
+      );
 
-    final result = await _ventaService.crearVenta(
-      tiendaId:      tiendaId,
-      metodoPago:    _metodoPago,
-      montoRecibido: _montoRecibido,
-      descuento:     _descuento,
-      clienteId:     clienteId,
-      aCredito:      _metodoPago == 'credito',
-      detalles:      detalles,
-      pagos:         pagos,
-    );
+      if (result['success'] == true) {
+        final msg = '✅ Venta registrada — Vuelto: \$${vuelto.toStringAsFixed(0)}';
+        _ultimaVenta = result['data'] as Map<String, dynamic>?;
+        limpiarCarrito();
+        _successMsg = msg;
+        notifyListeners();
+        return true;
+      }
 
-    _procesando = false;
+      _errorMsg = result['error'] ?? 'Error desconocido';
 
-    if (result['success'] == true) {
-      final msg = '✅ Venta registrada — Vuelto: \$${vuelto.toStringAsFixed(0)}';
-      _ultimaVenta = result['data'] as Map<String, dynamic>?;
-      limpiarCarrito();
-      _successMsg = msg;
+      if (_errorMsg.toLowerCase().contains('stock')) {
+        await _refrescarStockCarrito(tiendaId);
+      }
+
       notifyListeners();
-      return true;
+      return false;
+    } catch (e) {
+      _errorMsg = 'Error al procesar la venta';
+      debugPrint('❌ cobrar: $e');
+      notifyListeners();
+      return false;
+    } finally {
+      _procesando = false;
     }
-
-    _errorMsg = result['error'] ?? 'Error desconocido';
-
-    // Si el error es de stock, refrescar inventario del carrito para que
-    // el cajero vea inmediatamente la cantidad real disponible.
-    if (_errorMsg.toLowerCase().contains('stock')) {
-      await _refrescarStockCarrito(tiendaId);
-    }
-
-    notifyListeners();
-    return false;
   }
 
   Future<void> _refrescarStockCarrito(int tiendaId) async {
@@ -528,16 +537,21 @@ class PosProvider extends ChangeNotifier {
   }) async {
     _cargandoVentas = true;
     notifyListeners();
-
-    _ventas = await _ventaService.listarVentas(
-      tiendaId:  tiendaId,
-      fecha:     fecha,
-      sesionId:  sesionId,
-      clienteId: clienteId,
-    );
-
-    _cargandoVentas = false;
-    notifyListeners();
+    try {
+      _ventas = await _ventaService.listarVentas(
+        tiendaId:  tiendaId,
+        fecha:     fecha,
+        sesionId:  sesionId,
+        clienteId: clienteId,
+      );
+    } catch (e) {
+      _ventas   = [];
+      _errorMsg = 'Error al cargar ventas';
+      debugPrint('❌ cargarVentas: $e');
+    } finally {
+      _cargandoVentas = false;
+      notifyListeners();
+    }
   }
 
   // ── Detalle venta ─────────────────────────────────────
@@ -547,11 +561,15 @@ class PosProvider extends ChangeNotifier {
     _cargandoVentas = true;
     _ventaDetalle   = null;
     notifyListeners();
-
-    _ventaDetalle = await _ventaService.obtenerVenta(id);
-
-    _cargandoVentas = false;
-    notifyListeners();
+    try {
+      _ventaDetalle = await _ventaService.obtenerVenta(id);
+    } catch (e) {
+      _errorMsg = 'Error al cargar detalle de venta';
+      debugPrint('❌ cargarVentaDetalle: $e');
+    } finally {
+      _cargandoVentas = false;
+      notifyListeners();
+    }
   }
 
   // ── Anular venta ──────────────────────────────────────
@@ -560,21 +578,27 @@ class PosProvider extends ChangeNotifier {
     _procesando = true;
     _errorMsg   = '';
     notifyListeners();
+    bool exito = false;
+    try {
+      final result = await _ventaService.anularVenta(id);
 
-    final result = await _ventaService.anularVenta(id);
-    _procesando  = false;
-
-    if (result['success'] == true) {
-      _successMsg = '✅ Venta anulada correctamente';
-      _ventas = _ventas.map((v) =>
-          v['id'] == id ? {...v, 'estado': 'anulada'} : v
-      ).toList();
-    } else {
-      _errorMsg = result['error'] ?? 'Error al anular la venta';
+      if (result['success'] == true) {
+        _successMsg = '✅ Venta anulada correctamente';
+        _ventas     = _ventas.map((v) =>
+            v['id'] == id ? {...v, 'estado': 'anulada'} : v
+        ).toList();
+        exito = true;
+      } else {
+        _errorMsg = result['error'] ?? 'Error al anular la venta';
+      }
+    } catch (e) {
+      _errorMsg = 'Error al anular la venta';
+      debugPrint('❌ anularVenta: $e');
+    } finally {
+      _procesando = false;
+      notifyListeners();
     }
-
-    notifyListeners();
-    return result['success'] == true;
+    return exito;
   }
 
   // ── Limpiar mensajes ──────────────────────────────────

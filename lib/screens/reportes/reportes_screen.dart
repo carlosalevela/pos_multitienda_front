@@ -1,13 +1,20 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../providers/reportes_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/config_provider.dart';
 import '../../providers/contabilidad_provider.dart';
 import '../../providers/caja_provider.dart';
+import '../../models/contabilidad_models.dart';
 import '../../models/sesion_caja.dart';
 import '../../services/caja_service.dart';
+import '../../services/documento_service.dart';
+import '../../services/reporte_pdf_service.dart';
 import '../../services/venta_service.dart';
 import 'widgets/reporte_detalle_dialog.dart';
 import 'widgets/reporte_turno_card.dart';
@@ -218,35 +225,173 @@ class _ReportesScreenState extends State<ReportesScreen> {
               child: rep.cargando
                   ? const Center(
                       child: CircularProgressIndicator(color: _kSecondary))
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (sesionCard != null) ...[
-                            ReporteTurnoCard(
-                              sesion:        sesionCard,
-                              fecha:         _fechaStr,
-                              tiendaNombre:  auth.tiendaNombre,
-                              empresaNombre: auth.empresaNombre,
-                              cajaAbierta:   _esHoy && caja.sesionActiva != null,
-                            ),
-                            const SizedBox(height: 24),
-                          ],
-                          _buildKPIRow(rep, totalGastos, caja, sesionCard),
-                          const SizedBox(height: 10),
-                          _buildStatsChips(rep),
-                          const SizedBox(height: 16),
-                          _buildMetodosPago(rep),
-                          const SizedBox(height: 24),
-                          _buildMainGrid(rep, contab),
-                          const SizedBox(height: 24),
-                        ],
-                      ),
+                  : LayoutBuilder(
+                      builder: (_, lbc) {
+                        final contentW = lbc.maxWidth - 48;
+                        return SingleChildScrollView(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (sesionCard != null) ...[
+                                ReporteTurnoCard(
+                                  sesion:        sesionCard,
+                                  fecha:         _fechaStr,
+                                  tiendaNombre:  auth.tiendaNombre,
+                                  empresaNombre: auth.empresaNombre,
+                                  cajaAbierta:   _esHoy && caja.sesionActiva != null,
+                                ),
+                                const SizedBox(height: 24),
+                              ],
+                              _buildKPIRow(rep, totalGastos, caja, sesionCard, contentW),
+                              const SizedBox(height: 16),
+                              _buildMetaVenta(rep),
+                              const SizedBox(height: 10),
+                              _buildStatsChips(rep),
+                              const SizedBox(height: 16),
+                              _buildMetodosPago(rep),
+                              const SizedBox(height: 24),
+                              _buildMainGrid(rep, contab, contentW),
+                              const SizedBox(height: 24),
+                            ],
+                          ),
+                        );
+                      },
                     ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ── WhatsApp ───────────────────────────────────────────────
+
+  Future<void> _enviarWhatsApp(
+    ReportesProvider rep,
+    AuthProvider auth,
+    ContabilidadProvider contab,
+  ) async {
+    final numero = context.read<ConfigProvider>().whatsappAdmin.trim();
+    if (numero.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Configura el número WhatsApp del admin en Configuración → General'),
+        backgroundColor: Color(0xFF374151),
+        behavior: SnackBarBehavior.floating,
+      ));
+      return;
+    }
+
+    // Mostrar indicador mientras se genera el PDF
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Row(children: [
+        SizedBox(width: 16, height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+        SizedBox(width: 12),
+        Text('Generando PDF…'),
+      ]),
+      duration: Duration(seconds: 10),
+      backgroundColor: Color(0xFF374151),
+      behavior: SnackBarBehavior.floating,
+    ));
+
+    final List<Gasto> gastos = contab.gastos;
+    File? archivo;
+    try {
+      archivo = await ReportePdfService.generarReporteDia(
+        rep:           rep,
+        fecha:         _fechaStr,
+        tiendaNombre:  auth.tiendaNombre,
+        empresaNombre: auth.empresaNombre,
+        gastos:        gastos,
+        soloGuardar:   true,
+      );
+    } catch (_) {}
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+    if (archivo == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('No se pudo generar el PDF'),
+        backgroundColor: Color(0xFFBE123C),
+        behavior: SnackBarBehavior.floating,
+      ));
+      return;
+    }
+
+    await _mostrarDialogoWhatsApp(context, archivo.path, numero);
+  }
+
+  static Future<void> _mostrarDialogoWhatsApp(
+    BuildContext ctx,
+    String rutaPdf,
+    String numero,
+  ) async {
+    await showDialog(
+      context: ctx,
+      builder: (dCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Row(children: [
+          Icon(Icons.chat_rounded, color: Color(0xFF16A34A)),
+          SizedBox(width: 8),
+          Text('Enviar por WhatsApp',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'El PDF fue guardado. Para enviarlo por WhatsApp:',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 10),
+            const Text('1. Abre la carpeta y copia el archivo.',
+                style: TextStyle(fontSize: 12, color: Color(0xFF374151))),
+            const Text('2. En WhatsApp adjunta el PDF al chat del admin.',
+                style: TextStyle(fontSize: 12, color: Color(0xFF374151))),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3F4F6),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                rutaPdf,
+                style: const TextStyle(fontSize: 10, color: Color(0xFF6B7280)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          if (!kIsWeb)
+            TextButton.icon(
+              onPressed: () async {
+                await Process.run('explorer.exe', ['/select,', rutaPdf]);
+              },
+              icon: const Icon(Icons.folder_open_outlined, size: 16),
+              label: const Text('Abrir carpeta'),
+              style: TextButton.styleFrom(foregroundColor: const Color(0xFF3730A3)),
+            ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.pop(dCtx);
+              final uri = Uri.parse('https://wa.me/$numero');
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            },
+            icon: const Icon(Icons.chat_rounded, size: 16),
+            label: const Text('Abrir WhatsApp'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF16A34A),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -258,86 +403,99 @@ class _ReportesScreenState extends State<ReportesScreen> {
     AuthProvider auth,
     ContabilidadProvider contab,
   ) {
+    final actions = Row(mainAxisSize: MainAxisSize.min, children: [
+      // Date toggle
+      Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: _kOutlineVar),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        padding: const EdgeInsets.all(4),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          _shiftBtn('Hoy', _esHoy, () {
+            setState(() => _fecha = DateTime.now());
+            _cargar();
+          }),
+          _shiftBtn(
+            _esHoy ? 'Otra fecha' : _fechaStr,
+            !_esHoy,
+            _seleccionarFecha,
+          ),
+        ]),
+      ),
+      const SizedBox(width: 8),
+      // WhatsApp
+      Tooltip(
+        message: 'Enviar reporte al admin por WhatsApp',
+        child: OutlinedButton(
+          onPressed: rep.cargando ? null : () => _enviarWhatsApp(rep, auth, contab),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFF16A34A),
+            side: const BorderSide(color: Color(0xFF86EFAC)),
+            backgroundColor: const Color(0xFFF0FDF4),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            minimumSize: const Size(42, 42),
+            maximumSize: const Size(42, 42),
+            padding: EdgeInsets.zero,
+          ),
+          child: const Icon(Icons.chat_rounded, size: 20),
+        ),
+      ),
+      const SizedBox(width: 8),
+      // Refresh
+      Tooltip(
+        message: 'Actualizar',
+        child: OutlinedButton(
+          onPressed: rep.cargando ? null : _cargar,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: _kOnSurfVar,
+            side: BorderSide(color: _kOutlineVar),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            minimumSize: const Size(42, 42),
+            maximumSize: const Size(42, 42),
+            padding: EdgeInsets.zero,
+          ),
+          child: rep.cargando
+              ? const SizedBox(width: 16, height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: _kSecondary))
+              : const Icon(Icons.refresh_rounded, size: 18),
+        ),
+      ),
+    ]);
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+      padding: const EdgeInsets.fromLTRB(24, 14, 24, 14),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border(bottom: BorderSide(color: _kOutlineVar)),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // Title
+      child: LayoutBuilder(builder: (_, c) {
+        final isNarrow = c.maxWidth < 560;
+        if (isNarrow) {
+          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Reporte de turno',
+                style: GoogleFonts.inter(
+                    fontSize: 18, fontWeight: FontWeight.w600, color: _kPrimary)),
+            const SizedBox(height: 10),
+            actions,
+          ]);
+        }
+        return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Reporte de turno',
-                    style: GoogleFonts.inter(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
-                        color: _kPrimary)),
-                const SizedBox(height: 2),
-                Text(
-                  'Revisa tus ventas del día y cierra tu turno.',
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Reporte de turno',
                   style: GoogleFonts.inter(
-                      fontSize: 13, color: _kOnSurfVar),
-                ),
-              ],
-            ),
+                      fontSize: 20, fontWeight: FontWeight.w600, color: _kPrimary)),
+              const SizedBox(height: 2),
+              Text('Revisa tus ventas del día y cierra tu turno.',
+                  style: GoogleFonts.inter(fontSize: 13, color: _kOnSurfVar)),
+            ]),
           ),
           const SizedBox(width: 16),
-
-          // Date toggle
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: _kOutlineVar),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            padding: const EdgeInsets.all(4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _shiftBtn('Hoy', _esHoy, () {
-                  setState(() => _fecha = DateTime.now());
-                  _cargar();
-                }),
-                _shiftBtn(
-                  _esHoy ? 'Otra fecha' : _fechaStr,
-                  !_esHoy,
-                  _seleccionarFecha,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // Refresh
-          Tooltip(
-            message: 'Actualizar',
-            child: OutlinedButton(
-              onPressed: rep.cargando ? null : _cargar,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: _kOnSurfVar,
-                side: BorderSide(color: _kOutlineVar),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-                minimumSize: const Size(42, 42),
-                maximumSize: const Size(42, 42),
-                padding: EdgeInsets.zero,
-              ),
-              child: rep.cargando
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: _kSecondary))
-                  : const Icon(Icons.refresh_rounded, size: 18),
-            ),
-          ),
-        ],
-      ),
+          actions,
+        ]);
+      }),
     );
   }
 
@@ -367,48 +525,47 @@ class _ReportesScreenState extends State<ReportesScreen> {
 
   Widget _buildKPIRow(
       ReportesProvider rep, double totalGastos, CajaProvider caja,
-      SesionCaja? sesionCard) {
-    // sesionCard = sesionActiva | ultimaSesionCerrada (hoy) | _sesionHistorial (pasado)
+      SesionCaja? sesionCard, double availableWidth) {
     final sesion   = sesionCard;
     final ventas   = sesion?.ventasTotal ?? rep.totalDia;
-    // gastosTotalSesion solo está disponible cuando la sesión está activa ahora mismo
     final gastos   = (_esHoy && caja.sesionActiva != null)
         ? caja.gastosTotalSesion
         : totalGastos;
     final esperado = sesion?.montoEsperado ?? 0.0;
 
-    return Row(
-      children: [
-        _kpiCard(
-          'VENTAS DEL TURNO',
-          '\$${fmtNum(ventas)}',
-          Icons.trending_up_rounded,
-          _kSecondary,
-        ),
-        const SizedBox(width: 24),
-        _kpiCard(
-          'GASTOS DEL TURNO',
-          '\$${fmtNum(gastos)}',
-          Icons.payments_rounded,
-          _kError,
-        ),
-        const SizedBox(width: 24),
-        _kpiCard(
-          'ABONOS HOY',
-          '\$${fmtNum(rep.totalAbonos)}',
-          Icons.account_balance_wallet_rounded,
-          const Color(0xFF76859B),
-        ),
-        const SizedBox(width: 24),
-        _kpiCard(
-          'EFECTIVO ESPERADO',
-          sesion != null ? '\$${fmtNum(esperado)}' : '—',
-          Icons.check_circle_outline_rounded,
-          _kSecondary,
-          highlight: sesion != null,
-        ),
-      ],
-    );
+    final cards = [
+      _kpiCard('VENTAS DEL TURNO', '\$${fmtNum(ventas)}',
+          Icons.trending_up_rounded, _kSecondary),
+      _kpiCard('GASTOS DEL TURNO', '\$${fmtNum(gastos)}',
+          Icons.payments_rounded, _kError),
+      _kpiCard('ABONOS HOY', '\$${fmtNum(rep.totalAbonos)}',
+          Icons.account_balance_wallet_rounded, const Color(0xFF76859B)),
+      _kpiCard(
+        'EFECTIVO ESPERADO',
+        sesion != null ? '\$${fmtNum(esperado)}' : '—',
+        Icons.check_circle_outline_rounded,
+        _kSecondary,
+        highlight: sesion != null,
+      ),
+    ];
+
+    if (availableWidth < 700) {
+      final cardW = (availableWidth - 12) / 2;
+      return Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: cards.map((c) => SizedBox(width: cardW, child: c)).toList(),
+      );
+    }
+    return Row(children: [
+      Expanded(child: cards[0]),
+      const SizedBox(width: 24),
+      Expanded(child: cards[1]),
+      const SizedBox(width: 24),
+      Expanded(child: cards[2]),
+      const SizedBox(width: 24),
+      Expanded(child: cards[3]),
+    ]);
   }
 
   Widget _buildMetodosPago(ReportesProvider rep) {
@@ -488,8 +645,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
     String label, String value, IconData icon, Color iconColor, {
     bool highlight = false,
   }) {
-    return Expanded(
-      child: Container(
+    return Container(
         height: 128,
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
@@ -534,8 +690,194 @@ class _ReportesScreenState extends State<ReportesScreen> {
                     color: highlight ? _kSecondary : _kOnSurface)),
           ],
         ),
+    );
+  }
+
+  // ── Meta de ventas diaria ──────────────────────────────────
+
+  Widget _buildMetaVenta(ReportesProvider rep) {
+    final cfg  = context.watch<ConfigProvider>();
+    final meta = cfg.metaVentaDiaria;
+
+    // Si no hay meta configurada, mostrar solo el botón de configurar
+    if (meta <= 0) {
+      return GestureDetector(
+        onTap: () => _editarMeta(cfg),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.85),
+            border: Border.all(color: _kOutlineVar, style: BorderStyle.solid),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.flag_outlined, size: 16, color: _kOnSurfVar),
+              const SizedBox(width: 8),
+              Text('Configurar meta de ventas del día',
+                  style: GoogleFonts.inter(
+                      fontSize: 13, color: _kOnSurfVar,
+                      fontWeight: FontWeight.w500)),
+              const Spacer(),
+              Icon(Icons.add_rounded, size: 16, color: _kSecondary),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final vendido  = rep.totalDia;
+    final pct      = (vendido / meta).clamp(0.0, 1.0);
+    final superada = vendido >= meta;
+    final pctTexto = '${(pct * 100).toStringAsFixed(0)}%';
+
+    final Color barColor;
+    final Color bgColor;
+    if (superada) {
+      barColor = _kSecondary;
+      bgColor  = _kSecondary.withValues(alpha: 0.06);
+    } else if (pct >= 0.8) {
+      barColor = const Color(0xFF0891B2);   // cyan
+      bgColor  = const Color(0xFFE0F2FE);
+    } else if (pct >= 0.5) {
+      barColor = const Color(0xFFF59E0B);   // amber
+      bgColor  = const Color(0xFFFEF3C7);
+    } else {
+      barColor = const Color(0xFFEF4444);   // red
+      bgColor  = const Color(0xFFFEE2E2);
+    }
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      decoration: BoxDecoration(
+        color: bgColor,
+        border: Border.all(color: barColor.withValues(alpha: 0.25)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                superada ? Icons.emoji_events_rounded : Icons.flag_rounded,
+                size: 15,
+                color: barColor,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                superada ? '¡Meta alcanzada! 🎉' : 'Meta de ventas del día',
+                style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: barColor),
+              ),
+              const Spacer(),
+              Text(pctTexto,
+                  style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: barColor)),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => _editarMeta(cfg),
+                child: Icon(Icons.edit_outlined, size: 15, color: barColor),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: pct,
+              minHeight: 6,
+              backgroundColor: barColor.withValues(alpha: 0.15),
+              valueColor: AlwaysStoppedAnimation<Color>(barColor),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Text('Vendido: \$${fmtNum(vendido)}',
+                  style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: barColor.withValues(alpha: 0.85),
+                      fontWeight: FontWeight.w500)),
+              const Spacer(),
+              Text('Meta: \$${fmtNum(meta)}',
+                  style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: barColor.withValues(alpha: 0.7))),
+            ],
+          ),
+        ],
       ),
     );
+  }
+
+  Future<void> _editarMeta(ConfigProvider cfg) async {
+    final ctrl = TextEditingController(
+      text: cfg.metaVentaDiaria > 0
+          ? cfg.metaVentaDiaria.toStringAsFixed(0)
+          : '',
+    );
+    final result = await showDialog<double>(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Row(children: [
+          Icon(Icons.flag_rounded, color: Color(0xFF006C49)),
+          SizedBox(width: 8),
+          Text('Meta de ventas', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('¿Cuánto quieres vender hoy?',
+                style: TextStyle(fontSize: 13, color: Color(0xFF6B7280))),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                prefixText: '\$ ',
+                hintText: '0',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          if (cfg.metaVentaDiaria > 0)
+            TextButton(
+              onPressed: () => Navigator.pop(dCtx, 0.0),
+              child: const Text('Quitar meta', style: TextStyle(color: Color(0xFFEF4444))),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(dCtx),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final v = double.tryParse(ctrl.text.replaceAll(',', '.'));
+              if (v != null && v >= 0) Navigator.pop(dCtx, v);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF006C49),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+    if (result != null && mounted) {
+      await cfg.guardarMetaVentaDiaria(result);
+    }
   }
 
   // ── Stats chips (ventas, ticket promedio, anuladas) ────────
@@ -596,30 +938,40 @@ class _ReportesScreenState extends State<ReportesScreen> {
   // ── Main grid ──────────────────────────────────────────────
 
   Widget _buildMainGrid(
-      ReportesProvider rep, ContabilidadProvider contab) {
+      ReportesProvider rep, ContabilidadProvider contab, double availableWidth) {
+    final sidebar = Column(
+      children: [
+        _buildExpensesSidebar(contab),
+        const SizedBox(height: 24),
+        _buildDepositsSidebar(rep),
+        if (rep.topProductos.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          _buildTopProductosSidebar(rep),
+        ],
+        if (rep.numDevoluciones > 0) ...[
+          const SizedBox(height: 24),
+          _buildDevolucionesSidebar(rep),
+        ],
+      ],
+    );
+
+    if (availableWidth < 700) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSalesTable(rep),
+          const SizedBox(height: 24),
+          sidebar,
+        ],
+      );
+    }
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(flex: 8, child: _buildSalesTable(rep)),
         const SizedBox(width: 24),
-        Expanded(
-          flex: 4,
-          child: Column(
-            children: [
-              _buildExpensesSidebar(contab),
-              const SizedBox(height: 24),
-              _buildDepositsSidebar(rep),
-              if (rep.topProductos.isNotEmpty) ...[
-                const SizedBox(height: 24),
-                _buildTopProductosSidebar(rep),
-              ],
-              if (rep.numDevoluciones > 0) ...[
-                const SizedBox(height: 24),
-                _buildDevolucionesSidebar(rep),
-              ],
-            ],
-          ),
-        ),
+        Expanded(flex: 4, child: sidebar),
       ],
     );
   }
@@ -986,25 +1338,253 @@ class _ReportesScreenState extends State<ReportesScreen> {
           ? _emptySideMsg('Sin depósitos hoy')
           : Column(
               children: rep.abonos.take(6).map((a) {
-                final cliente = a['cliente_nombre']
-                        ?.toString() ??
-                    'Cliente';
+                final cliente  = a['cliente_nombre']?.toString() ?? 'Cliente';
                 final sepIdRaw = a['separado_id'];
-                final sepRef = (sepIdRaw != null &&
-                        sepIdRaw.toString() != 'null')
-                    ? 'REF: #SEP-$sepIdRaw'
+                final sepId    = sepIdRaw is int
+                    ? sepIdRaw
+                    : int.tryParse(sepIdRaw?.toString() ?? '');
+                final sepRef   = sepId != null
+                    ? 'SEP-$sepId'
                     : 'Abono directo';
-                final monto = double.tryParse(
-                        a['monto']?.toString() ?? '0') ??
-                    0;
+                final monto    = double.tryParse(
+                        a['monto']?.toString() ?? '0') ?? 0;
+                final metodo   = a['metodo_pago']?.toString() ?? 'efectivo';
+                final emp      = a['empleado_nombre']?.toString() ?? '';
+                final createdAt = a['created_at']?.toString();
+
                 return _sideItem(
-                  title: cliente,
-                  sub: sepRef,
-                  valueText: '+\$${fmtNum(monto)}',
+                  title:      cliente,
+                  sub:        sepRef,
+                  valueText:  '+\$${fmtNum(monto)}',
                   valueColor: _kSecondary,
+                  onTap: () => _verDetalleAbono(
+                    cliente:   cliente,
+                    sepId:     sepId,
+                    monto:     monto,
+                    metodo:    metodo,
+                    empNombre: emp,
+                    createdAt: createdAt,
+                  ),
                 );
               }).toList(),
             ),
+    );
+  }
+
+  Future<void> _verDetalleAbono({
+    required String  cliente,
+    required int?    sepId,
+    required double  monto,
+    required String  metodo,
+    required String  empNombre,
+    required String? createdAt,
+  }) async {
+    List<File> recibos = [];
+    if (sepId != null) {
+      final todos = await DocumentoService.instance.listar(TipoDocumento.abono);
+      recibos = todos.where((f) => f.path.contains('abono_${sepId}_')).toList();
+    }
+
+    if (!mounted) return;
+
+    final metodoLabel = switch (metodo) {
+      'tarjeta'       => 'Tarjeta',
+      'transferencia' => 'Transferencia',
+      _               => 'Efectivo',
+    };
+
+    String fechaStr = '—';
+    if (createdAt != null) {
+      try {
+        final dt = DateTime.parse(createdAt).toLocal();
+        final h  = dt.hour.toString().padLeft(2, '0');
+        final m  = dt.minute.toString().padLeft(2, '0');
+        final meses = ['', 'Ene','Feb','Mar','Abr','May','Jun',
+                            'Jul','Ago','Sep','Oct','Nov','Dic'];
+        fechaStr = '${dt.day} ${meses[dt.month]} ${dt.year}, $h:$m';
+      } catch (_) {}
+    }
+
+    final fmt = RegExp(r'(\d)(?=(\d{3})+(?!\d))');
+    String fmtM(double v) =>
+        v.toStringAsFixed(0).replaceAllMapped(fmt, (m) => '${m[1]},');
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        contentPadding: EdgeInsets.zero,
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          // Header
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+            decoration: const BoxDecoration(
+              color: Color(0xFFE8FFF4),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+            ),
+            child: Row(children: [
+              Container(
+                width: 44, height: 44,
+                decoration: BoxDecoration(
+                  color: _kSecondary,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.payments_rounded,
+                    color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Detalle de abono',
+                      style: GoogleFonts.inter(
+                          fontSize: 15, fontWeight: FontWeight.w700,
+                          color: _kSecondary)),
+                  if (sepId != null)
+                    Text('SEP-$sepId',
+                        style: GoogleFonts.inter(
+                            fontSize: 12, color: _kSecondary)),
+                ],
+              )),
+              Text('\$${fmtM(monto)}',
+                  style: GoogleFonts.inter(
+                      fontSize: 20, fontWeight: FontWeight.w800,
+                      color: _kSecondary)),
+            ]),
+          ),
+          // Cuerpo
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+            child: Column(children: [
+              _detalleAbonoRow(Icons.person_outline_rounded,  'Cliente',  cliente),
+              _detalleAbonoRow(Icons.credit_card_outlined,   'Método',   metodoLabel),
+              _detalleAbonoRow(Icons.schedule_rounded,       'Fecha',    fechaStr),
+              if (empNombre.isNotEmpty)
+                _detalleAbonoRow(Icons.badge_outlined,       'Empleado', empNombre),
+            ]),
+          ),
+          // Botón PDF
+          if (recibos.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: SizedBox(
+                width: double.infinity, height: 44,
+                child: ElevatedButton.icon(
+                  icon:  const Icon(Icons.picture_as_pdf_rounded, size: 17),
+                  label: Text(
+                    recibos.length == 1
+                        ? 'Ver recibo PDF'
+                        : 'Ver ${recibos.length} recibos PDF',
+                    style: GoogleFonts.inter(
+                        fontWeight: FontWeight.w700, fontSize: 13)),
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    if (recibos.length == 1) {
+                      await Process.run('cmd', ['/c', 'start', '', recibos.first.path]);
+                    } else {
+                      await _abrirListaRecibos(recibos, sepId!);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _kSecondary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: Text('Sin recibo PDF guardado',
+                  style: GoogleFonts.inter(
+                      fontSize: 11, color: _kOutline,
+                      fontStyle: FontStyle.italic),
+                  textAlign: TextAlign.center),
+            ),
+        ]),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cerrar',
+                style: GoogleFonts.inter(color: _kOutline)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detalleAbonoRow(IconData icon, String label, String valor) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(children: [
+          Icon(icon, size: 15, color: _kOutline),
+          const SizedBox(width: 8),
+          Text('$label:',
+              style: GoogleFonts.inter(
+                  fontSize: 12, color: _kOutline,
+                  fontWeight: FontWeight.w600)),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(valor,
+                style: GoogleFonts.inter(
+                    fontSize: 12, color: _kOnSurface,
+                    fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis),
+          ),
+        ]),
+      );
+
+  Future<void> _abrirListaRecibos(List<File> recibos, int sepId) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Recibos SEP-$sepId',
+            style: GoogleFonts.inter(
+                fontSize: 15, fontWeight: FontWeight.w700)),
+        content: SizedBox(
+          width: 320,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount:  recibos.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (_, i) {
+              final f   = recibos[i];
+              final mod = f.lastModifiedSync().toLocal();
+              final h   = mod.hour.toString().padLeft(2, '0');
+              final m   = mod.minute.toString().padLeft(2, '0');
+              final ts  = '${mod.day}/${mod.month}/${mod.year} $h:$m';
+              return ListTile(
+                dense: true,
+                leading: const Icon(Icons.picture_as_pdf_rounded,
+                    color: Color(0xFF006C49), size: 20),
+                title: Text('Abono ${i + 1}',
+                    style: GoogleFonts.inter(
+                        fontSize: 13, fontWeight: FontWeight.w600)),
+                subtitle: Text(ts,
+                    style: GoogleFonts.inter(
+                        fontSize: 11, color: _kOutline)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await Process.run('cmd', ['/c', 'start', '', f.path]);
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cerrar',
+                style: GoogleFonts.inter(color: _kOutline)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1065,14 +1645,14 @@ class _ReportesScreenState extends State<ReportesScreen> {
   }
 
   Widget _sideItem({
-    required String title,
-    required String sub,
-    required String valueText,
-    required Color valueColor,
+    required String   title,
+    required String   sub,
+    required String   valueText,
+    required Color    valueColor,
+    VoidCallback?     onTap,
   }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-          vertical: 6, horizontal: 4),
+    final row = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
       child: Row(
         children: [
           Expanded(
@@ -1100,8 +1680,20 @@ class _ReportesScreenState extends State<ReportesScreen> {
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                   color: valueColor)),
+          if (onTap != null) ...[
+            const SizedBox(width: 4),
+            const Icon(Icons.chevron_right_rounded, size: 14,
+                color: Color(0xFFC6C6CD)),
+          ],
         ],
       ),
+    );
+
+    if (onTap == null) return row;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: row,
     );
   }
 

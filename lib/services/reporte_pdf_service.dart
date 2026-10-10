@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -9,12 +10,13 @@ import 'documento_service.dart';
 
 
 class ReportePdfService {
-  static Future<void> generarReporteDia({
+  static Future<File?> generarReporteDia({
     required ReportesProvider rep,
     required String fecha,
     required String tiendaNombre,
     required String empresaNombre,
     List<Gasto> gastos = const [],
+    bool soloGuardar = false,
   }) async {
     final pdf        = pw.Document();
     final font       = await PdfGoogleFonts.poppinsRegular();
@@ -70,14 +72,20 @@ class ReportePdfService {
     );
 
     final bytes = await pdf.save();
-    unawaited(DocumentoService.instance.guardarReporte(
-      bytes: bytes,
-      nombre: fecha,           // guardarReporte ya antepone 'reporte_'
-    ));
-    await Printing.layoutPdf(
-      onLayout: (_) async => bytes,
-      name: 'Reporte_$fecha.pdf',
-    );
+    File? archivo;
+    try {
+      archivo = await DocumentoService.instance.guardarReporte(
+        bytes: bytes,
+        nombre: fecha,
+      );
+    } catch (_) {}
+    if (!soloGuardar) {
+      await Printing.layoutPdf(
+        onLayout: (_) async => bytes,
+        name: 'Reporte_$fecha.pdf',
+      );
+    }
+    return archivo;
   }
 
 
@@ -878,7 +886,7 @@ class ReportePdfService {
 
   // ── Cierre de turno (cajero) ───────────────────────
 
-  static Future<void> generarCierreTurno({
+  static Future<File?> generarCierreTurno({
     required dynamic sesion,          // SesionCaja
     required String fecha,
     required String tiendaNombre,
@@ -886,6 +894,7 @@ class ReportePdfService {
     required Map<String, double> metodosPago,
     required List<Map<String, dynamic>> gastosSesion,
     required double totalGastos,
+    bool soloGuardar = false,
   }) async {
     final pdf        = pw.Document();
     final font       = await PdfGoogleFonts.poppinsRegular();
@@ -1115,14 +1124,20 @@ class ReportePdfService {
     );
 
     final bytes = await pdf.save();
-    unawaited(DocumentoService.instance.guardarReporte(
-      bytes: bytes,
-      nombre: 'cierre_turno_$fecha',   // → reporte_cierre_turno_YYYY-MM-DD.pdf
-    ));
-    await Printing.layoutPdf(
-      onLayout: (_) async => bytes,
-      name: 'Cierre_turno_$fecha.pdf',
-    );
+    File? archivo;
+    try {
+      archivo = await DocumentoService.instance.guardarReporte(
+        bytes: bytes,
+        nombre: 'cierre_turno_$fecha',
+      );
+    } catch (_) {}
+    if (!soloGuardar) {
+      await Printing.layoutPdf(
+        onLayout: (_) async => bytes,
+        name: 'Cierre_turno_$fecha.pdf',
+      );
+    }
+    return archivo;
   }
 
   static pw.Widget _turnoItem(

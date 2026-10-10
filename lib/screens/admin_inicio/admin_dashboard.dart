@@ -159,14 +159,12 @@ class AdminDashboard extends StatefulWidget {
 }
 
 class _AdminDashboardState extends State<AdminDashboard> {
+  final _scaffoldKey  = GlobalKey<ScaffoldState>();
   String _activeScreen = 'dashboard';
-  bool _sidebarOpen = true;
 
   void _navigate(String screen) {
     setState(() => _activeScreen = screen);
-    if (MediaQuery.of(context).size.width < 900) {
-      setState(() => _sidebarOpen = false);
-    }
+    _scaffoldKey.currentState?.closeDrawer();
   }
 
   Widget _buildScreenByKey(String screen, String rol, String userName) {
@@ -203,11 +201,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final w = MediaQuery.of(context).size.width;
+    final w         = MediaQuery.of(context).size.width;
     final isDesktop = w >= 1024;
-    final isTablet = w >= 768 && w < 1024;
-    final auth = context.watch<AuthProvider>();
-    final navItems = _buildNavItems(auth.rol);
+    final auth      = context.watch<AuthProvider>();
+    final navItems  = _buildNavItems(auth.rol);
 
     if (!navItems.any((n) => n.screen == _activeScreen) && navItems.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -215,18 +212,45 @@ class _AdminDashboardState extends State<AdminDashboard> {
       });
     }
 
+    final sidebar = _Sidebar(
+      activeScreen: _activeScreen,
+      onNavigate:   _navigate,
+      userName:     widget.userName,
+      userRole:     widget.userRole,
+      navItems:     navItems,
+    );
+
+    final mainContent = Column(children: [
+      _TopBar(
+        branch:      widget.branch,
+        userName:    widget.userName,
+        userRole:    widget.userRole,
+        showMenuBtn: !isDesktop,
+        onMenuTap:   () => _scaffoldKey.currentState?.openDrawer(),
+      ),
+      Expanded(child: _buildScreenByKey(_activeScreen, auth.rol, widget.userName)),
+    ]);
+
+    if (isDesktop) {
+      return Scaffold(
+        key:             _scaffoldKey,
+        backgroundColor: _C.bg,
+        body: Row(children: [
+          SizedBox(width: 210, child: sidebar),
+          Expanded(child: mainContent),
+        ]),
+      );
+    }
+
     return Scaffold(
+      key:             _scaffoldKey,
       backgroundColor: _C.bg,
-      body: Row(children: [
-        if (isDesktop || (isTablet && _sidebarOpen))
-          _Sidebar(activeScreen: _activeScreen, onNavigate: _navigate, userName: widget.userName, userRole: widget.userRole, navItems: navItems),
-        Expanded(
-          child: Column(children: [
-            _TopBar(branch: widget.branch, userName: widget.userName, userRole: widget.userRole, showMenuBtn: !isDesktop, onMenuTap: () => setState(() => _sidebarOpen = !_sidebarOpen)),
-            Expanded(child: _buildScreenByKey(_activeScreen, auth.rol, widget.userName)),
-          ]),
-        ),
-      ]),
+      drawer: Drawer(
+        width:           280,
+        backgroundColor: _C.sidebar,
+        child:           sidebar,
+      ),
+      body: mainContent,
     );
   }
 }
@@ -264,7 +288,7 @@ class _Sidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 240,
+      width: double.infinity,
       color: _C.sidebar,
       child: Column(children: [
         Container(
@@ -346,22 +370,40 @@ class _TopBar extends StatelessWidget {
   const _TopBar({required this.branch, required this.userName, required this.userRole, required this.showMenuBtn, required this.onMenuTap});
   @override
   Widget build(BuildContext context) {
+    final w        = MediaQuery.of(context).size.width;
+    final isNarrow = w < 700;
     return Container(
       height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: EdgeInsets.only(left: isNarrow ? 12 : 24, right: isNarrow ? 8 : 16),
       decoration: BoxDecoration(color: _C.surface, border: Border(bottom: BorderSide(color: _C.border))),
       child: Row(children: [
-        if (showMenuBtn) ...[IconButton(icon: const Icon(Icons.menu_rounded), onPressed: onMenuTap, color: _C.textSecond, padding: EdgeInsets.zero), const SizedBox(width: 8)],
-        Text('Consola Central', style: GoogleFonts.inter(color: _C.textFaint, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.0)),
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text('•', style: TextStyle(color: _C.border, fontSize: 14))),
-        Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: _C.bg, borderRadius: BorderRadius.circular(20), border: Border.all(color: _C.border)), child: Text(branch, style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 11, fontWeight: FontWeight.w600))),
+        if (showMenuBtn) ...[
+          IconButton(icon: const Icon(Icons.menu_rounded), onPressed: onMenuTap, color: _C.textSecond, padding: EdgeInsets.zero),
+          const SizedBox(width: 6),
+        ],
+        if (!isNarrow) ...[
+          Text('Consola Central', style: GoogleFonts.inter(color: _C.textFaint, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.0)),
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text('•', style: TextStyle(color: _C.border, fontSize: 14))),
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(color: _C.bg, borderRadius: BorderRadius.circular(20), border: Border.all(color: _C.border)),
+              child: Text(branch, style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 11, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+            ),
+          ),
+        ] else
+          Flexible(
+            child: Text(branch, style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+          ),
         const Spacer(),
-        Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text(userName, style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 12, fontWeight: FontWeight.w600)),
-          Text(userRole, style: GoogleFonts.inter(color: _C.greenDark, fontSize: 10, fontWeight: FontWeight.w700)),
-        ]),
-        const SizedBox(width: 10),
+        if (!isNarrow)
+          Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text(userName, style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 12, fontWeight: FontWeight.w600)),
+            Text(userRole, style: GoogleFonts.inter(color: _C.greenDark, fontSize: 10, fontWeight: FontWeight.w700)),
+          ]),
+        SizedBox(width: isNarrow ? 8 : 10),
         Container(width: 36, height: 36, decoration: BoxDecoration(color: _C.greenLight, borderRadius: BorderRadius.circular(18)), child: Center(child: Text(userName[0], style: GoogleFonts.inter(color: _C.greenDark, fontWeight: FontWeight.w800, fontSize: 14)))),
+        const SizedBox(width: 4),
       ]),
     );
   }
@@ -517,11 +559,12 @@ class _DashboardBodyState extends State<_DashboardBody> {
       );
     }).toList();
 
-    final w      = MediaQuery.of(context).size.width;
-    final isWide = w >= 1100;
+    final w        = MediaQuery.of(context).size.width;
+    final isWide   = w >= 1100;
+    final isNarrow = w < 700;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(28),
+      padding: EdgeInsets.all(isNarrow ? 16 : 28),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
         // Banner
@@ -532,9 +575,8 @@ class _DashboardBodyState extends State<_DashboardBody> {
           child: Stack(children: [
             Positioned(right: -20, top: -20, child: Icon(Icons.point_of_sale_rounded, size: 140, color: Colors.white.withOpacity(0.04))),
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
+              Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, runSpacing: 8, children: [
                 Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: _C.green, borderRadius: BorderRadius.circular(4)), child: Text('PERSPECTIVA GENERAL DEL NEGOCIO', style: GoogleFonts.inter(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 1.2))),
-                const Spacer(),
                 _PeriodToggle(value: _periodo, onChange: (p) { setState(() => _periodo = p); _cargar(); }),
               ]),
               const SizedBox(height: 12),
@@ -553,8 +595,8 @@ class _DashboardBodyState extends State<_DashboardBody> {
 
         // KPIs
         LayoutBuilder(builder: (_, c) {
-          final cols = c.maxWidth >= 900 ? 4 : c.maxWidth >= 600 ? 2 : 1;
-          return GridView.count(crossAxisCount: cols, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: c.maxWidth >= 900 ? 1.65 : 1.9, children: kpis.map((k) => _KPICard(kpi: k)).toList());
+          final cols = c.maxWidth >= 1000 ? 4 : c.maxWidth >= 560 ? 2 : 1;
+          return GridView.count(crossAxisCount: cols, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: c.maxWidth >= 1000 ? 1.7 : 2.1, children: kpis.map((k) => _KPICard(kpi: k)).toList());
         }),
         const SizedBox(height: 24),
 

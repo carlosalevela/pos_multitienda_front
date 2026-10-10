@@ -32,6 +32,7 @@ class _EmpleadoFormDialogState extends State<EmpleadoFormDialog> {
 
   bool _obscurePass = true;
   bool _guardando = false;
+  String? _error;
   String _rolSelected = 'cajero';
 
   int? _empresaSelected;
@@ -58,7 +59,7 @@ class _EmpleadoFormDialogState extends State<EmpleadoFormDialog> {
       _apellidoCtrl.text = e['apellido'] ?? '';
       _cedulaCtrl.text = e['cedula'] ?? '';
       _emailCtrl.text = e['email'] ?? '';
-      _rolSelected = (e['rol'] == 'admin') ? 'supervisor' : (e['rol'] ?? 'cajero');
+      _rolSelected = e['rol'] ?? 'cajero';
 
       final empresa = e['empresa'];
       if (empresa is int) {
@@ -148,6 +149,24 @@ class _EmpleadoFormDialogState extends State<EmpleadoFormDialog> {
             child: Column(
               children: [
                 const SizedBox(height: 8),
+
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF1F2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFBE123C).withOpacity(0.3)),
+                      ),
+                      child: Row(children: [
+                        const Icon(Icons.error_outline_rounded, color: Color(0xFFBE123C), size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(_error!, style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFFBE123C)))),
+                      ]),
+                    ),
+                  ),
 
                 Row(
                   children: [
@@ -240,6 +259,7 @@ class _EmpleadoFormDialogState extends State<EmpleadoFormDialog> {
                     items: const [
                       DropdownMenuItem(value: 'cajero', child: Text('Cajero')),
                       DropdownMenuItem(value: 'supervisor', child: Text('Supervisor')),
+                      DropdownMenuItem(value: 'admin', child: Text('Administrador')),
                     ],
                     onChanged: (v) => setState(() => _rolSelected = v!),
                   ),
@@ -428,8 +448,11 @@ class _EmpleadoFormDialogState extends State<EmpleadoFormDialog> {
     try {
       await widget.onGuardar(data);
       if (mounted) Navigator.pop(context);
-    } catch (_) {
-      if (mounted) setState(() => _guardando = false);
+    } catch (e) {
+      if (mounted) setState(() {
+        _guardando = false;
+        _error = e.toString().replaceFirst('Exception: ', '');
+      });
     }
   }
 }

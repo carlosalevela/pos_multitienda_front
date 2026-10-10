@@ -47,6 +47,7 @@ class _CajeroDashboardState extends State<CajeroDashboard> {
   final _ventaSvc   = VentaService();
 
   bool                 _loading        = true;
+  String?              _error;
   List<Separado>       _separados      = [];
   Map<String, dynamic> _alertas        = {'vencidos': [], 'por_vencer': [], 'total_alertas': 0};
   int                  _creditosCount  = 0;
@@ -87,7 +88,9 @@ class _CajeroDashboardState extends State<CajeroDashboard> {
           _creditosCount = creditos.length;
           _creditosTotal = creditos.fold(0.0, (s, v) => s + (double.tryParse(v['total']?.toString() ?? '0') ?? 0));
         });
-      } catch (_) {}
+      } catch (e) {
+        if (mounted) setState(() => _error = 'Error al cargar datos. Verifica tu conexión.');
+      }
     }
 
     if (mounted) setState(() => _loading = false);
@@ -124,83 +127,114 @@ class _CajeroDashboardState extends State<CajeroDashboard> {
         ? '${duracion.inHours}h ${duracion.inMinutes.remainder(60)}m de turno'
         : null;
 
+    final w        = MediaQuery.of(context).size.width;
+    final isNarrow = w < 500;
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isNarrow ? 14 : 24),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+
+        if (_error != null)
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: _C.roseLight,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _C.rose.withOpacity(0.3)),
+            ),
+            child: Row(children: [
+              const Icon(Icons.error_outline_rounded, color: _C.rose, size: 16),
+              const SizedBox(width: 10),
+              Expanded(child: Text(_error!, style: GoogleFonts.inter(color: _C.rose, fontSize: 12, fontWeight: FontWeight.w600))),
+              GestureDetector(
+                onTap: () => setState(() => _error = null),
+                child: const Icon(Icons.refresh_rounded, size: 16, color: _C.rose),
+              ),
+            ]),
+          ),
 
         // ── Banner bienvenida ────────────────────────────────────
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          padding: EdgeInsets.symmetric(horizontal: isNarrow ? 16 : 24, vertical: isNarrow ? 16 : 20),
           decoration: BoxDecoration(color: _C.greenDark, borderRadius: BorderRadius.circular(14)),
           child: Stack(children: [
             Positioned(right: -10, top: -10,
               child: Icon(Icons.point_of_sale_rounded, size: 110,
                   color: Colors.white.withOpacity(0.05))),
-            Row(children: [
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Hola, $nombre',
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(child: Text('Hola, $nombre',
                   style: GoogleFonts.inter(
-                      color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 5),
-                if (cajaAbierta && horaApertura != null) ...[
-                  Row(children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        const Icon(Icons.circle, size: 7, color: Color(0xFF61DDAA)),
-                        const SizedBox(width: 5),
-                        Text('Caja abierta desde $horaApertura',
-                          style: GoogleFonts.inter(
-                              color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
-                      ]),
+                      color: Colors.white,
+                      fontSize: isNarrow ? 17 : 20,
+                      fontWeight: FontWeight.w800))),
+                GestureDetector(
+                  onTap: _loading ? null : _cargar,
+                  child: Container(
+                    width: 34, height: 34,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    if (durStr != null) ...[
-                      const SizedBox(width: 8),
-                      Text(durStr,
-                        style: GoogleFonts.inter(
-                            color: Colors.white.withOpacity(0.55), fontSize: 11)),
-                    ],
-                  ]),
-                ] else
-                  Text('No tienes una caja abierta aún',
-                    style: GoogleFonts.inter(
-                        color: Colors.white.withOpacity(0.65), fontSize: 12.5)),
-              ])),
-              const SizedBox(width: 12),
-              GestureDetector(
-                onTap: _loading ? null : _cargar,
-                child: Container(
-                  width: 36, height: 36,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(8),
+                    child: _loading
+                      ? const Padding(
+                          padding: EdgeInsets.all(9),
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.refresh_rounded, size: 17, color: Colors.white),
                   ),
-                  child: _loading
-                    ? const Padding(
-                        padding: EdgeInsets.all(9),
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.refresh_rounded, size: 18, color: Colors.white),
                 ),
-              ),
-              const SizedBox(width: 10),
-              ElevatedButton.icon(
-                onPressed: () => widget.onNavigate('pos'),
-                icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
-                label: const Text('Nueva Venta'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _C.green,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  textStyle: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13),
-                ),
-              ),
+                const SizedBox(width: 8),
+                isNarrow
+                  ? GestureDetector(
+                      onTap: () => widget.onNavigate('pos'),
+                      child: Container(
+                        width: 34, height: 34,
+                        decoration: BoxDecoration(color: _C.green, borderRadius: BorderRadius.circular(8)),
+                        child: const Icon(Icons.add_shopping_cart_rounded, size: 17, color: Colors.white),
+                      ),
+                    )
+                  : ElevatedButton.icon(
+                      onPressed: () => widget.onNavigate('pos'),
+                      icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
+                      label: const Text('Nueva Venta'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _C.green,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        textStyle: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13),
+                      ),
+                    ),
+              ]),
+              const SizedBox(height: 6),
+              if (cajaAbierta && horaApertura != null) ...[
+                Wrap(spacing: 8, children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.circle, size: 7, color: Color(0xFF61DDAA)),
+                      const SizedBox(width: 5),
+                      Text('Caja abierta desde $horaApertura',
+                        style: GoogleFonts.inter(
+                            color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                    ]),
+                  ),
+                  if (durStr != null)
+                    Text(durStr,
+                      style: GoogleFonts.inter(
+                          color: Colors.white.withOpacity(0.55), fontSize: 11)),
+                ]),
+              ] else
+                Text('No tienes una caja abierta aún',
+                  style: GoogleFonts.inter(
+                      color: Colors.white.withOpacity(0.65), fontSize: 12.5)),
             ]),
           ]),
         ),
@@ -258,14 +292,14 @@ class _CajeroDashboardState extends State<CajeroDashboard> {
         // ── KPI Strip ────────────────────────────────────────────
         if (cajaAbierta) ...[
           LayoutBuilder(builder: (_, c) {
-            final cols = c.maxWidth >= 800 ? 4 : 2;
+            final cols = c.maxWidth >= 900 ? 4 : 2;
             return GridView.count(
               crossAxisCount: cols,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
-              childAspectRatio: cols == 4 ? 1.7 : 1.85,
+              childAspectRatio: cols == 4 ? 1.6 : 1.5,
               children: [
                 _KpiCard(
                   title: 'Ventas del Turno',
@@ -343,7 +377,7 @@ class _CajeroDashboardState extends State<CajeroDashboard> {
 
         // ── Fila inferior ────────────────────────────────────────
         LayoutBuilder(builder: (_, c) {
-          final wide = c.maxWidth >= 800;
+          final wide = c.maxWidth >= 860;
 
           final separadosCard = _SeparadosCard(
             separados: separadosPendientes.take(4).toList(),

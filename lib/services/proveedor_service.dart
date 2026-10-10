@@ -35,7 +35,10 @@ class ProveedorService {
       return List<Map<String, dynamic>>.from(data);
     } on DioException catch (e) {
       debugPrint('❌ listarProveedores error: ${e.response?.data}');
-      throw Exception(_extractError(e, 'Error al cargar proveedores'));
+      return [];
+    } catch (e) {
+      debugPrint('❌ listarProveedores error: $e');
+      return [];
     }
   }
 

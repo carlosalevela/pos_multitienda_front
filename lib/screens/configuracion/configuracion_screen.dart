@@ -151,11 +151,12 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
     final config = context.read<ConfigProvider>();
     setState(() => _guardando = true);
     final ok = await config.guardarConfigTienda(_tiendaId, {
-      'moneda_simbolo': _monedaSimboloCtrl.text.trim(),
-      'moneda_codigo':  _monedaCodigoCtrl.text.trim().toUpperCase(),
-      'iva_pct':        double.tryParse(_ivaPctCtrl.text) ?? 0,
-      'metodos_pago':   _metodosPago,
+      'moneda_simbolo':  _monedaSimboloCtrl.text.trim(),
+      'moneda_codigo':   _monedaCodigoCtrl.text.trim().toUpperCase(),
+      'iva_pct':         double.tryParse(_ivaPctCtrl.text) ?? 0,
+      'metodos_pago':    _metodosPago,
     });
+    if (!mounted) return;
     setState(() => _guardando = false);
     _showSnack(ok ? 'Configuración guardada' : config.errorMsg, ok);
   }
@@ -168,6 +169,7 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
       'habilitar_mayoreo': _mayoreoHabilitado,
       'umbral_mayoreo':    umbral,   // null = usa el global de empresa
     });
+    if (!mounted) return;
     setState(() => _guardando = false);
     _showSnack(ok ? 'Configuración tienda guardada' : config.errorMsg, ok);
   }
@@ -184,6 +186,7 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
       manejaM:   _empresaManejaM,
       cantidadM: cantidad,
     );
+    if (!mounted) return;
     setState(() => _guardandoEmpresa = false);
     _showSnack(ok ? 'Configuración de empresa guardada' : config.errorMsg, ok);
   }
@@ -197,6 +200,7 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
       'politica_cancelacion':  _politica,
       'dias_alerta_separados': int.tryParse(_diasAlertaCtrl.text)     ?? 3,
     });
+    if (!mounted) return;
     setState(() => _guardando = false);
     _showSnack(ok ? 'Configuración separados guardada' : config.errorMsg, ok);
   }
@@ -212,6 +216,7 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
       'mensaje_pie':         _mensajePieCtrl.text.trim(),
       'nombre_dispositivo':  _dispositivoCtrl.text.trim(),
     });
+    if (!mounted) return;
     setState(() => _guardando = false);
     _showSnack(ok ? 'Configuración impresión guardada' : config.errorMsg, ok);
   }
@@ -1097,7 +1102,7 @@ class _TabImpresion extends StatelessWidget {
                 ),
                 Text('$copias', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                 IconButton(
-                  onPressed: puedeEditar && copias < 4 ? () => onCopias(copias + 1) : null,
+                  onPressed: puedeEditar && copias < 5 ? () => onCopias(copias + 1) : null,
                   icon: const Icon(Icons.add_circle_outline),
                   color: const Color(0xFF3730A3),
                 ),

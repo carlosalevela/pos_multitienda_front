@@ -115,15 +115,27 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
         const SizedBox(height: 20),
 
         // KPI strip
-        Row(children: [
-          _kpiChip('Total',       '$total',       Icons.people_outline_rounded,      _C.indigo,   _C.indigoLight),
-          const SizedBox(width: 10),
-          _kpiChip('Activos',     '$activos',     Icons.check_circle_outline_rounded, _C.greenDark, _C.greenLight),
-          const SizedBox(width: 10),
-          _kpiChip('Cajeros',     '$cajeros',     Icons.point_of_sale_outlined,       _C.amber,    _C.amberLight),
-          const SizedBox(width: 10),
-          _kpiChip('Supervisores','$supervisores', Icons.manage_accounts_outlined,     _C.purple,   _C.purpleLight),
-        ]),
+        LayoutBuilder(builder: (_, lbc) {
+          final isNarrow = lbc.maxWidth < 500;
+          if (isNarrow) {
+            final chipW = (lbc.maxWidth - 10) / 2;
+            return Wrap(spacing: 10, runSpacing: 10, children: [
+              SizedBox(width: chipW, child: _kpiChip('Total',        '$total',        Icons.people_outline_rounded,       _C.indigo,    _C.indigoLight)),
+              SizedBox(width: chipW, child: _kpiChip('Activos',      '$activos',      Icons.check_circle_outline_rounded, _C.greenDark, _C.greenLight)),
+              SizedBox(width: chipW, child: _kpiChip('Cajeros',      '$cajeros',      Icons.point_of_sale_outlined,       _C.amber,     _C.amberLight)),
+              SizedBox(width: chipW, child: _kpiChip('Supervisores', '$supervisores', Icons.manage_accounts_outlined,     _C.purple,    _C.purpleLight)),
+            ]);
+          }
+          return Row(children: [
+            Expanded(child: _kpiChip('Total',        '$total',        Icons.people_outline_rounded,       _C.indigo,    _C.indigoLight)),
+            const SizedBox(width: 10),
+            Expanded(child: _kpiChip('Activos',      '$activos',      Icons.check_circle_outline_rounded, _C.greenDark, _C.greenLight)),
+            const SizedBox(width: 10),
+            Expanded(child: _kpiChip('Cajeros',      '$cajeros',      Icons.point_of_sale_outlined,       _C.amber,     _C.amberLight)),
+            const SizedBox(width: 10),
+            Expanded(child: _kpiChip('Supervisores', '$supervisores', Icons.manage_accounts_outlined,     _C.purple,    _C.purpleLight)),
+          ]);
+        }),
         const SizedBox(height: 16),
 
         // Search bar
@@ -205,19 +217,17 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
   // ── helpers de UI ──────────────────────────────────────────────────────────
 
   Widget _kpiChip(String label, String value, IconData icon, Color color, Color bg) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(10), border: Border.all(color: color.withOpacity(0.2))),
-        child: Row(children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 8),
-          Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            Text(value, style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, color: color)),
-            Text(label, style: GoogleFonts.inter(fontSize: 10, color: color.withOpacity(0.7), fontWeight: FontWeight.w500)),
-          ]),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(10), border: Border.all(color: color.withOpacity(0.2))),
+      child: Row(children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 8),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          Text(value, style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, color: color)),
+          Text(label, style: GoogleFonts.inter(fontSize: 10, color: color.withOpacity(0.7), fontWeight: FontWeight.w500)),
         ]),
-      ),
+      ]),
     );
   }
 
@@ -320,9 +330,10 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancelar', style: GoogleFonts.inter())),
           ElevatedButton(
             onPressed: () async {
+              final nav = Navigator.of(context);
               final result = await _service.editarEmpleado(e['id'], {'activo': !activo});
-              if (!context.mounted) return;
-              Navigator.pop(context);
+              if (!mounted) return;
+              nav.pop();
               if (result['success'] == true) {
                 setState(() { _successMsg = activo ? 'Empleado desactivado' : 'Empleado activado'; _errorMsg = ''; });
                 await _cargarEmpleados();

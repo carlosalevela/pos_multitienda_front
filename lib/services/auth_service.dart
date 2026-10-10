@@ -58,6 +58,13 @@ class AuthService {
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
 
+    final refresh = prefs.getString('refresh_token') ?? '';
+    if (refresh.isNotEmpty) {
+      try {
+        await ApiClient.instance.post('/auth/logout/', data: {'refresh': refresh});
+      } catch (_) {}
+    }
+
     await prefs.remove('access_token');
     await prefs.remove('refresh_token');
     await prefs.remove('empleado_id');
@@ -73,6 +80,15 @@ class AuthService {
   Future<bool> isLoggedIn() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('access_token') != null;
+  }
+
+  Future<bool> verificarTokenBackend() async {
+    try {
+      await ApiClient.instance.get('/auth/perfil/');
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<Map<String, dynamic>> getUsuarioLocal() async {

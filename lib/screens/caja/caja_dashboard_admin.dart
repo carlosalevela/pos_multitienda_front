@@ -139,10 +139,11 @@ class _CajaDashboardAdminState extends State<CajaDashboardAdmin> {
       ]));
     }
 
+    final isNarrow = MediaQuery.of(context).size.width < 600;
     return Container(
       color: _C.bg,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(28),
+        padding: EdgeInsets.all(isNarrow ? 16 : 28),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           _buildHeader(),
           const SizedBox(height: 24),
@@ -161,23 +162,44 @@ class _CajaDashboardAdminState extends State<CajaDashboardAdmin> {
 
   // ── Header ─────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
-    return Row(children: [
+    final w        = MediaQuery.of(context).size.width;
+    final isNarrow = w < 700;
+
+    final titleBlock = Row(children: [
       Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(color: _C.greenContainer, borderRadius: BorderRadius.circular(10)),
         child: const Icon(Icons.payments_rounded, size: 20, color: _C.green),
       ),
       const SizedBox(width: 12),
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('Control de Caja', style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 20, fontWeight: FontWeight.w700)),
-        Text('Flujo de efectivo, faltantes y cierres por tienda', style: GoogleFonts.inter(color: _C.textFaint, fontSize: 12)),
-      ]),
-      const Spacer(),
+        Text('Flujo de efectivo, faltantes y cierres por tienda',
+          style: GoogleFonts.inter(color: _C.textFaint, fontSize: 12),
+          overflow: TextOverflow.ellipsis),
+      ])),
+    ]);
+
+    final controls = Row(mainAxisSize: MainAxisSize.min, children: [
       if (_tiendas.isNotEmpty) ...[
         _buildStoreSelector(),
         const SizedBox(width: 10),
       ],
       _PeriodToggle(value: _periodo, onChange: (v) { setState(() => _periodo = v); _cargar(); }),
+    ]);
+
+    if (isNarrow) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        titleBlock,
+        const SizedBox(height: 12),
+        controls,
+      ]);
+    }
+
+    return Row(children: [
+      Expanded(child: titleBlock),
+      const SizedBox(width: 12),
+      controls,
     ]);
   }
 
@@ -300,13 +322,22 @@ class _CajaDashboardAdminState extends State<CajaDashboardAdmin> {
       ),
     ];
 
-    return Wrap(spacing: 16, runSpacing: 16, children: kpis.map((k) => _KpiCard(data: k)).toList());
+    return LayoutBuilder(builder: (_, c) {
+      final avail = c.maxWidth;
+      final cardW = avail >= 900 ? (avail - 48) / 4 : avail >= 500 ? (avail - 16) / 2 : avail;
+      return Wrap(
+        spacing: 16, runSpacing: 16,
+        children: kpis.map((k) => SizedBox(width: cardW, child: _KpiCard(data: k))).toList(),
+      );
+    });
   }
 
   // ── Main row: chart left + side cards right ────────────────────────────────
   Widget _buildMainRow() {
-    final w = MediaQuery.of(context).size.width;
-    final isWide = w >= 960;
+    return LayoutBuilder(builder: (_, c) => _buildMainRowInner(c.maxWidth >= 760));
+  }
+
+  Widget _buildMainRowInner(bool isWide) {
     final hasSide = _alertasFaltantes.isNotEmpty || _topCrecimiento.isNotEmpty;
 
     if (_ventasPorTienda.isEmpty && !hasSide) return const SizedBox.shrink();
@@ -361,11 +392,8 @@ class _KpiCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final w = MediaQuery.of(context).size.width;
-    final cardW = w >= 1100 ? (w - 56 - 48) / 4 : w >= 700 ? (w - 56 - 16) / 2 : w - 56.0;
     final up = data.trendUp ?? true;
     return Container(
-      width: cardW,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: _C.surface,

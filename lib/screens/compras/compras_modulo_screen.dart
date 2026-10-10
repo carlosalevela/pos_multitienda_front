@@ -576,14 +576,19 @@ class _ComprasModuloScreenState extends State<ComprasModuloScreen>
   Widget _buildProveedoresTab(ProveedoresProvider prov) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(child: _buildProveedoresTable(prov)),
-          const SizedBox(width: 16),
-          SizedBox(width: 280, child: _buildProveedorPanel(prov)),
-        ],
-      ),
+      child: LayoutBuilder(builder: (_, c) {
+        final mostrarPanel = c.maxWidth >= 760;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: _buildProveedoresTable(prov)),
+            if (mostrarPanel) ...[
+              const SizedBox(width: 16),
+              SizedBox(width: 280, child: _buildProveedorPanel(prov)),
+            ],
+          ],
+        );
+      }),
     );
   }
 
@@ -1034,14 +1039,19 @@ class _ComprasModuloScreenState extends State<ComprasModuloScreen>
   Widget _buildOrdenesTab(ProveedoresProvider prov) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(child: _buildOrdenesTable(prov)),
-          const SizedBox(width: 16),
-          SizedBox(width: 280, child: _buildOrdenPanel()),
-        ],
-      ),
+      child: LayoutBuilder(builder: (_, c) {
+        final mostrarPanel = c.maxWidth >= 760;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: _buildOrdenesTable(prov)),
+            if (mostrarPanel) ...[
+              const SizedBox(width: 16),
+              SizedBox(width: 280, child: _buildOrdenPanel()),
+            ],
+          ],
+        );
+      }),
     );
   }
 

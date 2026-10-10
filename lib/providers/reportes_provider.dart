@@ -190,7 +190,6 @@ class ReportesProvider extends ChangeNotifier {
     _cargando = true;
     _errorMsg = '';
     notifyListeners();
-
     try {
       final resultados = await Future.wait([
         _service.listarVentas(tiendaId: tiendaId, fecha: fecha),
@@ -201,16 +200,16 @@ class ReportesProvider extends ChangeNotifier {
         ),
       ]);
 
-      _ventas = resultados[0];
-      _abonos = resultados[1];
+      _ventas       = resultados[0];
+      _abonos       = resultados[1];
       _devoluciones = resultados[2];
     } catch (e) {
       _errorMsg = 'Error al cargar reportes';
       debugPrint('❌ cargarVentas error: $e');
+    } finally {
+      _cargando = false;
+      notifyListeners();
     }
-
-    _cargando = false;
-    notifyListeners();
   }
 
   String _fechaHoy() {

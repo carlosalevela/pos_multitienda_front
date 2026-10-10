@@ -458,9 +458,14 @@ class ComprasPDFService {
                             fontWeight: pw.FontWeight.bold,
                             color: _pOnSurf)),
                     if (esNuevo)
-                      pw.Text('★ Producto nuevo',
+                      pw.Text('NUEVO',
                           style: pw.TextStyle(
-                              fontSize: 7.5, color: _pGreen)),
+                              fontSize: 7, color: _pWhite,
+                              fontWeight: pw.FontWeight.bold,
+                              background: pw.BoxDecoration(
+                                color: _pGreen,
+                                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+                              ))),
                   ],
                 ),
               ),
@@ -530,14 +535,14 @@ class ComprasPDFService {
   pw.Widget _buildSellosRecepcion() {
     return pw.Row(children: [
       _sello(
-        icon: '✓',
+        icon: 'OK',
         label: 'RECIBIDA CORRECTAMENTE',
         bg: _pGreenLight,
         fg: _pGreen,
       ),
       pw.SizedBox(width: 12),
       _sello(
-        icon: '📦',
+        icon: '+',
         label: 'INVENTARIO ACTUALIZADO',
         bg: _pSurfHigh,
         fg: _pOnVar,

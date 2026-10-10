@@ -136,8 +136,8 @@ class PlantillaEtiqueta {
       defaultPos(aw, ah);
 
   factory PlantillaEtiqueta.defaults() {
-    const aw = 58.0;
-    const ah = 30.0;
+    const aw = 32.0;
+    const ah = 15.0;
     return PlantillaEtiqueta(
       anchoMm:              aw,
       altoMm:               ah,
@@ -166,8 +166,8 @@ class PlantillaEtiqueta {
   };
 
   factory PlantillaEtiqueta.fromJson(Map<String, dynamic> j) {
-    final aw = (j['anchoMm'] as num?)?.toDouble() ?? 58;
-    final ah = (j['altoMm']  as num?)?.toDouble() ?? 30;
+    final aw = (j['anchoMm'] as num?)?.toDouble() ?? 32;
+    final ah = (j['altoMm']  as num?)?.toDouble() ?? 15;
     final Map<String, ElemPos> pos = {};
     final rawPos = j['posiciones'] as Map<String, dynamic>?;
     if (rawPos != null) {
@@ -517,15 +517,15 @@ class EtiquetaService {
   }
 
   /// Genera un PDF con el tamaño exacto de página que tiene configurado el
-  /// driver de Windows (ej. 101.6×101.6mm para SAT TT448-2 en modo USER).
+  /// driver de Windows (ej. 32×15mm para SAT TT448-2 con rollo 32mm).
   /// Las etiquetas se tilearon en esa página para que el driver imprima
   /// exactamente el papel que ya tendría que avanzar de todas formas.
   Future<Uint8List> generarPdfPaginaDriver(
     PlantillaEtiqueta    p,
     Map<String, dynamic> producto,
     int                  cantidad, {
-    double pgAncho        = 101.6,   // mm — debe coincidir con la config del driver
-    double pgAlto         = 101.6,   // mm
+    double pgAncho        = 32.0,   // mm — debe coincidir con la config del driver
+    double pgAlto         = 15.0,   // mm
     bool   negritaForzada = false,   // true → todos los textos en negrita
   }) async {
     final pageFormat = PdfPageFormat(

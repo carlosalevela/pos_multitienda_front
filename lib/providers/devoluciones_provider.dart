@@ -23,7 +23,6 @@ class DevolucionesProvider extends ChangeNotifier {
     _cargando = true;
     _error = null;
     notifyListeners();
-
     try {
       _devoluciones = await _devolucionService.getDevoluciones(
         tiendaId: tiendaId,
@@ -35,10 +34,10 @@ class DevolucionesProvider extends ChangeNotifier {
     } catch (e) {
       _error = 'Error al cargar devoluciones';
       debugPrint('❌ cargarDevoluciones: $e');
+    } finally {
+      _cargando = false;
+      notifyListeners();
     }
-
-    _cargando = false;
-    notifyListeners();
   }
 
   Future<Map<String, dynamic>> crearDevolucion({
@@ -48,20 +47,26 @@ class DevolucionesProvider extends ChangeNotifier {
     String? observaciones,
   }) async {
     _error = null;
+    try {
+      final resp = await _devolucionService.crearDevolucion(
+        ventaId: ventaId,
+        metodoPago: metodoPago,
+        detalles: detalles,
+        observaciones: observaciones,
+      );
 
-    final resp = await _devolucionService.crearDevolucion(
-      ventaId: ventaId,
-      metodoPago: metodoPago,
-      detalles: detalles,
-      observaciones: observaciones,
-    );
+      if (resp['success'] != true) {
+        _error = resp['error']?.toString() ?? 'Error al crear devolución';
+        notifyListeners();
+      }
 
-    if (resp['success'] != true) {
-      _error = resp['error']?.toString() ?? 'Error al crear devolución';
+      return resp;
+    } catch (e) {
+      _error = 'Error al crear devolución';
+      debugPrint('❌ crearDevolucion: $e');
       notifyListeners();
+      return {'success': false, 'error': _error};
     }
-
-    return resp;
   }
 
   Future<Map<String, dynamic>> crearCambio({
@@ -75,33 +80,39 @@ class DevolucionesProvider extends ChangeNotifier {
     double? montoRecibido,
   }) async {
     _error = null;
+    try {
+      final resp = await _devolucionService.crearCambio(
+        ventaId: ventaId,
+        metodoPago: metodoPago,
+        detalles: detalles,
+        productoReemplazoId: productoReemplazoId,
+        cantidadReemplazo: cantidadReemplazo,
+        observaciones: observaciones,
+        metodoPagoDiferencia: metodoPagoDiferencia,
+        montoRecibido: montoRecibido,
+      );
 
-    final resp = await _devolucionService.crearCambio(
-      ventaId: ventaId,
-      metodoPago: metodoPago,
-      detalles: detalles,
-      productoReemplazoId: productoReemplazoId,
-      cantidadReemplazo: cantidadReemplazo,
-      observaciones: observaciones,
-      metodoPagoDiferencia: metodoPagoDiferencia,
-      montoRecibido: montoRecibido,
-    );
+      if (resp['success'] == true) {
+        final rawData = resp['data'];
+        final data = rawData is Map<String, dynamic>
+            ? rawData
+            : Map<String, dynamic>.from(rawData as Map);
 
-    if (resp['success'] == true) {
-      final rawData = resp['data'];
-      final data = rawData is Map<String, dynamic>
-          ? rawData
-          : Map<String, dynamic>.from(rawData as Map);
+        resp['mensaje_ui'] = _generarMensajeCambio(data);
 
-      resp['mensaje_ui'] = _generarMensajeCambio(data);
+        await cargarDevoluciones();
+      } else {
+        _error = resp['error']?.toString() ?? 'Error al procesar cambio';
+        notifyListeners();
+      }
 
-      await cargarDevoluciones();
-    } else {
-      _error = resp['error']?.toString() ?? 'Error al procesar cambio';
+      return resp;
+    } catch (e) {
+      _error = 'Error al procesar cambio';
+      debugPrint('❌ crearCambio: $e');
       notifyListeners();
+      return {'success': false, 'error': _error};
     }
-
-    return resp;
   }
 
   String _generarMensajeCambio(Map<String, dynamic> data) {
@@ -127,18 +138,24 @@ class DevolucionesProvider extends ChangeNotifier {
 
   Future<bool> cancelarDevolucion(int id) async {
     _error = null;
+    try {
+      final resp = await _devolucionService.cancelarDevolucion(id);
 
-    final resp = await _devolucionService.cancelarDevolucion(id);
-
-    if (resp['success'] == true) {
-      final idx = _devoluciones.indexWhere((d) => d.id == id);
-      if (idx >= 0) {
-        _devoluciones[idx] = _devoluciones[idx].copyWith(estado: 'cancelada');
+      if (resp['success'] == true) {
+        final idx = _devoluciones.indexWhere((d) => d.id == id);
+        if (idx >= 0) {
+          _devoluciones[idx] = _devoluciones[idx].copyWith(estado: 'cancelada');
+        }
+        notifyListeners();
+        return true;
       }
-      notifyListeners();
-      return true;
-    } else {
+
       _error = resp['error']?.toString() ?? 'Error al cancelar';
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _error = 'Error al cancelar devolución';
+      debugPrint('❌ cancelarDevolucion: $e');
       notifyListeners();
       return false;
     }

@@ -89,7 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
     context.read<AuthProvider>().clearError();
     await context.read<AuthProvider>().login(
       _userCtrl.text.trim(),
-      _passCtrl.text.trim(),
+      _passCtrl.text,
     );
   }
 

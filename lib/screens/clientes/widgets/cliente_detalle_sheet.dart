@@ -1,5 +1,6 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -8,8 +9,10 @@ import '../../../models/cliente.dart';
 import '../../../models/separado.dart';
 import '../../../models/tier_model.dart';
 import '../../../providers/cliente_provider.dart';
+import '../../../services/documento_service.dart';
 import '../../../services/tier_service.dart';
 import '../../../services/venta_service.dart';
+import 'abonar_sheet.dart';
 
 // ─────────────────────────────────────────────────────────────
 // Paleta — misma que clientes_screen.dart
@@ -153,23 +156,83 @@ class _ClienteDetalleSheetContentState
 
   // ── Abonar ────────────────────────────────────────────────
   void _mostrarAbonar(Separado sep) {
-    showModalBottomSheet(
-      context:            context,
-      isScrollControlled: true,
-      backgroundColor:    Colors.transparent,
-      builder: (_) => _AbonarSheet(
-        separado: sep,
-        onAbonar: (monto, metodo) async {
-          final prov = context.read<ClienteProvider>();
-          final ok   = await prov.abonarSeparado(sep.id, monto, metodo);
-          if (!mounted) return;
-          Navigator.pop(context);
-          _showSnack(
-            ok ? 'Abono registrado correctamente'
-               : (prov.error ?? 'Error al registrar abono'),
-            ok ? _Pal.success : _Pal.danger,
-          );
-        },
+    final fmt = NumberFormat.currency(locale: 'es_CO', symbol: '\$', decimalDigits: 0);
+    AbonarSheet.mostrar(
+      context,
+      separado:  sep,
+      fmt:       fmt,
+      onAbonado: () {
+        if (mounted) {
+          context.read<ClienteProvider>().cargarDetalleCliente(widget.cliente.id);
+        }
+      },
+    );
+  }
+
+  // ── Ver recibos de abono guardados ────────────────────────
+  Future<void> _verRecibosAbono(Separado sep) async {
+    final archivos = await DocumentoService.instance.listar(TipoDocumento.abono);
+    final filtrados = archivos
+        .where((f) => f.path.contains('abono_${sep.id}_'))
+        .toList();
+
+    if (!mounted) return;
+
+    if (filtrados.isEmpty) {
+      _showSnack('No hay recibos guardados para SEP-${sep.id}', _Pal.inkLight);
+      return;
+    }
+
+    if (filtrados.length == 1) {
+      await Process.run('cmd', ['/c', 'start', '', filtrados.first.path]);
+      return;
+    }
+
+    // Mostrar lista de recibos
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Recibos de abono — SEP-${sep.id}',
+            style: GoogleFonts.plusJakartaSans(
+                fontSize: 15, fontWeight: FontWeight.w700)),
+        content: SizedBox(
+          width: 340,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount:  filtrados.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (_, i) {
+              final f    = filtrados[i];
+              final mod  = f.lastModifiedSync().toLocal();
+              final hora = '${mod.day}/${mod.month}/${mod.year} '
+                  '${mod.hour.toString().padLeft(2,'0')}:'
+                  '${mod.minute.toString().padLeft(2,'0')}';
+              return ListTile(
+                dense: true,
+                leading: const Icon(Icons.picture_as_pdf_rounded,
+                    color: Color(0xFF01696F), size: 20),
+                title: Text('Abono ${i + 1}',
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13, fontWeight: FontWeight.w600)),
+                subtitle: Text(hora,
+                    style: GoogleFonts.plusJakartaSans(fontSize: 11)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await Process.run('cmd', ['/c', 'start', '', f.path]);
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cerrar',
+                style: GoogleFonts.plusJakartaSans(color: _Pal.inkMid)),
+          ),
+        ],
       ),
     );
   }
@@ -295,15 +358,12 @@ class _ClienteDetalleSheetContentState
                               mensaje: 'Sin separados activos',
                               sub:     'Los separados activos de este cliente\naparecerán aquí.',
                             )
-                          : ListView.builder(
-                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                              itemCount: prov.separadosActivos.length,
-                              itemBuilder: (_, i) => _SeparadoCard(
-                                separado:   prov.separadosActivos[i],
-                                esAdmin:    widget.esAdminOSupervisor,
-                                onAbonar:   () => _mostrarAbonar(prov.separadosActivos[i]),
-                                onCancelar: () => _confirmarCancelar(prov.separadosActivos[i]),
-                              ),
+                          : _SeparadosTab(
+                              separados:     prov.separadosActivos,
+                              esAdmin:       widget.esAdminOSupervisor,
+                              onAbonar:      _mostrarAbonar,
+                              onCancelar:    _confirmarCancelar,
+                              onVerRecibos:  _verRecibosAbono,
                             ),
 
                       // Tab 3 — Historial
@@ -722,12 +782,14 @@ class _SeparadoCard extends StatelessWidget {
   final bool         esAdmin;
   final VoidCallback onAbonar;
   final VoidCallback onCancelar;
+  final VoidCallback onVerRecibos;
 
   const _SeparadoCard({
     required this.separado,
     required this.esAdmin,
     required this.onAbonar,
     required this.onCancelar,
+    required this.onVerRecibos,
   });
 
   static final _fmt    = NumberFormat.currency(
@@ -899,6 +961,22 @@ class _SeparadoCard extends StatelessWidget {
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),
               ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Botón Ver recibos de abono
+          Tooltip(
+            message: 'Ver recibos de abono',
+            child: OutlinedButton(
+              onPressed: onVerRecibos,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _Pal.teal,
+                side:    BorderSide(color: _Pal.teal.withOpacity(0.4)),
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                shape:   RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Icon(Icons.receipt_long_rounded, size: 16),
             ),
           ),
           if (esAdmin) ...[
@@ -1602,199 +1680,6 @@ class _TierBanner extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// ABONAR SHEET
-// ─────────────────────────────────────────────────────────────
-class _AbonarSheet extends StatefulWidget {
-  final Separado                      separado;
-  final void Function(double, String) onAbonar;
-  const _AbonarSheet({required this.separado, required this.onAbonar});
-
-  @override
-  State<_AbonarSheet> createState() => _AbonarSheetState();
-}
-
-class _AbonarSheetState extends State<_AbonarSheet> {
-  final _formKey   = GlobalKey<FormState>();
-  final _montoCtrl = TextEditingController();
-  String _metodo   = 'efectivo';
-  bool   _enviando = false;
-
-  static const _metodos = [
-    ('efectivo',      'Efectivo',      Icons.payments_rounded),
-    ('transferencia', 'Transferencia', Icons.swap_horiz_rounded),
-    ('tarjeta',       'Tarjeta',       Icons.credit_card_rounded),
-  ];
-
-  static final _fmt = NumberFormat.currency(
-      locale: 'es_CO', symbol: '\$', decimalDigits: 0);
-
-  @override
-  void dispose() { _montoCtrl.dispose(); super.dispose(); }
-
-  @override
-  Widget build(BuildContext context) {
-    final sep    = widget.separado;
-    final bottom = MediaQuery.of(context).viewInsets.bottom;
-
-    return Container(
-      padding: EdgeInsets.fromLTRB(24, 20, 24, 24 + bottom),
-      decoration: const BoxDecoration(
-        color:        Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Form(
-        key: _formKey,
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-
-          Center(
-            child: Container(
-              width:  36, height: 4,
-              margin: const EdgeInsets.only(bottom: 18),
-              decoration: BoxDecoration(
-                color:        const Color(0xFFE2E8F0),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-
-          // Título
-          Row(children: [
-            Container(
-              width:  40, height: 40,
-              decoration: BoxDecoration(
-                color:        _Pal.teal.withOpacity(0.10),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.add_rounded, color: _Pal.teal, size: 22),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Registrar abono',
-                    style: GoogleFonts.plusJakartaSans(
-                        fontSize: 16, fontWeight: FontWeight.w800,
-                        color: _Pal.ink)),
-                Text('SEP-${sep.id} · Saldo: ${_fmt.format(sep.saldoPendiente)}',
-                    style: GoogleFonts.plusJakartaSans(
-                        fontSize: 11, color: _Pal.inkLight)),
-              ]),
-            ),
-          ]),
-
-          const SizedBox(height: 20),
-
-          // Campo monto
-          TextFormField(
-            controller:   _montoCtrl,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
-            ],
-            style: GoogleFonts.plusJakartaSans(fontSize: 14, color: _Pal.ink),
-            decoration: _inputDeco('Monto del abono', Icons.attach_money_rounded),
-            validator: (v) {
-              if (v == null || v.isEmpty) return 'Ingresa el monto';
-              final monto = double.tryParse(v);
-              if (monto == null || monto <= 0) return 'Monto inválido';
-              if (monto > sep.saldoPendiente) {
-                return 'No puede superar el saldo (${_fmt.format(sep.saldoPendiente)})';
-              }
-              return null;
-            },
-          ),
-
-          const SizedBox(height: 14),
-
-          // Método de pago
-          Row(children: _metodos.map((m) {
-            final activo = _metodo == m.$1;
-            return Expanded(
-              child: GestureDetector(
-                onTap: () => setState(() => _metodo = m.$1),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  margin:  const EdgeInsets.only(right: 6),
-                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-                  decoration: BoxDecoration(
-                    color:        activo ? _Pal.teal : const Color(0xFFF2F5F7),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: activo ? _Pal.teal : const Color(0xFFE4EAF0)),
-                  ),
-                  child: Column(children: [
-                    Icon(m.$3, size: 18,
-                        color: activo ? Colors.white : _Pal.inkLight),
-                    const SizedBox(height: 4),
-                    Text(m.$2,
-                        style: GoogleFonts.plusJakartaSans(
-                            fontSize: 10, fontWeight: FontWeight.w700,
-                            color: activo ? Colors.white : _Pal.inkMid)),
-                  ]),
-                ),
-              ),
-            );
-          }).toList()),
-
-          const SizedBox(height: 20),
-
-          // Botón
-          SizedBox(
-            width:  double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              onPressed: _enviando
-                  ? null
-                  : () {
-                      if (!_formKey.currentState!.validate()) return;
-                      setState(() => _enviando = true);
-                      widget.onAbonar(double.parse(_montoCtrl.text), _metodo);
-                    },
-              style: ElevatedButton.styleFrom(
-                backgroundColor:         _Pal.teal,
-                foregroundColor:         Colors.white,
-                disabledBackgroundColor: _Pal.teal.withOpacity(0.5),
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
-              ),
-              child: _enviando
-                  ? const SizedBox(
-                      width: 22, height: 22,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2.5))
-                  : Text('Confirmar abono',
-                      style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.w700, fontSize: 15)),
-            ),
-          ),
-        ]),
-      ),
-    );
-  }
-
-  InputDecoration _inputDeco(String hint, IconData icon) => InputDecoration(
-    hintText:  hint,
-    hintStyle: GoogleFonts.plusJakartaSans(fontSize: 13, color: _Pal.inkLight),
-    prefixIcon:    Icon(icon, size: 20, color: _Pal.teal),
-    filled:        true,
-    fillColor:     const Color(0xFFF8FAFB),
-    border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide:   const BorderSide(color: Color(0xFFE4EAF0))),
-    enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide:   const BorderSide(color: Color(0xFFE4EAF0))),
-    focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide:   const BorderSide(color: _Pal.teal, width: 1.5)),
-    errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide:   const BorderSide(color: _Pal.danger)),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
 // CONFIRM DIALOG
 // ─────────────────────────────────────────────────────────────
 class _ConfirmDialog extends StatelessWidget {
@@ -2266,4 +2151,133 @@ class _AbonarCreditoSheetState extends State<_AbonarCreditoSheet> {
       ]),
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Tab de separados activos con banner de deuda vencida
+// ─────────────────────────────────────────────────────────────
+class _SeparadosTab extends StatelessWidget {
+  final List<Separado>              separados;
+  final bool                        esAdmin;
+  final void Function(Separado)     onAbonar;
+  final void Function(Separado)     onCancelar;
+  final Future<void> Function(Separado) onVerRecibos;
+
+  const _SeparadosTab({
+    required this.separados,
+    required this.esAdmin,
+    required this.onAbonar,
+    required this.onCancelar,
+    required this.onVerRecibos,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hoy = DateTime.now();
+    final hoyDate = DateTime(hoy.year, hoy.month, hoy.day);
+
+    // Compute overdue info from separados
+    final vencidos = separados.where((s) {
+      if (s.fechaLimite == null) return false;
+      final lim = DateTime.tryParse(s.fechaLimite!);
+      return lim != null && hoyDate.isAfter(lim);
+    }).toList();
+
+    int maxDias = 0;
+    double totalVencido = 0;
+    for (final s in vencidos) {
+      final lim = DateTime.tryParse(s.fechaLimite!)!;
+      final dias = hoyDate.difference(lim).inDays;
+      if (dias > maxDias) maxDias = dias;
+      totalVencido += s.saldoPendiente;
+    }
+
+    final fmt = NumberFormat('#,##0', 'es_CO');
+    final hayVencidos = vencidos.isNotEmpty;
+
+    return ListView.builder(
+      padding: EdgeInsets.fromLTRB(16, hayVencidos ? 0 : 12, 16, 24),
+      itemCount: separados.length + (hayVencidos ? 1 : 0),
+      itemBuilder: (_, i) {
+        // Header de deuda vencida al inicio
+        if (hayVencidos && i == 0) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(0, 12, 0, 8),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                border: Border.all(color: const Color(0xFFFCA5A5)),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    const Icon(Icons.warning_amber_rounded,
+                        size: 15, color: Color(0xFFDC2626)),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${vencidos.length} separado${vencidos.length != 1 ? 's' : ''} vencido${vencidos.length != 1 ? 's' : ''}',
+                      style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFFDC2626)),
+                    ),
+                  ]),
+                  const SizedBox(height: 6),
+                  Row(children: [
+                    Expanded(
+                      child: _DeudaItem(
+                        label: 'Total vencido',
+                        valor: '\$${fmt.format(totalVencido)}',
+                      ),
+                    ),
+                    Expanded(
+                      child: _DeudaItem(
+                        label: 'Más antiguo',
+                        valor: 'hace $maxDias día${maxDias != 1 ? 's' : ''}',
+                      ),
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+          );
+        }
+
+        final idx = hayVencidos ? i - 1 : i;
+        final sep = separados[idx];
+        return _SeparadoCard(
+          separado:    sep,
+          esAdmin:     esAdmin,
+          onAbonar:    () => onAbonar(sep),
+          onCancelar:  () => onCancelar(sep),
+          onVerRecibos: () => onVerRecibos(sep),
+        );
+      },
+    );
+  }
+}
+
+class _DeudaItem extends StatelessWidget {
+  final String label;
+  final String valor;
+  const _DeudaItem({required this.label, required this.valor});
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label,
+          style: GoogleFonts.inter(
+              fontSize: 10, color: const Color(0xFF9CA3AF))),
+      const SizedBox(height: 2),
+      Text(valor,
+          style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFFDC2626))),
+    ],
+  );
 }

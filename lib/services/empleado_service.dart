@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/api_client.dart';
 
 class EmpleadoService {
@@ -121,11 +122,15 @@ class EmpleadoService {
     required String passwordNuevo,
   }) async {
     try {
+      final prefs   = await SharedPreferences.getInstance();
+      final refresh = prefs.getString('refresh_token') ?? '';
+
       final r = await ApiClient.instance.post(
         '/auth/cambiar-password/',
         data: {
           'password_actual': passwordActual,
           'password_nuevo': passwordNuevo,
+          if (refresh.isNotEmpty) 'refresh': refresh,
         },
       );
 

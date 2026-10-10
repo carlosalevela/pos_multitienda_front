@@ -5,11 +5,14 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import 'dart:io';
+
 import '../../models/alerta_separado.dart';
 import '../../models/cliente.dart';
 import '../../models/separado.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/cliente_provider.dart';
+import '../../services/documento_service.dart';
 import '../clientes/widgets/abonar_sheet.dart';
 import '../clientes/widgets/separado_detalle_sheet.dart';
 import '../clientes/widgets/separado_form.dart';
@@ -117,66 +120,83 @@ class _SeparadosScreenState extends State<SeparadosScreen> {
   // HEADER
   // ════════════════════════════════════════════════════════════
   Widget _buildHeader(AuthProvider auth, ClienteProvider prov) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 14, 16, 14),
-      decoration: const BoxDecoration(
-        color: _kCard,
-        border: Border(bottom: BorderSide(color: _kBorder)),
-      ),
-      child: Row(children: [
-        Container(
-          width: 36, height: 36,
-          decoration: BoxDecoration(
-            color: _kGreen,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Icon(Icons.bookmark_rounded,
-              color: Colors.white, size: 18),
+    return LayoutBuilder(builder: (_, lbc) {
+      final isNarrow = lbc.maxWidth < 500;
+      return Container(
+        padding: const EdgeInsets.fromLTRB(20, 14, 16, 14),
+        decoration: const BoxDecoration(
+          color: _kCard,
+          border: Border(bottom: BorderSide(color: _kBorder)),
         ),
-        const SizedBox(width: 12),
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Separados',
-              style: GoogleFonts.inter(
-                  fontSize: 15, fontWeight: FontWeight.w700,
-                  color: _kText)),
-          Text(auth.tiendaNombre.isNotEmpty
-                  ? auth.tiendaNombre : 'Mi Tienda',
-              style: GoogleFonts.inter(
-                  fontSize: 11, color: _kTextMuted)),
+        child: Row(children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: _kGreen,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.bookmark_rounded,
+                color: Colors.white, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Separados',
+                  style: GoogleFonts.inter(
+                      fontSize: 15, fontWeight: FontWeight.w700,
+                      color: _kText)),
+              Text(auth.tiendaNombre.isNotEmpty
+                      ? auth.tiendaNombre : 'Mi Tienda',
+                  style: GoogleFonts.inter(
+                      fontSize: 11, color: _kTextMuted)),
+            ]),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.bookmark_add_rounded, size: 15),
+            label: Text('Nuevo',
+                style: GoogleFonts.inter(
+                    fontSize: 12, fontWeight: FontWeight.w600)),
+            onPressed: _abrirNuevoSeparado,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _kGreenDark,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (isNarrow)
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              onPressed: _cargarTodo,
+              style: IconButton.styleFrom(
+                foregroundColor: _kGreenDark,
+                backgroundColor: _kGreenLight,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+              ),
+            )
+          else
+            TextButton.icon(
+              icon: const Icon(Icons.refresh_rounded, size: 15),
+              label: Text('Actualizar',
+                  style: GoogleFonts.inter(
+                      fontSize: 12, fontWeight: FontWeight.w600)),
+              onPressed: _cargarTodo,
+              style: TextButton.styleFrom(
+                foregroundColor: _kGreenDark,
+                backgroundColor: _kGreenLight,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
         ]),
-        const Spacer(),
-        ElevatedButton.icon(
-          icon: const Icon(Icons.bookmark_add_rounded, size: 15),
-          label: Text('Nuevo',
-              style: GoogleFonts.inter(
-                  fontSize: 12, fontWeight: FontWeight.w600)),
-          onPressed: _abrirNuevoSeparado,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _kGreenDark,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8)),
-          ),
-        ),
-        const SizedBox(width: 8),
-        TextButton.icon(
-          icon: const Icon(Icons.refresh_rounded, size: 15),
-          label: Text('Actualizar',
-              style: GoogleFonts.inter(
-                  fontSize: 12, fontWeight: FontWeight.w600)),
-          onPressed: _cargarTodo,
-          style: TextButton.styleFrom(
-            foregroundColor: _kGreenDark,
-            backgroundColor: _kGreenLight,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8)),
-          ),
-        ),
-      ]),
-    );
+      );
+    });
   }
 
   // ════════════════════════════════════════════════════════════
@@ -489,51 +509,287 @@ class _SeparadosScreenState extends State<SeparadosScreen> {
     final monto    = (a['monto'] as num?)?.toDouble() ?? 0;
     final cliente  = a['cliente_nombre'] as String? ?? '—';
     final metodo   = a['metodo_pago']    as String? ?? 'efectivo';
-    final hora     = a['created_at']  != null
+    final hora     = a['created_at'] != null
         ? DateFormat('HH:mm').format(DateTime.parse(a['created_at'] as String))
         : '';
-    final sepId    = a['separado'] as int?;
+    final sepId    = a['separado_id'] as int?;
+    final empNombre = a['empleado_nombre'] as String? ?? '';
 
     final metodoIcon = switch (metodo) {
       'tarjeta'       => Icons.credit_card_rounded,
       'transferencia' => Icons.swap_horiz_rounded,
       _               => Icons.payments_rounded,
     };
+    final metodoLabel = switch (metodo) {
+      'tarjeta'       => 'Tarjeta',
+      'transferencia' => 'Transferencia',
+      _               => 'Efectivo',
+    };
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _kCard,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _kBorder),
+    return GestureDetector(
+      onTap: () => _verDetalleAbono(
+        cliente:    cliente,
+        sepId:      sepId,
+        monto:      monto,
+        metodo:     metodoLabel,
+        hora:       hora,
+        empNombre:  empNombre,
+        createdAt:  a['created_at'] as String?,
       ),
-      child: Row(children: [
-        Container(
-          width: 40, height: 40,
-          decoration: BoxDecoration(
-            color: _kGreenLight,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(metodoIcon, size: 18, color: _kGreenDark),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: _kCard,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _kBorder),
         ),
-        const SizedBox(width: 12),
-        Expanded(child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(cliente,
-                style: GoogleFonts.inter(
-                    fontSize: 13, fontWeight: FontWeight.w700,
-                    color: _kText)),
-            Text('Separado #$sepId${hora.isNotEmpty ? '  ·  $hora' : ''}',
+        child: Row(children: [
+          Container(
+            width: 40, height: 40,
+            decoration: BoxDecoration(
+              color: _kGreenLight,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(metodoIcon, size: 18, color: _kGreenDark),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(cliente,
+                  style: GoogleFonts.inter(
+                      fontSize: 13, fontWeight: FontWeight.w700,
+                      color: _kText)),
+              Text(
+                'SEP-${sepId ?? '?'}  ·  $hora',
                 style: GoogleFonts.inter(
                     fontSize: 11, color: _kTextMuted)),
-          ],
-        )),
-        Text(_fmt.format(monto),
+            ],
+          )),
+          const SizedBox(width: 8),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text(_fmt.format(monto),
+                style: GoogleFonts.inter(
+                    fontSize: 15, fontWeight: FontWeight.w800,
+                    color: _kGreenDark)),
+            Container(
+              margin: const EdgeInsets.only(top: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: _kGreenLight,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(metodoLabel,
+                  style: GoogleFonts.inter(
+                      fontSize: 9, fontWeight: FontWeight.w700,
+                      color: _kGreenDark)),
+            ),
+          ]),
+          const SizedBox(width: 8),
+          const Icon(Icons.chevron_right_rounded, size: 16, color: _kTextMuted),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _verDetalleAbono({
+    required String  cliente,
+    required int?    sepId,
+    required double  monto,
+    required String  metodo,
+    required String  hora,
+    required String  empNombre,
+    required String? createdAt,
+  }) async {
+    // Buscar recibos PDF guardados para este separado
+    List<File> recibos = [];
+    if (sepId != null) {
+      final todos = await DocumentoService.instance.listar(TipoDocumento.abono);
+      recibos = todos.where((f) => f.path.contains('abono_${sepId}_')).toList();
+    }
+
+    if (!mounted) return;
+
+    String fechaStr = '—';
+    if (createdAt != null) {
+      try {
+        final dt = DateTime.parse(createdAt).toLocal();
+        fechaStr = DateFormat('d MMM yyyy · HH:mm', 'es').format(dt);
+      } catch (_) {}
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        contentPadding: EdgeInsets.zero,
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          // Header
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+            decoration: BoxDecoration(
+              color: _kGreenLight,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+            ),
+            child: Row(children: [
+              Container(
+                width: 44, height: 44,
+                decoration: BoxDecoration(
+                  color: _kGreenDark,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.payments_rounded,
+                    color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Detalle de abono',
+                      style: GoogleFonts.inter(
+                          fontSize: 15, fontWeight: FontWeight.w700,
+                          color: _kGreenDark)),
+                  if (sepId != null)
+                    Text('SEP-$sepId',
+                        style: GoogleFonts.inter(
+                            fontSize: 12, color: _kGreenDark)),
+                ],
+              )),
+              Text(_fmt.format(monto),
+                  style: GoogleFonts.inter(
+                      fontSize: 20, fontWeight: FontWeight.w800,
+                      color: _kGreenDark)),
+            ]),
+          ),
+          // Cuerpo
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+            child: Column(children: [
+              _detalleRow(Icons.person_outline_rounded, 'Cliente',   cliente),
+              _detalleRow(Icons.credit_card_outlined,  'Método',    metodo),
+              _detalleRow(Icons.schedule_rounded,      'Fecha',     fechaStr),
+              if (empNombre.isNotEmpty)
+                _detalleRow(Icons.badge_outlined,      'Empleado',  empNombre),
+            ]),
+          ),
+          // Botón PDF (si hay recibos)
+          if (recibos.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: SizedBox(
+                width: double.infinity, height: 44,
+                child: ElevatedButton.icon(
+                  icon:  const Icon(Icons.picture_as_pdf_rounded, size: 17),
+                  label: Text(
+                    recibos.length == 1
+                        ? 'Ver recibo PDF'
+                        : 'Ver ${recibos.length} recibos PDF',
+                    style: GoogleFonts.inter(
+                        fontWeight: FontWeight.w700, fontSize: 13)),
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    if (recibos.length == 1) {
+                      await Process.run('cmd', ['/c', 'start', '', recibos.first.path]);
+                    } else {
+                      await _abrirListaRecibos(recibos, sepId!);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _kGreenDark,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: Text(
+                'Sin recibo PDF guardado',
+                style: GoogleFonts.inter(
+                    fontSize: 11, color: _kTextMuted,
+                    fontStyle: FontStyle.italic),
+                textAlign: TextAlign.center,
+              ),
+            ),
+        ]),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cerrar',
+                style: GoogleFonts.inter(color: _kTextMuted)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detalleRow(IconData icon, String label, String valor) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Row(children: [
+      Icon(icon, size: 15, color: _kTextMuted),
+      const SizedBox(width: 8),
+      Text('$label:',
+          style: GoogleFonts.inter(
+              fontSize: 12, color: _kTextMuted, fontWeight: FontWeight.w600)),
+      const SizedBox(width: 6),
+      Expanded(
+        child: Text(valor,
             style: GoogleFonts.inter(
-                fontSize: 15, fontWeight: FontWeight.w800,
-                color: _kGreenDark)),
-      ]),
+                fontSize: 12, color: _kText, fontWeight: FontWeight.w600),
+            overflow: TextOverflow.ellipsis),
+      ),
+    ]),
+  );
+
+  Future<void> _abrirListaRecibos(List<File> recibos, int sepId) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Recibos SEP-$sepId',
+            style: GoogleFonts.inter(
+                fontSize: 15, fontWeight: FontWeight.w700)),
+        content: SizedBox(
+          width: 320,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount:  recibos.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (_, i) {
+              final f   = recibos[i];
+              final mod = f.lastModifiedSync().toLocal();
+              final ts  = DateFormat('d MMM · HH:mm', 'es').format(mod);
+              return ListTile(
+                dense: true,
+                leading: const Icon(Icons.picture_as_pdf_rounded,
+                    color: _kGreenDark, size: 20),
+                title: Text('Abono ${i + 1}',
+                    style: GoogleFonts.inter(
+                        fontSize: 13, fontWeight: FontWeight.w600)),
+                subtitle: Text(ts,
+                    style: GoogleFonts.inter(fontSize: 11, color: _kTextMuted)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await Process.run('cmd', ['/c', 'start', '', f.path]);
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cerrar',
+                style: GoogleFonts.inter(color: _kTextMuted)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -841,41 +1097,44 @@ class _SeparadosScreenState extends State<SeparadosScreen> {
     List<Widget>      actions = const [],
   }) =>
     Container(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
       color: _kCard,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Container(
-            width: 40, height: 40,
+            width: 36, height: 36,
             decoration: BoxDecoration(
               color: _kGreenLight,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, size: 20, color: _kGreenDark),
+            child: Icon(icon, size: 18, color: _kGreenDark),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(title,
                   style: GoogleFonts.inter(
-                      fontSize: 20, fontWeight: FontWeight.w700,
+                      fontSize: 17, fontWeight: FontWeight.w700,
                       color: _kText)),
               Text(subtitle,
                   style: GoogleFonts.inter(
-                      fontSize: 12, color: _kTextMuted)),
+                      fontSize: 11, color: _kTextMuted)),
             ],
           )),
-          ...actions,
+          if (actions.isEmpty) const SizedBox.shrink(),
         ]),
-        const SizedBox(height: 12),
+        if (actions.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          ...actions,
+        ],
+        const SizedBox(height: 10),
         const Divider(color: _kBorder, height: 1),
       ]),
     );
 
   Widget _searchField() => SizedBox(
-    width: 220,
+    width: double.infinity,
     child: TextField(
       controller: _searchCtrl,
       style: GoogleFonts.inter(fontSize: 13, color: _kText),

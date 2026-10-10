@@ -56,6 +56,7 @@ class _DocumentosScreenState extends State<DocumentosScreen> {
 
   List<_DocEntry> _docs     = [];
   bool            _cargando = false;
+  String?         _error;
   TipoDocumento?  _filtro;         // null = todos
   String          _rutaRaiz = '';
 
@@ -91,9 +92,9 @@ class _DocumentosScreenState extends State<DocumentosScreen> {
         final files = await _service.listar(_filtro!);
         docs = files.map((f) => _DocEntry(file: f, tipo: _filtro!)).toList();
       }
-      if (mounted) setState(() { _docs = docs; _cargando = false; });
+      if (mounted) setState(() { _docs = docs; _cargando = false; _error = null; });
     } catch (_) {
-      if (mounted) setState(() => _cargando = false);
+      if (mounted) setState(() { _cargando = false; _error = 'Error al cargar documentos.'; });
     }
   }
 
@@ -150,6 +151,26 @@ class _DocumentosScreenState extends State<DocumentosScreen> {
           ),
         ]),
         const SizedBox(height: 20),
+
+        if (_error != null)
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF1F2),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _C.rose.withOpacity(0.3)),
+            ),
+            child: Row(children: [
+              const Icon(Icons.error_outline_rounded, color: _C.rose, size: 16),
+              const SizedBox(width: 10),
+              Expanded(child: Text(_error!, style: GoogleFonts.inter(color: _C.rose, fontSize: 12, fontWeight: FontWeight.w600))),
+              GestureDetector(
+                onTap: _cargar,
+                child: const Icon(Icons.refresh_rounded, size: 16, color: _C.rose),
+              ),
+            ]),
+          ),
 
         // ── Filtros ──────────────────────────────────────────────
         SingleChildScrollView(
