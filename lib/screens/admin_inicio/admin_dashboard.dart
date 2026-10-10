@@ -38,7 +38,7 @@ class _C {
   static const textFaint = Color(0xFF9CA3AF);
   static const green = Color(0xFF61DDAA);
   static const greenLight = Color(0xFFE8FFF4);
-  static const greenDark = Color(0xFF0B7A53);
+  static const greenDark = Color(0xFF006C49);
   static const amber = Color(0xFFB45309);
   static const amberLight = Color(0xFFFEF3C7);
   static const rose = Color(0xFFBE123C);
@@ -374,7 +374,7 @@ class _TopBar extends StatelessWidget {
     final isNarrow = w < 700;
     return Container(
       height: 64,
-      padding: EdgeInsets.only(left: isNarrow ? 12 : 24, right: isNarrow ? 8 : 16),
+      padding: EdgeInsets.only(left: isNarrow ? 12 : 24, right: 0),
       decoration: BoxDecoration(color: _C.surface, border: Border(bottom: BorderSide(color: _C.border))),
       child: Row(children: [
         if (showMenuBtn) ...[
@@ -396,14 +396,29 @@ class _TopBar extends StatelessWidget {
             child: Text(branch, style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
           ),
         const Spacer(),
-        if (!isNarrow)
-          Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text(userName, style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 12, fontWeight: FontWeight.w600)),
-            Text(userRole, style: GoogleFonts.inter(color: _C.greenDark, fontSize: 10, fontWeight: FontWeight.w700)),
+        Container(
+          margin:  const EdgeInsets.only(right: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color:        _C.bg,
+            borderRadius: BorderRadius.circular(12),
+            border:       Border.all(color: _C.border),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              width: 30, height: 30,
+              decoration: BoxDecoration(color: _C.greenLight, borderRadius: BorderRadius.circular(8)),
+              child: Center(child: Text(userName[0], style: GoogleFonts.inter(color: _C.greenDark, fontWeight: FontWeight.w800, fontSize: 13))),
+            ),
+            if (!isNarrow) ...[
+              const SizedBox(width: 9),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                Text(userName.split(' ').first, style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 12, fontWeight: FontWeight.w600)),
+                Text(userRole, style: GoogleFonts.inter(color: _C.greenDark, fontSize: 10, fontWeight: FontWeight.w700)),
+              ]),
+            ],
           ]),
-        SizedBox(width: isNarrow ? 8 : 10),
-        Container(width: 36, height: 36, decoration: BoxDecoration(color: _C.greenLight, borderRadius: BorderRadius.circular(18)), child: Center(child: Text(userName[0], style: GoogleFonts.inter(color: _C.greenDark, fontWeight: FontWeight.w800, fontSize: 14)))),
-        const SizedBox(width: 4),
+        ),
       ]),
     );
   }

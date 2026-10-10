@@ -1,7 +1,6 @@
 // lib/providers/auth_provider.dart
 
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../services/documento_service.dart';
 
@@ -129,7 +128,7 @@ class AuthProvider extends ChangeNotifier {
   void _sincronizarDocumentoService() {
     final nombre = _tiendaNombre.isNotEmpty ? _tiendaNombre : _empresaNombre;
     if (nombre.isNotEmpty) {
-      DocumentoService.instance.setTienda(nombre);
+      DocumentoService.instance.setTienda(nombre, id: _tiendaId > 0 ? _tiendaId : null);
     }
   }
 

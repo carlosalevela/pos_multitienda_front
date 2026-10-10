@@ -1,10 +1,12 @@
 // lib/services/documento_service.dart
 //
-// Guarda PDFs localmente en Documents/POS_{tienda}/{tipo}/{año}/{mes}/
-// Las carpetas se crean automáticamente en el primer uso.
+// 1. Guarda PDFs localmente en Documents/POS_{tienda}/{tipo}/{año}/{mes}/
+// 2. Los sube al backend en segundo plano para que admin/superadmin los vea
 
 import 'dart:io';
+import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
+import '../core/api_client.dart';
 
 enum TipoDocumento { venta, separado, abono, cierre, devolucion, reporte, inventario, compra, recepcion }
 
@@ -13,11 +15,12 @@ class DocumentoService {
   static final DocumentoService instance = DocumentoService._();
 
   String _tiendaNombre = 'POS';
+  int?   _tiendaId;
 
   /// Llamar al hacer login o al cargar la tienda activa.
-  /// Crea la estructura de carpetas inmediatamente si no existe.
-  void setTienda(String nombre) {
+  void setTienda(String nombre, {int? id}) {
     _tiendaNombre = _sanitizar(nombre.isEmpty ? 'POS' : nombre);
+    _tiendaId     = id;
     _crearEstructura();
   }
 
@@ -25,97 +28,41 @@ class DocumentoService {
     try {
       for (final tipo in TipoDocumento.values) {
         final dir = await _carpeta(tipo);
-        if (!dir.existsSync()) {
-          await dir.create(recursive: true);
-        }
+        if (!dir.existsSync()) await dir.create(recursive: true);
       }
     } catch (_) {}
   }
 
-  // ── Guardar ────────────────────────────────────────────
+  // ── Guardar (local + subida al backend) ───────────────────
 
-  Future<File> guardarVenta({
-    required List<int> bytes,
-    required String    numeroFactura,
-  }) => _guardar(
-    bytes:  bytes,
-    tipo:   TipoDocumento.venta,
-    nombre: 'venta_$numeroFactura',
-  );
+  Future<File> guardarVenta({required List<int> bytes, required String numeroFactura}) =>
+      _guardar(bytes: bytes, tipo: TipoDocumento.venta, nombre: 'venta_$numeroFactura');
 
-  Future<File> guardarSeparado({
-    required List<int> bytes,
-    required String    numeroSeparado,
-  }) => _guardar(
-    bytes:  bytes,
-    tipo:   TipoDocumento.separado,
-    nombre: 'separado_$numeroSeparado',
-  );
+  Future<File> guardarSeparado({required List<int> bytes, required String numeroSeparado}) =>
+      _guardar(bytes: bytes, tipo: TipoDocumento.separado, nombre: 'separado_$numeroSeparado');
 
-  Future<File> guardarAbono({
-    required List<int> bytes,
-    required String    referencia,
-  }) => _guardar(
-    bytes:  bytes,
-    tipo:   TipoDocumento.abono,
-    nombre: 'abono_$referencia',
-  );
+  Future<File> guardarAbono({required List<int> bytes, required String referencia}) =>
+      _guardar(bytes: bytes, tipo: TipoDocumento.abono, nombre: 'abono_$referencia');
 
-  Future<File> guardarCierre({
-    required List<int> bytes,
-    required String    referencia,
-  }) => _guardar(
-    bytes:  bytes,
-    tipo:   TipoDocumento.cierre,
-    nombre: 'cierre_$referencia',
-  );
+  Future<File> guardarCierre({required List<int> bytes, required String referencia}) =>
+      _guardar(bytes: bytes, tipo: TipoDocumento.cierre, nombre: 'cierre_$referencia');
 
-  Future<File> guardarDevolucion({
-    required List<int> bytes,
-    required String    referencia,
-  }) => _guardar(
-    bytes:  bytes,
-    tipo:   TipoDocumento.devolucion,
-    nombre: 'devolucion_$referencia',
-  );
+  Future<File> guardarDevolucion({required List<int> bytes, required String referencia}) =>
+      _guardar(bytes: bytes, tipo: TipoDocumento.devolucion, nombre: 'devolucion_$referencia');
 
-  Future<File> guardarReporte({
-    required List<int> bytes,
-    required String    nombre,
-  }) => _guardar(
-    bytes:  bytes,
-    tipo:   TipoDocumento.reporte,
-    nombre: 'reporte_$nombre',
-  );
+  Future<File> guardarReporte({required List<int> bytes, required String nombre}) =>
+      _guardar(bytes: bytes, tipo: TipoDocumento.reporte, nombre: 'reporte_$nombre');
 
-  Future<File> guardarInventario({
-    required List<int> bytes,
-    required String    nombre,
-  }) => _guardar(
-    bytes:  bytes,
-    tipo:   TipoDocumento.inventario,
-    nombre: 'inventario_$nombre',
-  );
+  Future<File> guardarInventario({required List<int> bytes, required String nombre}) =>
+      _guardar(bytes: bytes, tipo: TipoDocumento.inventario, nombre: 'inventario_$nombre');
 
-  Future<File> guardarOrdenCompra({
-    required List<int> bytes,
-    required String    numeroOrden,
-  }) => _guardar(
-    bytes:  bytes,
-    tipo:   TipoDocumento.compra,
-    nombre: 'OC_$numeroOrden',
-  );
+  Future<File> guardarOrdenCompra({required List<int> bytes, required String numeroOrden}) =>
+      _guardar(bytes: bytes, tipo: TipoDocumento.compra, nombre: 'OC_$numeroOrden');
 
-  Future<File> guardarRecepcion({
-    required List<int> bytes,
-    required String    numeroOrden,
-  }) => _guardar(
-    bytes:  bytes,
-    tipo:   TipoDocumento.recepcion,
-    nombre: 'recepcion_$numeroOrden',
-  );
+  Future<File> guardarRecepcion({required List<int> bytes, required String numeroOrden}) =>
+      _guardar(bytes: bytes, tipo: TipoDocumento.recepcion, nombre: 'recepcion_$numeroOrden');
 
-  // ── Listar documentos de un tipo ───────────────────────
+  // ── Listar local ───────────────────────────────────────────
 
   Future<List<File>> listar(TipoDocumento tipo) async {
     try {
@@ -132,43 +79,59 @@ class DocumentoService {
     }
   }
 
-  // ── Ruta raíz visible (para mostrar al usuario) ────────
-
   Future<String> rutaRaiz() async {
     final docs = await getApplicationDocumentsDirectory();
     return '${docs.path}\\POS_$_tiendaNombre';
   }
 
-  // ── Internos ────────────────────────────────────────────
+  // ── Internos ────────────────────────────────────────────────
 
   Future<File> _guardar({
-    required List<int>       bytes,
-    required TipoDocumento   tipo,
-    required String          nombre,
+    required List<int>     bytes,
+    required TipoDocumento tipo,
+    required String        nombre,
   }) async {
+    // 1. Guardar local
     final dir      = await _carpetaMes(tipo, DateTime.now());
-    // Nombre fijo por ID de documento: si ya existe lo sobreescribe
-    // (evita duplicados al reimprimir la misma factura/devolución/separado).
-    // Para abonos el llamador ya incluye un timestamp en el nombre.
     final fileName = '${_sanitizar(nombre)}.pdf';
     final file     = File('${dir.path}\\$fileName');
     await file.writeAsBytes(bytes, flush: true);
+
+    // 2. Subir al backend en segundo plano (no bloquea UI)
+    _subirAlBackend(bytes: bytes, tipo: tipo, nombre: fileName);
+
     return file;
   }
 
+  Future<void> _subirAlBackend({
+    required List<int>     bytes,
+    required TipoDocumento tipo,
+    required String        nombre,
+  }) async {
+    if (_tiendaId == null) return;
+    try {
+      final formData = FormData.fromMap({
+        'tienda_id': _tiendaId,
+        'tipo':      _tipoStr(tipo),
+        'nombre':    nombre,
+        'archivo':   MultipartFile.fromBytes(bytes, filename: nombre),
+      });
+      await ApiClient.instance.post('/documentos/subir/', data: formData);
+    } catch (_) {
+      // Error silencioso — el PDF local ya está guardado
+    }
+  }
+
   Future<Directory> _carpetaMes(TipoDocumento tipo, DateTime fecha) async {
-    final base  = await _carpeta(tipo);
-    final mes   = Directory(
-      '${base.path}\\${fecha.year}\\${fecha.month.toString().padLeft(2, '0')}',
-    );
+    final base = await _carpeta(tipo);
+    final mes  = Directory('${base.path}\\${fecha.year}\\${fecha.month.toString().padLeft(2, '0')}');
     await mes.create(recursive: true);
     return mes;
   }
 
   Future<Directory> _carpeta(TipoDocumento tipo) async {
-    final docs   = await getApplicationDocumentsDirectory();
-    final nombre = _nombreCarpeta(tipo);
-    return Directory('${docs.path}\\POS_$_tiendaNombre\\$nombre');
+    final docs = await getApplicationDocumentsDirectory();
+    return Directory('${docs.path}\\POS_$_tiendaNombre\\${_nombreCarpeta(tipo)}');
   }
 
   String _nombreCarpeta(TipoDocumento tipo) => switch (tipo) {
@@ -183,7 +146,18 @@ class DocumentoService {
     TipoDocumento.recepcion  => 'recepciones',
   };
 
-  /// Reemplaza caracteres inválidos en nombres de archivo/carpeta.
+  String _tipoStr(TipoDocumento tipo) => switch (tipo) {
+    TipoDocumento.venta      => 'venta',
+    TipoDocumento.separado   => 'separado',
+    TipoDocumento.abono      => 'abono',
+    TipoDocumento.cierre     => 'cierre',
+    TipoDocumento.devolucion => 'devolucion',
+    TipoDocumento.reporte    => 'reporte',
+    TipoDocumento.inventario => 'inventario',
+    TipoDocumento.compra     => 'compra',
+    TipoDocumento.recepcion  => 'recepcion',
+  };
+
   String _sanitizar(String s) =>
       s.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
 }

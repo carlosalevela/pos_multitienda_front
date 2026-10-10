@@ -14,14 +14,14 @@ import 'widgets/cliente_form.dart';
 import 'widgets/cliente_detalle_sheet.dart';
 import 'widgets/alertas_badge.dart';
 
-const _teal   = Color(0xFF01696F);
-const _tealBg = Color(0xFFE6F4F4);
-const _danger = Color(0xFFE03E3E);
-const _bg     = Color(0xFFF2F5F7);
-const _surface = Colors.white;
-const _border = Color(0xFFE4E8EB);
-const _textPrimary = Color(0xFF141C22);
-const _textMuted   = Color(0xFF8C9BAB);
+const _teal        = Color(0xFF006C49);
+const _tealBg      = Color(0xFFE8FFF4);
+const _danger      = Color(0xFFBA1A1A);
+const _bg          = Color(0xFFF7F9FB);
+const _surface     = Colors.white;
+const _border      = Color(0xFFE0E3E5);
+const _textPrimary = Color(0xFF191C1E);
+const _textMuted   = Color(0xFF76777D);
 
 class ClientesScreen extends StatefulWidget {
   final bool esAdminOSupervisor;
