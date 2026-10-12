@@ -1,20 +1,16 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../providers/reportes_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/config_provider.dart';
 import '../../providers/contabilidad_provider.dart';
 import '../../providers/caja_provider.dart';
-import '../../models/contabilidad_models.dart';
 import '../../models/sesion_caja.dart';
 import '../../services/caja_service.dart';
 import '../../services/documento_service.dart';
-import '../../services/reporte_pdf_service.dart';
 import '../../services/venta_service.dart';
 import 'widgets/reporte_detalle_dialog.dart';
 import 'widgets/reporte_turno_card.dart';
@@ -265,137 +261,6 @@ class _ReportesScreenState extends State<ReportesScreen> {
     );
   }
 
-  // ── WhatsApp ───────────────────────────────────────────────
-
-  Future<void> _enviarWhatsApp(
-    ReportesProvider rep,
-    AuthProvider auth,
-    ContabilidadProvider contab,
-  ) async {
-    final numero = context.read<ConfigProvider>().whatsappAdmin.trim();
-    if (numero.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Configura el número WhatsApp del admin en Configuración → General'),
-        backgroundColor: Color(0xFF374151),
-        behavior: SnackBarBehavior.floating,
-      ));
-      return;
-    }
-
-    // Mostrar indicador mientras se genera el PDF
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Row(children: [
-        SizedBox(width: 16, height: 16,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
-        SizedBox(width: 12),
-        Text('Generando PDF…'),
-      ]),
-      duration: Duration(seconds: 10),
-      backgroundColor: Color(0xFF374151),
-      behavior: SnackBarBehavior.floating,
-    ));
-
-    final List<Gasto> gastos = contab.gastos;
-    File? archivo;
-    try {
-      archivo = await ReportePdfService.generarReporteDia(
-        rep:           rep,
-        fecha:         _fechaStr,
-        tiendaNombre:  auth.tiendaNombre,
-        empresaNombre: auth.empresaNombre,
-        gastos:        gastos,
-        soloGuardar:   true,
-      );
-    } catch (_) {}
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-
-    if (archivo == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('No se pudo generar el PDF'),
-        backgroundColor: Color(0xFFBE123C),
-        behavior: SnackBarBehavior.floating,
-      ));
-      return;
-    }
-
-    await _mostrarDialogoWhatsApp(context, archivo.path, numero);
-  }
-
-  static Future<void> _mostrarDialogoWhatsApp(
-    BuildContext ctx,
-    String rutaPdf,
-    String numero,
-  ) async {
-    await showDialog(
-      context: ctx,
-      builder: (dCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Row(children: [
-          Icon(Icons.chat_rounded, color: Color(0xFF16A34A)),
-          SizedBox(width: 8),
-          Text('Enviar por WhatsApp',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        ]),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'El PDF fue guardado. Para enviarlo por WhatsApp:',
-              style: TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 10),
-            const Text('1. Abre la carpeta y copia el archivo.',
-                style: TextStyle(fontSize: 12, color: Color(0xFF374151))),
-            const Text('2. En WhatsApp adjunta el PDF al chat del admin.',
-                style: TextStyle(fontSize: 12, color: Color(0xFF374151))),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                rutaPdf,
-                style: const TextStyle(fontSize: 10, color: Color(0xFF6B7280)),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          if (!kIsWeb)
-            TextButton.icon(
-              onPressed: () async {
-                await Process.run('explorer.exe', ['/select,', rutaPdf]);
-              },
-              icon: const Icon(Icons.folder_open_outlined, size: 16),
-              label: const Text('Abrir carpeta'),
-              style: TextButton.styleFrom(foregroundColor: const Color(0xFF3730A3)),
-            ),
-          ElevatedButton.icon(
-            onPressed: () async {
-              Navigator.pop(dCtx);
-              final uri = Uri.parse('https://wa.me/$numero');
-              await launchUrl(uri, mode: LaunchMode.externalApplication);
-            },
-            icon: const Icon(Icons.chat_rounded, size: 16),
-            label: const Text('Abrir WhatsApp'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF16A34A),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   // ── Header ─────────────────────────────────────────────────
 
   Widget _buildHeader(
@@ -423,24 +288,6 @@ class _ReportesScreenState extends State<ReportesScreen> {
             _seleccionarFecha,
           ),
         ]),
-      ),
-      const SizedBox(width: 8),
-      // WhatsApp
-      Tooltip(
-        message: 'Enviar reporte al admin por WhatsApp',
-        child: OutlinedButton(
-          onPressed: rep.cargando ? null : () => _enviarWhatsApp(rep, auth, contab),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFF16A34A),
-            side: const BorderSide(color: Color(0xFF86EFAC)),
-            backgroundColor: const Color(0xFFF0FDF4),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            minimumSize: const Size(42, 42),
-            maximumSize: const Size(42, 42),
-            padding: EdgeInsets.zero,
-          ),
-          child: const Icon(Icons.chat_rounded, size: 20),
-        ),
       ),
       const SizedBox(width: 8),
       // Refresh

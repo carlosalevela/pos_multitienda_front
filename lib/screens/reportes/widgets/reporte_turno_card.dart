@@ -1,16 +1,11 @@
-import 'dart:io';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../models/sesion_caja.dart';
 import '../../../providers/caja_provider.dart';
-import '../../../providers/config_provider.dart';
 import '../../../providers/contabilidad_provider.dart';
 import '../../../providers/reportes_provider.dart';
 import '../../../services/cierre_turno_print_service.dart';
-import '../../../services/reporte_pdf_service.dart';
 import 'reporte_utils.dart';
 
 // ── Paleta verde (caja cerrada / lista para imprimir) ─────────
@@ -48,125 +43,6 @@ class _ReporteTurnoCardState extends State<ReporteTurnoCard> {
   String     get empresaNombre => widget.empresaNombre;
   bool       get cajaAbierta   => widget.cajaAbierta;
 
-  Future<void> _enviarCierreWhatsApp(
-    ReportesProvider rep,
-    ContabilidadProvider contab,
-  ) async {
-    final numero = context.read<ConfigProvider>().whatsappAdmin.trim();
-    if (numero.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Configura el número WhatsApp en Configuración → General'),
-        backgroundColor: Color(0xFF374151),
-        behavior: SnackBarBehavior.floating,
-      ));
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Row(children: [
-        SizedBox(width: 16, height: 16,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
-        SizedBox(width: 12),
-        Text('Generando PDF de cierre…'),
-      ]),
-      duration: Duration(seconds: 10),
-      backgroundColor: Color(0xFF374151),
-      behavior: SnackBarBehavior.floating,
-    ));
-
-    File? archivo;
-    try {
-      archivo = await ReportePdfService.generarCierreTurno(
-        sesion:        sesion,
-        fecha:         fecha,
-        tiendaNombre:  tiendaNombre,
-        empresaNombre: empresaNombre,
-        metodosPago:   rep.totalPorMetodo,
-        gastosSesion:  contab.gastos.map((g) => {
-          'monto':       g.monto,
-          'descripcion': g.descripcion,
-          'categoria':   g.categoria,
-          'metodo_pago': g.metodoPago,
-        }).toList(),
-        totalGastos:  sesion.gastosTotal,
-        soloGuardar:  true,
-      );
-    } catch (_) {}
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-
-    if (archivo == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('No se pudo generar el PDF'),
-        backgroundColor: Color(0xFFBE123C),
-        behavior: SnackBarBehavior.floating,
-      ));
-      return;
-    }
-
-    final rutaPdf = archivo.path;
-    await showDialog(
-      context: context,
-      builder: (dCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Row(children: [
-          Icon(Icons.chat_rounded, color: Color(0xFF16A34A)),
-          SizedBox(width: 8),
-          Text('Enviar por WhatsApp',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        ]),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('El PDF de cierre fue guardado. Para enviarlo:',
-                style: TextStyle(fontSize: 13)),
-            const SizedBox(height: 10),
-            const Text('1. Abre la carpeta y copia el archivo.',
-                style: TextStyle(fontSize: 12, color: Color(0xFF374151))),
-            const Text('2. En WhatsApp adjunta el PDF al chat del admin.',
-                style: TextStyle(fontSize: 12, color: Color(0xFF374151))),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(rutaPdf,
-                  style: const TextStyle(fontSize: 10, color: Color(0xFF6B7280))),
-            ),
-          ],
-        ),
-        actions: [
-          if (!kIsWeb)
-            TextButton.icon(
-              onPressed: () async {
-                await Process.run('explorer.exe', ['/select,', rutaPdf]);
-              },
-              icon: const Icon(Icons.folder_open_outlined, size: 16),
-              label: const Text('Abrir carpeta'),
-              style: TextButton.styleFrom(foregroundColor: const Color(0xFF3730A3)),
-            ),
-          ElevatedButton.icon(
-            onPressed: () async {
-              Navigator.pop(dCtx);
-              await launchUrl(Uri.parse('https://wa.me/$numero'),
-                  mode: LaunchMode.externalApplication);
-            },
-            icon: const Icon(Icons.chat_rounded, size: 16),
-            label: const Text('Abrir WhatsApp'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF16A34A),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -270,25 +146,6 @@ class _ReporteTurnoCardState extends State<ReporteTurnoCard> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // WhatsApp
-                    Tooltip(
-                      message: 'Enviar cierre al admin por WhatsApp',
-                      child: ElevatedButton(
-                        onPressed: () => _enviarCierreWhatsApp(rep, contab),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: const Color(0xFF16A34A),
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                          minimumSize: const Size(42, 40),
-                          maximumSize: const Size(42, 40),
-                          padding: EdgeInsets.zero,
-                        ),
-                        child: const Icon(Icons.chat_rounded, size: 18),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
                     // Imprimir
                     ElevatedButton.icon(
                       onPressed: () => CierreTurnoPrintService.imprimir(
@@ -304,7 +161,9 @@ class _ReporteTurnoCardState extends State<ReporteTurnoCard> {
                             'categoria':   g.categoria,
                             'metodo_pago': g.metodoPago,
                           }).toList(),
-                        totalGastos: sesion.gastosTotal,
+                        totalGastos:  sesion.gastosTotal,
+                        topProductos: contab.topProductos,
+                        separadosDia: contab.separadosDia,
                       ),
                       icon: const Icon(Icons.print_rounded, size: 15),
                       label: Text(

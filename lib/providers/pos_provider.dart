@@ -88,8 +88,9 @@ class PosProvider extends ChangeNotifier {
   String _metodoPago    = 'efectivo';
   double _montoRecibido = 0;
   double _descuento     = 0;
-  double _mixtoEfectivo   = 0;
-  String _mixtoOtroMetodo = 'transferencia';
+  double _mixtoEfectivo    = 0;
+  String _mixtoOtroMetodo  = 'transferencia';
+  int?   _cuentaDestinoId;
 
   // ── Tickets parkados ──────────────────────────────────
   static const _kStorageKey = 'pos_tickets_parkados';
@@ -125,12 +126,19 @@ class PosProvider extends ChangeNotifier {
   double get mixtoEfectivo     => _mixtoEfectivo;
   String get mixtoOtroMetodo   => _mixtoOtroMetodo;
   double get mixtoOtroMonto    => (totalConDescuento - _mixtoEfectivo).clamp(0, double.infinity);
+  int?   get cuentaDestinoId   => _cuentaDestinoId;
 
   // ── Setters ───────────────────────────────────────────
 
   void setMetodoPago(String metodo) {
     _metodoPago = metodo;
     if (metodo == 'mixto') _mixtoEfectivo = 0;
+    if (metodo == 'efectivo' || metodo == 'credito') _cuentaDestinoId = null;
+    notifyListeners();
+  }
+
+  void setCuentaDestino(int? id) {
+    _cuentaDestinoId = id;
     notifyListeners();
   }
 
@@ -280,15 +288,16 @@ class PosProvider extends ChangeNotifier {
   }
 
   void limpiarCarrito() {
-    _carrito         = [];
-    _montoRecibido   = 0;
-    _metodoPago      = 'efectivo';
-    _errorMsg        = '';
-    _successMsg      = '';
-    _descuento       = 0;
-    _numeroActual    = null;
-    _mixtoEfectivo   = 0;
-    _mixtoOtroMetodo = 'transferencia';
+    _carrito          = [];
+    _montoRecibido    = 0;
+    _metodoPago       = 'efectivo';
+    _errorMsg         = '';
+    _successMsg       = '';
+    _descuento        = 0;
+    _numeroActual     = null;
+    _mixtoEfectivo    = 0;
+    _mixtoOtroMetodo  = 'transferencia';
+    _cuentaDestinoId  = null;
     notifyListeners();
   }
 
@@ -464,14 +473,15 @@ class PosProvider extends ChangeNotifier {
           : [];
 
       final result = await _ventaService.crearVenta(
-        tiendaId:      tiendaId,
-        metodoPago:    _metodoPago,
-        montoRecibido: _montoRecibido,
-        descuento:     _descuento,
-        clienteId:     clienteId,
-        aCredito:      _metodoPago == 'credito',
-        detalles:      detalles,
-        pagos:         pagos,
+        tiendaId:        tiendaId,
+        metodoPago:      _metodoPago,
+        montoRecibido:   _montoRecibido,
+        descuento:       _descuento,
+        clienteId:       clienteId,
+        aCredito:        _metodoPago == 'credito',
+        detalles:        detalles,
+        pagos:           pagos,
+        cuentaDestinoId: _cuentaDestinoId,
       );
 
       if (result['success'] == true) {

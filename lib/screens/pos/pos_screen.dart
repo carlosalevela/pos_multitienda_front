@@ -1578,6 +1578,10 @@ class _PosScreenState extends State<PosScreen> {
         const SizedBox(height: 10),
         _buildCreditoInfo(),
       ],
+      if (pos.metodoPago != 'efectivo' && pos.metodoPago != 'credito') ...[
+        const SizedBox(height: 10),
+        _buildCuentaSelector(pos),
+      ],
     ]),
   );
 
@@ -1961,6 +1965,73 @@ class _PosScreenState extends State<PosScreen> {
         ),
       );
     }).toList());
+  }
+
+  // ── Selector de cuenta destino (Nequi, DaviPlata, Datáfono…) ──
+
+  Widget _buildCuentaSelector(PosProvider pos) {
+    final cuentas = context.read<ConfigProvider>().cuentas;
+    if (cuentas.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          const Icon(Icons.account_balance_wallet_outlined, size: 13, color: _kTextMuted),
+          const SizedBox(width: 5),
+          Text('¿A qué cuenta llega el pago?',
+            style: GoogleFonts.inter(fontSize: 11, color: _kTextMuted,
+                fontWeight: FontWeight.w500)),
+        ]),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            ...cuentas.map((c) {
+              final sel = pos.cuentaDestinoId == c.id;
+              return GestureDetector(
+                onTap: () => pos.setCuentaDestino(sel ? null : c.id),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 120),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: sel
+                        ? _kGreen.withValues(alpha: 0.10)
+                        : _kSurfaceLow,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: sel ? _kGreen : _kBorder,
+                      width: sel ? 1.5 : 1,
+                    ),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(_iconoCuenta(c.tipo), size: 13,
+                        color: sel ? _kGreenDark : _kTextMuted),
+                    const SizedBox(width: 5),
+                    Text(c.nombre,
+                      style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
+                          color: sel ? _kGreenDark : _kText)),
+                  ]),
+                ),
+              );
+            }),
+          ],
+        ),
+      ],
+    );
+  }
+
+  static IconData _iconoCuenta(String tipo) {
+    switch (tipo) {
+      case 'nequi':         return Icons.smartphone_rounded;
+      case 'daviplata':     return Icons.phone_android_rounded;
+      case 'tarjeta':       return Icons.credit_card_rounded;
+      case 'transferencia': return Icons.account_balance_rounded;
+      default:              return Icons.payments_rounded;
+    }
   }
 
   // ── Info crédito ──────────────────────────────────────────

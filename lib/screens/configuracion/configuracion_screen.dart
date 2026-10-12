@@ -259,7 +259,7 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
     final sinSeleccion = auth.esSuperadmin && _tiendaSeleccionada == null;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7F8),
+      backgroundColor: const Color(0xFFF7F9FB),
       body: Column(
         children: [
           _Header(tienda: nombreTienda),
@@ -359,13 +359,13 @@ class _TiendaPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: const Color(0xFFEEF2FF),
+      color: const Color(0xFFE8FFF4),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          const Icon(Icons.store_rounded, size: 18, color: Color(0xFF3730A3)),
+          const Icon(Icons.store_rounded, size: 18, color: Color(0xFF006C49)),
           const SizedBox(width: 8),
-          const Text('Tienda:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF3730A3))),
+          const Text('Tienda:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF006C49))),
           const SizedBox(width: 10),
           Expanded(
             child: cargando
@@ -424,24 +424,31 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
       color: Colors.white,
-      child: Row(
-        children: [
-          const Icon(Icons.settings_outlined, size: 22, color: Color(0xFF3730A3)),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Configuración',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF111827))),
-              if (tienda.isNotEmpty)
-                Text(tienda,
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
-            ],
-          ),
-        ],
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Color(0xFFE0E3E5))),
       ),
+      child: Row(children: [
+        Container(
+          padding: const EdgeInsets.all(9),
+          decoration: BoxDecoration(
+            color: const Color(0xFFE8FFF4),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.settings_rounded, color: Color(0xFF006C49), size: 20),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Configuración',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF191C1E))),
+            if (tienda.isNotEmpty)
+              Text(tienda,
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF76777D))),
+          ]),
+        ),
+      ]),
     );
   }
 }
@@ -458,9 +465,9 @@ class _TabBar extends StatelessWidget {
       color: Colors.white,
       child: TabBar(
         controller:  controller,
-        labelColor:  const Color(0xFF3730A3),
+        labelColor:  const Color(0xFF006C49),
         unselectedLabelColor: const Color(0xFF6B7280),
-        indicatorColor: const Color(0xFF3730A3),
+        indicatorColor: const Color(0xFF006C49),
         labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
         tabs: const [
           Tab(icon: Icon(Icons.tune_outlined,           size: 18), text: 'General'),
@@ -508,7 +515,7 @@ Widget _field(TextEditingController ctrl, {
         borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
     focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFF3730A3), width: 1.5)),
+        borderSide: const BorderSide(color: Color(0xFF006C49), width: 1.5)),
     disabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
@@ -526,7 +533,7 @@ Widget _guardarBtn({required VoidCallback onTap, required bool guardando}) =>
             : const Icon(Icons.save_outlined, size: 16),
         label: Text(guardando ? 'Guardando…' : 'Guardar cambios'),
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF3730A3),
+          backgroundColor: const Color(0xFF006C49),
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -606,7 +613,7 @@ class _TabGeneral extends StatelessWidget {
                     style: const TextStyle(fontSize: 13, color: Color(0xFF374151))),
                 contentPadding: EdgeInsets.zero,
                 controlAffinity: ListTileControlAffinity.leading,
-                activeColor: const Color(0xFF3730A3),
+                activeColor: const Color(0xFF006C49),
               ),
             ),
           ],
@@ -676,11 +683,11 @@ class _TabMayoreo extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEEF2FF),
+                  color: const Color(0xFFE8FFF4),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(Icons.business_rounded,
-                    size: 16, color: Color(0xFF3730A3)),
+                    size: 16, color: Color(0xFF006C49)),
               ),
               const SizedBox(width: 8),
               const Text('Configuración empresa (global)',
@@ -734,8 +741,8 @@ class _TabMayoreo extends StatelessWidget {
                 Switch(
                   value:           empresaManejaM,
                   onChanged:       puedeEditarEmpresa ? onChangeEmpresa : null,
-                  activeThumbColor: const Color(0xFF3730A3),
-                  activeTrackColor: const Color(0xFFBFBFF7),
+                  activeThumbColor: const Color(0xFF006C49),
+                  activeTrackColor: const Color(0xFFB3D9CD),
                 ),
               ]),
             ),
@@ -756,11 +763,11 @@ class _TabMayoreo extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEEF2FF),
+                    color: const Color(0xFFE8FFF4),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Text('unidades',
-                      style: TextStyle(fontSize: 13, color: Color(0xFF3730A3),
+                      style: TextStyle(fontSize: 13, color: Color(0xFF006C49),
                           fontWeight: FontWeight.w600)),
                 ),
               ]),
@@ -786,7 +793,7 @@ class _TabMayoreo extends StatelessWidget {
                       ? 'Guardando…'
                       : 'Guardar config empresa'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF3730A3),
+                    backgroundColor: const Color(0xFF006C49),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 10),
@@ -880,8 +887,8 @@ class _TabMayoreo extends StatelessWidget {
                 Switch(
                   value:           habilitadoTienda,
                   onChanged:       puedeEditar ? onChangeTienda : null,
-                  activeThumbColor: const Color(0xFF3730A3),
-                  activeTrackColor: const Color(0xFFBFBFF7),
+                  activeThumbColor: const Color(0xFF006C49),
+                  activeTrackColor: const Color(0xFFB3D9CD),
                 ),
               ]),
             ),
@@ -1018,7 +1025,7 @@ class _TabSeparados extends StatelessWidget {
               subtitle: Text(e.value.$2,
                   style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
               contentPadding: EdgeInsets.zero,
-              activeColor: const Color(0xFF3730A3),
+              activeColor: const Color(0xFF006C49),
             )),
           ],
         )),
@@ -1084,7 +1091,7 @@ class _TabImpresion extends StatelessWidget {
               subtitle: Text(e.value.$2,
                   style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
               contentPadding: EdgeInsets.zero,
-              activeColor: const Color(0xFF3730A3),
+              activeColor: const Color(0xFF006C49),
             )),
           ],
         )),
@@ -1098,13 +1105,13 @@ class _TabImpresion extends StatelessWidget {
                 IconButton(
                   onPressed: puedeEditar && copias > 1 ? () => onCopias(copias - 1) : null,
                   icon: const Icon(Icons.remove_circle_outline),
-                  color: const Color(0xFF3730A3),
+                  color: const Color(0xFF006C49),
                 ),
                 Text('$copias', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                 IconButton(
                   onPressed: puedeEditar && copias < 5 ? () => onCopias(copias + 1) : null,
                   icon: const Icon(Icons.add_circle_outline),
-                  color: const Color(0xFF3730A3),
+                  color: const Color(0xFF006C49),
                 ),
               ],
             ),
@@ -1113,7 +1120,7 @@ class _TabImpresion extends StatelessWidget {
               onChanged: puedeEditar ? onMostrarLogo : null,
               title: const Text('Mostrar logo en recibo',
                   style: TextStyle(fontSize: 13, color: Color(0xFF374151))),
-              activeThumbColor: const Color(0xFF3730A3),
+              activeThumbColor: const Color(0xFF006C49),
               contentPadding: EdgeInsets.zero,
             ),
             SwitchListTile(
@@ -1121,7 +1128,7 @@ class _TabImpresion extends StatelessWidget {
               onChanged: puedeEditar ? onMostrarNit : null,
               title: const Text('Mostrar NIT / RUT en recibo',
                   style: TextStyle(fontSize: 13, color: Color(0xFF374151))),
-              activeThumbColor: const Color(0xFF3730A3),
+              activeThumbColor: const Color(0xFF006C49),
               contentPadding: EdgeInsets.zero,
             ),
             const SizedBox(height: 12),
@@ -1405,7 +1412,7 @@ class _TabFidelizacionState extends State<_TabFidelizacion> {
               IconButton(
                 onPressed: () => _abrirFormulario(tier),
                 icon: const Icon(Icons.edit_outlined, size: 18),
-                color: const Color(0xFF3730A3),
+                color: const Color(0xFF006C49),
                 tooltip: 'Editar',
               ),
               IconButton(
@@ -1435,7 +1442,7 @@ class _TabFidelizacionState extends State<_TabFidelizacion> {
               icon: const Icon(Icons.add_rounded, size: 18),
               label: const Text('Agregar tier'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF3730A3),
+                backgroundColor: const Color(0xFF006C49),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -1763,14 +1770,14 @@ class _TierDialogState extends State<_TierDialog> {
                       Switch(
                         value: _activo,
                         onChanged: (v) => setState(() => _activo = v),
-                        activeThumbColor: const Color(0xFF3730A3),
-                        activeTrackColor: const Color(0xFFBFBFF7),
+                        activeThumbColor: const Color(0xFF006C49),
+                        activeTrackColor: const Color(0xFFB3D9CD),
                       ),
                       Text(_activo ? 'Activo' : 'Inactivo',
                           style: TextStyle(
                             fontSize: 13, fontWeight: FontWeight.w600,
                             color: _activo
-                                ? const Color(0xFF3730A3)
+                                ? const Color(0xFF006C49)
                                 : const Color(0xFF9CA3AF),
                           )),
                     ]),
@@ -1790,7 +1797,7 @@ class _TierDialogState extends State<_TierDialog> {
         ElevatedButton(
           onPressed: _confirmar,
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF3730A3),
+            backgroundColor: const Color(0xFF006C49),
             foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
@@ -1810,7 +1817,7 @@ class _TierDialogState extends State<_TierDialog> {
     enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
     focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFF3730A3), width: 1.5)),
+        borderSide: const BorderSide(color: Color(0xFF006C49), width: 1.5)),
     errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: Color(0xFFBE123C))),
   );
@@ -1840,7 +1847,7 @@ class _ConexionImpresoraCardState extends State<_ConexionImpresoraCard> {
   bool           _tieneCaja  = false;
   String?        _error;
 
-  static const _indigo = Color(0xFF3730A3);
+  static const _indigo = Color(0xFF006C49);
   static const _green  = Color(0xFF0B7A53);
   static const _red    = Color(0xFFBE123C);
   static const _grey   = Color(0xFF6B7280);
@@ -1986,11 +1993,19 @@ class _ConexionImpresoraCardState extends State<_ConexionImpresoraCard> {
   }
 
   Future<void> _abrirCaja() async {
-    if (_device == null) return;
     setState(() => _trabajando = true);
     try {
-      await ThermalPrinterService.kickDrawer(_device!);
+      bool ok = false;
+      if (ThermalPrinterService.isWebUsbSupported && _device != null) {
+        await ThermalPrinterService.kickDrawer(_device!);
+        ok = true;
+      } else if (!kIsWeb && _winPrinter != null) {
+        // ESC p 0 25 250 — pulso de apertura estándar RJ-11
+        ok = await WindowsPrinterService.printRaw(
+            [0x1B, 0x70, 0x00, 0x19, 0xFA]);
+      }
       if (!mounted) return;
+      if (!ok) { _snack('Conecta la impresora primero', false); return; }
       // El comando llegó a la impresora. Si la caja no abrió es un problema físico.
       _snack('Señal enviada. Si no abrió, verifica el cable RJ-11.', true);
     } catch (e) {
@@ -2172,7 +2187,7 @@ class _ConexionImpresoraCardState extends State<_ConexionImpresoraCard> {
                   label: const Text('Cambiar'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: _indigo,
-                    side: const BorderSide(color: Color(0xFFBFBFF7)),
+                    side: const BorderSide(color: Color(0xFFB3D9CD)),
                     padding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 10),
                     shape: RoundedRectangleBorder(
@@ -2280,63 +2295,100 @@ class _ConexionImpresoraCardState extends State<_ConexionImpresoraCard> {
                       'Queda guardada y los recibos se imprimen automáticamente.',
                 ),
                 const SizedBox(height: 10),
-                // Dropdown de impresoras disponibles
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: const Color(0xFFE5E7EB)),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    children: _winPrinters.map((p) {
-                      final isLast = p == _winPrinters.last;
-                      return InkWell(
-                        onTap: () => _seleccionarWinPrinter(p),
-                        borderRadius: BorderRadius.vertical(
-                          top: _winPrinters.first == p
-                              ? const Radius.circular(8) : Radius.zero,
-                          bottom: isLast ? const Radius.circular(8) : Radius.zero,
-                        ),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 10),
+                // Dropdown — solo impresoras físicas (filtra virtuales)
+                Builder(builder: (_) {
+                  const _virtual = [
+                    'Microsoft Print to PDF',
+                    'Microsoft XPS Document Writer',
+                    'OneNote',
+                    'Fax',
+                    'PDF',
+                    'Send To OneNote',
+                  ];
+                  final visibles = _winPrinters.where((p) =>
+                    !_virtual.any((v) =>
+                        p.name.toLowerCase().contains(v.toLowerCase()))).toList();
+                  final ocultas = _winPrinters.length - visibles.length;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (visibles.isEmpty)
+                        _InfoBanner(
+                          icon: Icons.warning_amber_rounded,
+                          color: const Color(0xFFD97706),
+                          bg: const Color(0xFFFFF7ED),
+                          border: const Color(0xFFFED7AA),
+                          text: 'No se encontraron impresoras físicas. '
+                              'Instala el driver de tu impresora térmica.',
+                        )
+                      else
+                        Container(
                           decoration: BoxDecoration(
-                            border: isLast ? null
-                                : const Border(bottom: BorderSide(
-                                    color: Color(0xFFE5E7EB))),
+                            border: Border.all(color: const Color(0xFFE5E7EB)),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Row(children: [
-                            Icon(
-                              p.isDefault
-                                  ? Icons.print_rounded
-                                  : Icons.print_outlined,
-                              size: 18,
-                              color: p.isDefault ? _indigo : _grey,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(p.name,
-                                      style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w500)),
-                                  if (p.isDefault)
-                                    const Text('Predeterminada',
-                                        style: TextStyle(
-                                            fontSize: 11,
-                                            color: Color(0xFF6B7280))),
-                                ],
-                              ),
-                            ),
-                            const Icon(Icons.chevron_right_rounded,
-                                size: 16, color: Color(0xFF9CA3AF)),
-                          ]),
+                          child: Column(
+                            children: visibles.map((p) {
+                              final isLast = p == visibles.last;
+                              return InkWell(
+                                onTap: () => _seleccionarWinPrinter(p),
+                                borderRadius: BorderRadius.vertical(
+                                  top: visibles.first == p
+                                      ? const Radius.circular(8) : Radius.zero,
+                                  bottom: isLast ? const Radius.circular(8) : Radius.zero,
+                                ),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    border: isLast ? null
+                                        : const Border(bottom: BorderSide(
+                                            color: Color(0xFFE5E7EB))),
+                                  ),
+                                  child: Row(children: [
+                                    Icon(
+                                      p.isDefault
+                                          ? Icons.print_rounded
+                                          : Icons.print_outlined,
+                                      size: 18,
+                                      color: p.isDefault ? _indigo : _grey,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(p.name,
+                                              style: const TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w500)),
+                                          if (p.isDefault)
+                                            const Text('Predeterminada',
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Color(0xFF6B7280))),
+                                        ],
+                                      ),
+                                    ),
+                                    const Icon(Icons.chevron_right_rounded,
+                                        size: 16, color: Color(0xFF9CA3AF)),
+                                  ]),
+                                ),
+                              );
+                            }).toList(),
+                          ),
                         ),
-                      );
-                    }).toList(),
-                  ),
-                ),
+                      if (ocultas > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            '$ocultas impresora${ocultas > 1 ? 's' : ''} virtual${ocultas > 1 ? 'es' : ''} ocultada${ocultas > 1 ? 's' : ''} (PDF, Fax…)',
+                            style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+                          ),
+                        ),
+                    ],
+                  );
+                }),
                 const SizedBox(height: 8),
                 TextButton.icon(
                   onPressed: _cargarWinPrinters,
@@ -2405,7 +2457,7 @@ class _ConexionImpresoraCardState extends State<_ConexionImpresoraCard> {
             const SizedBox(height: 10),
             if (conectada) ...[
               _StatusChip(
-                label: 'Conectada vía ${_device!.displayName}',
+                label: 'Conectada vía ${webUsb ? _device!.displayName : _winPrinter!.name}',
                 sub: 'El cable RJ-11 debe estar enchufado a la impresora',
                 color: const Color(0xFF92400E),
                 bgColor: const Color(0xFFFEF9C3),
@@ -2486,7 +2538,7 @@ class _DeviceRow extends StatelessWidget {
             ? const Padding(
                 padding: EdgeInsets.all(10),
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Color(0xFF3730A3)))
+                    strokeWidth: 2, color: Color(0xFF006C49)))
             : Icon(icon, size: 18, color: iconColor),
       ),
       const SizedBox(width: 10),

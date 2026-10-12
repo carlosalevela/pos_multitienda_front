@@ -894,6 +894,9 @@ class ReportePdfService {
     required Map<String, double> metodosPago,
     required List<Map<String, dynamic>> gastosSesion,
     required double totalGastos,
+    List<TopProducto> topProductos        = const [],
+    List<Map<String, dynamic>> separadosDia  = const [],
+    List<Map<String, dynamic>> resumenCuentas = const [],
     bool soloGuardar = false,
   }) async {
     final pdf        = pw.Document();
@@ -1092,6 +1095,203 @@ class ReportePdfService {
             pw.SizedBox(height: 16),
           ],
 
+          // ── Cuentas destino del turno ─────────
+          if (resumenCuentas.isNotEmpty) ...[
+            _sectionTitle('Ingresos por cuenta',
+                const PdfColor.fromInt(0xFF7B1FA2), fontBold, font,
+                badge: '${resumenCuentas.length} cuenta${resumenCuentas.length != 1 ? "s" : ""}'),
+            pw.SizedBox(height: 8),
+            pw.Table(
+              border: pw.TableBorder.all(
+                  color: const PdfColor.fromInt(0xFFE1BEE7), width: 0.5),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(2.5),
+                1: const pw.FlexColumnWidth(1.5),
+                2: const pw.FixedColumnWidth(90),
+                3: const pw.FixedColumnWidth(110),
+              },
+              children: [
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(
+                      color: PdfColor.fromInt(0xFF7B1FA2)),
+                  children: ['Cuenta', 'Tipo', 'Este turno', 'Acumulado total']
+                      .map((h) => _th(h, fontBold))
+                      .toList(),
+                ),
+                ...resumenCuentas.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final c = entry.value;
+                  final sesionT = double.tryParse(c['sesion_total']?.toString()    ?? '0') ?? 0;
+                  final acumT   = double.tryParse(c['total_acumulado']?.toString() ?? '0') ?? 0;
+                  return pw.TableRow(
+                    decoration: pw.BoxDecoration(
+                      color: i.isEven
+                          ? const PdfColor.fromInt(0xFFF3E5F5)
+                          : PdfColors.white),
+                    children: [
+                      _td(c['nombre']?.toString() ?? '—', fontMedium,
+                          color: const PdfColor.fromInt(0xFF4A148C)),
+                      _td(c['tipo_display']?.toString() ?? '—', font,
+                          color: PdfColors.grey600),
+                      _td('\$${_fmt(sesionT)}', fontBold,
+                          color: const PdfColor.fromInt(0xFF7B1FA2)),
+                      _td('\$${_fmt(acumT)}', fontBold,
+                          color: const PdfColor.fromInt(0xFF4A148C)),
+                    ],
+                  );
+                }),
+              ],
+            ),
+            pw.SizedBox(height: 16),
+          ],
+
+          // ── Abonos del turno ──────────────────
+          if ((sesion.abonosTotal as double) > 0) ...[
+            _sectionTitle('Abonos del turno',
+                PdfColors.indigo700, fontBold, font,
+                badge: '${sesion.numAbonos} abono${(sesion.numAbonos as int) != 1 ? "s" : ""}'),
+            pw.SizedBox(height: 8),
+            pw.Row(
+              children: [
+                _buildAbonoCard('Efectivo',
+                    sesion.abonosEfectivo as double,
+                    sesion.abonosTotal as double,
+                    PdfColors.indigo700, font, fontBold),
+                _buildAbonoCard('Tarjeta',
+                    sesion.abonosTarjeta as double,
+                    sesion.abonosTotal as double,
+                    PdfColors.indigo700, font, fontBold),
+                _buildAbonoCard('Transferencia',
+                    sesion.abonosTransferencia as double,
+                    sesion.abonosTotal as double,
+                    PdfColors.indigo700, font, fontBold),
+                pw.Expanded(
+                  child: pw.Container(
+                    margin: const pw.EdgeInsets.only(right: 8),
+                    padding: const pw.EdgeInsets.all(10),
+                    decoration: pw.BoxDecoration(
+                      color: const PdfColor.fromInt(0xFFE8EAF6),
+                      borderRadius: pw.BorderRadius.circular(8),
+                      border: pw.Border.all(color: PdfColors.indigo200),
+                    ),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('TOTAL',
+                          style: pw.TextStyle(font: fontBold, fontSize: 9,
+                              color: PdfColors.indigo700)),
+                        pw.SizedBox(height: 4),
+                        pw.Text('\$${_fmt(sesion.abonosTotal as double)}',
+                          style: pw.TextStyle(font: fontBold, fontSize: 14,
+                              color: PdfColors.indigo700)),
+                        pw.Text('100%',
+                          style: pw.TextStyle(font: font, fontSize: 9,
+                              color: PdfColors.grey500)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 16),
+          ],
+
+          // ── Separados activos ──────────────────
+          if (separadosDia.isNotEmpty) ...[
+            _sectionTitle('Separados del día',
+                PdfColors.teal700, fontBold, font,
+                badge: '${separadosDia.length} separado${separadosDia.length != 1 ? "s" : ""}'),
+            pw.SizedBox(height: 8),
+            pw.Table(
+              border: pw.TableBorder.all(
+                  color: PdfColors.teal100, width: 0.5),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(2),
+                1: const pw.FlexColumnWidth(1.5),
+                2: const pw.FixedColumnWidth(80),
+                3: const pw.FixedColumnWidth(80),
+              },
+              children: [
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(
+                      color: PdfColors.teal700),
+                  children: ['Cliente', 'Estado', 'Abonado', 'Total']
+                      .map((h) => _th(h, fontBold))
+                      .toList(),
+                ),
+                ...separadosDia.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final s = entry.value;
+                  final total   = double.tryParse(s['total']?.toString()   ?? '0') ?? 0;
+                  final abonado = double.tryParse(s['abonado']?.toString() ?? '0') ?? 0;
+                  return pw.TableRow(
+                    decoration: pw.BoxDecoration(
+                      color: i.isEven
+                          ? const PdfColor.fromInt(0xFFE0F2F1)
+                          : PdfColors.white),
+                    children: [
+                      _td(s['cliente_nombre']?.toString()
+                          ?? s['cliente']?.toString() ?? '—', fontMedium,
+                          color: PdfColors.teal900),
+                      _td(s['estado']?.toString() ?? '—', font,
+                          color: PdfColors.grey600),
+                      _td('\$${_fmt(abonado)}', font, color: PdfColors.teal700),
+                      _td('\$${_fmt(total)}', fontBold, color: PdfColors.teal900),
+                    ],
+                  );
+                }),
+              ],
+            ),
+            pw.SizedBox(height: 16),
+          ],
+
+          // ── Productos más vendidos ─────────────
+          if (topProductos.isNotEmpty) ...[
+            _sectionTitle('Productos vendidos',
+                PdfColors.blue800, fontBold, font,
+                badge: '${topProductos.length} producto${topProductos.length != 1 ? "s" : ""}'),
+            pw.SizedBox(height: 8),
+            pw.Table(
+              border: pw.TableBorder.all(
+                  color: PdfColors.blue100, width: 0.5),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(2.5),
+                1: const pw.FlexColumnWidth(1.5),
+                2: const pw.FixedColumnWidth(70),
+                3: const pw.FixedColumnWidth(90),
+              },
+              children: [
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(
+                      color: PdfColors.blue800),
+                  children: ['Producto', 'Categoría', 'Cant.', 'Ingresos']
+                      .map((h) => _th(h, fontBold))
+                      .toList(),
+                ),
+                ...topProductos.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final p = entry.value;
+                  return pw.TableRow(
+                    decoration: pw.BoxDecoration(
+                      color: i.isEven
+                          ? const PdfColor.fromInt(0xFFE3F2FD)
+                          : PdfColors.white),
+                    children: [
+                      _td(p.producto, fontMedium, color: PdfColors.blue900),
+                      _td(p.categoria, font, color: PdfColors.grey600),
+                      _td(p.totalVendido.toStringAsFixed(
+                          p.totalVendido == p.totalVendido.roundToDouble() ? 0 : 1),
+                          fontBold, color: PdfColors.blue700),
+                      _td('\$${_fmt(p.totalIngresos)}', fontBold,
+                          color: PdfColors.blue800),
+                    ],
+                  );
+                }),
+              ],
+            ),
+            pw.SizedBox(height: 16),
+          ],
+
           // ── Recuadro de cierre ─────────────────
           pw.Container(
             padding: const pw.EdgeInsets.all(14),
@@ -1161,6 +1361,39 @@ class ReportePdfService {
                 font: font, fontSize: 8,
                 color: PdfColors.grey600)),
         ],
+      ),
+    );
+
+  static pw.Widget _buildAbonoCard(
+    String label, double monto, double total,
+    PdfColor accentColor, pw.Font font, pw.Font fontBold,
+  ) =>
+    pw.Expanded(
+      child: pw.Container(
+        margin: const pw.EdgeInsets.only(right: 8),
+        padding: const pw.EdgeInsets.all(10),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: PdfColors.indigo100),
+          borderRadius: pw.BorderRadius.circular(8),
+        ),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(label.toUpperCase(),
+              style: pw.TextStyle(font: fontBold, fontSize: 9,
+                  color: accentColor)),
+            pw.SizedBox(height: 4),
+            pw.Text('\$${_fmt(monto)}',
+              style: pw.TextStyle(font: fontBold, fontSize: 13,
+                  color: accentColor)),
+            pw.Text(
+              total > 0
+                  ? '${(monto / total * 100).toStringAsFixed(1)}%'
+                  : '0%',
+              style: pw.TextStyle(font: font, fontSize: 9,
+                  color: PdfColors.grey500)),
+          ],
+        ),
       ),
     );
 

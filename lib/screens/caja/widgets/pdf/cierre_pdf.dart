@@ -33,8 +33,11 @@ Future<void> _abrirPdf(List<int> bytes, String nombre) async {
     await Process.run('cmd', ['/c', 'start', '', file.path]);
   } else if (Platform.isMacOS) {
     await Process.run('open', [file.path]);
-  } else {
+  } else if (Platform.isLinux) {
     await Process.run('xdg-open', [file.path]);
+  } else {
+    // Android / iOS — compartir via hoja del sistema
+    await Printing.sharePdf(bytes: Uint8List.fromList(bytes), filename: nombre);
   }
 }
 

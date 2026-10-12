@@ -4,10 +4,11 @@
 // Los bytes van directo al spooler → driver → impresora sin pasar por GDI/PDF.
 // Funciona con CUALQUIER puerto: COM3, USB001, red, etc. — solo necesita el nombre.
 
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -51,91 +52,94 @@ class WindowsPrinterService {
     await prefs.remove(_kPrinterName);
   }
 
+  // ── FFI → winspool.drv (lazily initialized) ─────────────
+  // Solo se inicializa la primera vez que se llama printRaw en Windows.
+  static final _ws = DynamicLibrary.open('winspool.drv');
+
+  static final _openPrinterW = _ws.lookupFunction<
+      Int32 Function(Pointer<Uint16>, Pointer<IntPtr>, Pointer<Void>),
+      int   Function(Pointer<Uint16>, Pointer<IntPtr>, Pointer<Void>)>('OpenPrinterW');
+
+  static final _startDocW = _ws.lookupFunction<
+      Uint32 Function(IntPtr, Uint32, Pointer<Void>),
+      int    Function(int,   int,    Pointer<Void>)>('StartDocPrinterW');
+
+  static final _writePrinter = _ws.lookupFunction<
+      Int32 Function(IntPtr, Pointer<Uint8>, Uint32, Pointer<Uint32>),
+      int   Function(int,    Pointer<Uint8>, int,    Pointer<Uint32>)>('WritePrinter');
+
+  static final _endDocPrinter = _ws.lookupFunction<
+      Int32 Function(IntPtr), int Function(int)>('EndDocPrinter');
+
+  static final _closePrinter = _ws.lookupFunction<
+      Int32 Function(IntPtr), int Function(int)>('ClosePrinter');
+
+  static Pointer<Uint16> _utf16(String s) {
+    final units = s.codeUnits;
+    final ptr   = malloc<Uint16>(units.length + 1);
+    for (int i = 0; i < units.length; i++) {
+      ptr[i] = units[i];
+    }
+    ptr[units.length] = 0;
+    return ptr;
+  }
+
   // ── ESC/POS RAW via WritePrinter API ────────────────────
   //
-  // Envía bytes ESC/POS crudos a través del spooler de Windows usando
-  // el nombre de la impresora. Funciona con cualquier puerto (COM, USB, red).
-  // Equivalente a WebUSB pero para el exe nativo.
+  // Envía bytes ESC/POS crudos directamente al spooler de Windows usando
+  // FFI a winspool.drv — sin PowerShell, sin compilación C#, respuesta inmediata.
   static Future<bool> printRaw(List<int> bytes) async {
     if (kIsWeb) return false;
+    if (!Platform.isWindows) return false;
     final printerName = await getSavedName();
     if (printerName == null) return false;
 
     try {
-      final dir     = await getTemporaryDirectory();
-      final datFile = File('${dir.path}\\receipt_escpos.bin');
-      final psFile  = File('${dir.path}\\print_raw.ps1');
+      final data  = Uint8List.fromList(bytes);
+      final nameW = _utf16(printerName);
+      final hPtr  = malloc<IntPtr>();
+      hPtr.value  = 0;
 
-      await datFile.writeAsBytes(bytes);
+      final opened = _openPrinterW(nameW, hPtr, nullptr);
+      malloc.free(nameW);
+      if (opened == 0 || hPtr.value == 0) {
+        malloc.free(hPtr);
+        return false;
+      }
+      final handle = hPtr.value;
+      malloc.free(hPtr);
 
-      // Script PS1 con parámetros — evita problemas de escaping en Dart
-      const psScript = r'''
-param(
-  [string]$PrinterName,
-  [string]$DataFile
-)
-$ErrorActionPreference = 'Stop'
-Add-Type -Language CSharp -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-public class RawPrint {
-  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
-  public struct DOCINFO {
-    public string pDocName;
-    public string pOutputFile;
-    public string pDataType;
-  }
-  [DllImport("winspool.drv", CharSet = CharSet.Ansi)]
-  public static extern bool OpenPrinter(string p, out IntPtr h, IntPtr d);
-  [DllImport("winspool.drv")]
-  public static extern bool ClosePrinter(IntPtr h);
-  [DllImport("winspool.drv", CharSet = CharSet.Ansi)]
-  public static extern bool StartDocPrinter(IntPtr h, int l, ref DOCINFO d);
-  [DllImport("winspool.drv")]
-  public static extern bool EndDocPrinter(IntPtr h);
-  [DllImport("winspool.drv")]
-  public static extern bool StartPagePrinter(IntPtr h);
-  [DllImport("winspool.drv")]
-  public static extern bool EndPagePrinter(IntPtr h);
-  [DllImport("winspool.drv")]
-  public static extern bool WritePrinter(IntPtr h, IntPtr p, int c, out int w);
-  public static bool Send(string printer, byte[] data) {
-    IntPtr h;
-    if (!OpenPrinter(printer, out h, IntPtr.Zero)) return false;
-    var di = new DOCINFO { pDocName = "ESC/POS", pDataType = "RAW" };
-    if (!StartDocPrinter(h, 1, ref di)) { ClosePrinter(h); return false; }
-    StartPagePrinter(h);
-    IntPtr ptr = Marshal.AllocCoTaskMem(data.Length);
-    Marshal.Copy(data, 0, ptr, data.Length);
-    int written = 0;
-    WritePrinter(h, ptr, data.Length, out written);
-    Marshal.FreeCoTaskMem(ptr);
-    EndPagePrinter(h);
-    EndDocPrinter(h);
-    ClosePrinter(h);
-    return written > 0;
-  }
-}
-"@
-$bytes = [IO.File]::ReadAllBytes($DataFile)
-$ok = [RawPrint]::Send($PrinterName, $bytes)
-if (-not $ok) { exit 1 }
-''';
+      // DOC_INFO_1W: pDocName, pOutputFile (null), pDatatype
+      final docName = _utf16('ESC/POS');
+      final dtRaw   = _utf16('RAW');
+      final docInfo = malloc<IntPtr>(3);
+      docInfo[0]    = docName.address;
+      docInfo[1]    = 0;
+      docInfo[2]    = dtRaw.address;
 
-      await psFile.writeAsString(psScript);
+      final jobId = _startDocW(handle, 1, docInfo.cast<Void>());
+      malloc.free(docInfo);
+      malloc.free(docName);
+      malloc.free(dtRaw);
 
-      final result = await Process.run('powershell', [
-        '-ExecutionPolicy', 'Bypass',
-        '-NonInteractive',
-        '-File',        psFile.path,
-        '-PrinterName', printerName,
-        '-DataFile',    datFile.path,
-      ]);
+      if (jobId == 0) {
+        _closePrinter(handle);
+        return false;
+      }
 
-      try { await datFile.delete(); } catch (_) {}
-      try { await psFile.delete(); } catch (_) {}
-
-      return result.exitCode == 0;
+      final buf     = malloc<Uint8>(data.length);
+      final written = malloc<Uint32>();
+      bool ok = false;
+      try {
+        for (int i = 0; i < data.length; i++) { buf[i] = data[i]; }
+        ok = _writePrinter(handle, buf, data.length, written) != 0;
+      } finally {
+        malloc.free(buf);
+        malloc.free(written);
+        _endDocPrinter(handle);
+        _closePrinter(handle);
+      }
+      return ok;
     } catch (_) {
       return false;
     }

@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/cuenta_bancaria.dart';
 import '../services/config_service.dart';
+import '../services/cuenta_bancaria_service.dart';
 import '../services/empresa_service.dart';
 
 class ConfigProvider extends ChangeNotifier {
-  final ConfigService  _service        = ConfigService();
-  final EmpresaService _empresaService = EmpresaService();
+  final ConfigService          _service          = ConfigService();
+  final EmpresaService         _empresaService   = EmpresaService();
+  final CuentaBancariaService  _cuentaService    = CuentaBancariaService();
 
   // ── Config Tienda ─────────────────────────────────────────
   bool   _habilitaMayoreo      = false;
@@ -48,6 +51,10 @@ class ConfigProvider extends ChangeNotifier {
   bool   _mostrarNit           = true;
   String _mensajePie           = '';
   String _nombreDispositivo    = '';
+
+  // ── Cuentas bancarias (Nequi, DaviPlata, Datáfono…) ─────
+  List<CuentaBancaria> _cuentas = [];
+  List<CuentaBancaria> get cuentas => _cuentas;
 
   // ── Estado ────────────────────────────────────────────────
   bool   _cargando  = false;
@@ -113,6 +120,10 @@ class ConfigProvider extends ChangeNotifier {
             (d) => d != null ? {'success': true, 'data': d} : {'success': false},
           ),
       ];
+      _cuentaService.listar(tiendaId).then((lista) {
+        _cuentas = lista;
+        notifyListeners();
+      });
 
       final results = await Future.wait(futures);
 

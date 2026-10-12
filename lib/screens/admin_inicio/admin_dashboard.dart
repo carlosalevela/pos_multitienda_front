@@ -43,8 +43,6 @@ class _C {
   static const amberLight = Color(0xFFFEF3C7);
   static const rose = Color(0xFFBE123C);
   static const roseLight = Color(0xFFFFF1F2);
-  static const indigo = Color(0xFF3730A3);
-  static const indigoLight = Color(0xFFEEF2FF);
   static const sidebar = Color(0xFFFFFFFF);
   static const sidebarHov = Color(0xFFF3F4F6);
 }
@@ -536,8 +534,7 @@ class _DashboardBodyState extends State<_DashboardBody> {
         trend: _balanceMensual >= 0 ? 'Positivo' : 'Negativo',
         trendUp: _balanceMensual >= 0,
         icon: Icons.account_balance_outlined,
-        accent: _balanceMensual >= 0 ? _C.indigo : _C.rose,
-        accentBg: _balanceMensual >= 0 ? _C.indigoLight : _C.roseLight,
+        accent: _C.greenDark, accentBg: _C.greenLight,
       ),
       _KPI(
         title: 'Alerta Existencias', sub: '$_alertasCriticas críticos',
@@ -545,8 +542,7 @@ class _DashboardBodyState extends State<_DashboardBody> {
         trend: totalBajo > 4 ? 'Revisar urgente' : 'Bajo control',
         trendUp: totalBajo <= 4,
         icon: Icons.inventory_2_outlined,
-        accent: totalBajo > 4 ? _C.rose : _C.amber,
-        accentBg: totalBajo > 4 ? _C.roseLight : _C.amberLight,
+        accent: _C.greenDark, accentBg: _C.greenLight,
         onTap: () => widget.onNavigate('inventory'),
       ),
       _KPI(
@@ -555,8 +551,7 @@ class _DashboardBodyState extends State<_DashboardBody> {
         trend: _comprasPendientes > 0 ? 'Atención requerida' : 'Al día',
         trendUp: _comprasPendientes == 0,
         icon: Icons.shopping_cart_outlined,
-        accent: _comprasPendientes > 0 ? _C.amber : _C.indigo,
-        accentBg: _comprasPendientes > 0 ? _C.amberLight : _C.indigoLight,
+        accent: _C.greenDark, accentBg: _C.greenLight,
         onTap: () => widget.onNavigate('compras'),
       ),
     ];
@@ -626,7 +621,7 @@ class _DashboardBodyState extends State<_DashboardBody> {
 
         // Bitácora + métodos de pago
         isWide
-            ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            ? Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Expanded(flex: 6, child: _MovementsCard(movements: movements)),
                 const SizedBox(width: 20),
                 Expanded(flex: 5, child: _MetodosPagoCard(metodos: _metodosPago, periodo: _periodo)),
@@ -641,7 +636,7 @@ class _DashboardBodyState extends State<_DashboardBody> {
         if (_ventasPorTienda.isNotEmpty || _desempeno.isNotEmpty) ...[
           const SizedBox(height: 24),
           if (isWide)
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               if (_ventasPorTienda.isNotEmpty)
                 Expanded(child: _VentasPorTiendaCard(ventas: _ventasPorTienda, periodo: _periodo)),
               if (_ventasPorTienda.isNotEmpty && _desempeno.isNotEmpty)
@@ -701,7 +696,7 @@ class _AlertasPanel extends StatelessWidget {
                 if (inventarioBajo > 0)
                   _alertaChip(icon: Icons.inventory_2_outlined, color: _C.amber, bg: _C.amberLight, label: '$inventarioBajo stock bajo', onTap: () => onNavigate('inventory')),
                 if (comprasPendientes > 0)
-                  _alertaChip(icon: Icons.local_shipping_outlined, color: _C.indigo, bg: _C.indigoLight, label: '$comprasPendientes por recibir', onTap: () => onNavigate('compras')),
+                  _alertaChip(icon: Icons.local_shipping_outlined, color: _C.greenDark, bg: _C.greenLight, label: '$comprasPendientes por recibir', onTap: () => onNavigate('compras')),
               ]),
             ])
           : Row(children: [
@@ -786,7 +781,7 @@ class _MovementsCard extends StatelessWidget {
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(color: _C.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: _C.border)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Row(children: [Icon(Icons.history_rounded, size: 15, color: _C.indigo), const SizedBox(width: 8), Text('Auditoría: Bitácora del Día', style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 13, fontWeight: FontWeight.w700))]), Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), decoration: BoxDecoration(color: _C.bg, borderRadius: BorderRadius.circular(20), border: Border.all(color: _C.border)), child: Text('Últimas ${movements.length} acciones', style: GoogleFonts.inter(color: _C.textFaint, fontSize: 10)))]),
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Row(children: [Icon(Icons.history_rounded, size: 15, color: _C.greenDark), const SizedBox(width: 8), Text('Auditoría: Bitácora del Día', style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 13, fontWeight: FontWeight.w700))]), Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), decoration: BoxDecoration(color: _C.bg, borderRadius: BorderRadius.circular(20), border: Border.all(color: _C.border)), child: Text('Últimas ${movements.length} acciones', style: GoogleFonts.inter(color: _C.textFaint, fontSize: 10)))]),
         const SizedBox(height: 4),
         Divider(color: _C.divider),
         const SizedBox(height: 8),
@@ -1034,7 +1029,7 @@ class _SucursalesCard extends StatelessWidget {
       decoration: BoxDecoration(color: _C.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: _C.border)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Icon(Icons.store_rounded, size: 15, color: _C.indigo),
+          Icon(Icons.store_rounded, size: 15, color: _C.greenDark),
           const SizedBox(width: 8),
           Text('Estado de Sucursales', style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
           const Spacer(),
@@ -1065,8 +1060,8 @@ class _SucursalRow extends StatelessWidget {
   final Map<String, dynamic> t;
   const _SucursalRow({required this.t});
 
-  Color  _estadoBg(String e)  => e == 'optimo' ? _C.greenLight  : e == 'estable' ? _C.indigoLight : _C.amberLight;
-  Color  _estadoFg(String e)  => e == 'optimo' ? _C.greenDark   : e == 'estable' ? _C.indigo      : _C.amber;
+  Color  _estadoBg(String e)  => e == 'optimo' ? _C.greenLight  : e == 'estable' ? _C.divider : _C.amberLight;
+  Color  _estadoFg(String e)  => e == 'optimo' ? _C.greenDark   : e == 'estable' ? _C.textSecond : _C.amber;
   String _estadoLbl(String e) => e == 'optimo' ? 'ÓPTIMO'       : e == 'estable' ? 'ESTABLE'      : 'MODERADO';
 
   @override

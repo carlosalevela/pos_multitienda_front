@@ -2,8 +2,11 @@ import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/contabilidad_models.dart';
 import '../models/sesion_caja.dart';
+import '../providers/auth_provider.dart';
 import '../providers/config_provider.dart';
+import 'cuenta_bancaria_service.dart';
 import 'reporte_pdf_service.dart';
 import 'thermal_printer_service.dart';
 import 'windows_printer_service.dart';
@@ -18,8 +21,11 @@ class CierreTurnoPrintService {
     required Map<String, double>        metodosPago,
     required List<Map<String, dynamic>> gastosSesion,
     required double                     totalGastos,
+    List<TopProducto>                   topProductos  = const [],
+    List<Map<String, dynamic>>          separadosDia  = const [],
   }) async {
-    final config = context.read<ConfigProvider>();
+    final config   = context.read<ConfigProvider>();
+    final tiendaId = context.read<AuthProvider>().tiendaId;
 
     try {
       final paperSize = config.tipoPapel == '58mm' ? PaperSize.mm58 : PaperSize.mm80;
@@ -47,11 +53,18 @@ class CierreTurnoPrintService {
         return;
       }
 
+      // Fetch resumen por cuenta destino
+      final resumenCuentas = tiendaId > 0
+          ? await CuentaBancariaService().resumen(tiendaId, sesionId: sesion.id)
+          : <Map<String, dynamic>>[];
+
       // Fallback: PDF A4
       await ReportePdfService.generarCierreTurno(
         sesion: sesion, fecha: fecha, tiendaNombre: tiendaNombre,
         empresaNombre: empresaNombre, metodosPago: metodosPago,
         gastosSesion: gastosSesion, totalGastos: totalGastos,
+        topProductos: topProductos, separadosDia: separadosDia,
+        resumenCuentas: resumenCuentas,
       );
     } catch (e, st) {
       debugPrint('CierreTurnoPrintService: $e\n$st');
