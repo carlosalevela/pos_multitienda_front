@@ -10,13 +10,15 @@ import '../services/venta_service.dart';
 
 // ── Snapshot de un ticket parkado ─────────────────────────────
 class TicketParkado {
-  final List<ItemCarrito> carrito;
-  final String            metodoPago;
-  final double            montoRecibido;
-  final double            descuento;
-  final int               numero;
-  final double            mixtoEfectivo;
-  final String            mixtoOtroMetodo;
+  final List<ItemCarrito>  carrito;
+  final String             metodoPago;
+  final double             montoRecibido;
+  final double             descuento;
+  final int                numero;
+  final double             mixtoEfectivo;
+  final String             mixtoOtroMetodo;
+  final Map<String, dynamic>? clienteSnap;
+  final int                separadosCliente;
 
   const TicketParkado({
     required this.carrito,
@@ -24,20 +26,24 @@ class TicketParkado {
     required this.montoRecibido,
     required this.descuento,
     required this.numero,
-    this.mixtoEfectivo   = 0,
-    this.mixtoOtroMetodo = 'transferencia',
+    this.mixtoEfectivo    = 0,
+    this.mixtoOtroMetodo  = 'transferencia',
+    this.clienteSnap,
+    this.separadosCliente = 0,
   });
 
   double get total => carrito.fold(0, (s, i) => s + i.subtotal);
   int    get items => carrito.fold(0, (s, i) => s + i.cantidad);
 
   Map<String, dynamic> toJson() => {
-    'numero':          numero,
-    'metodoPago':      metodoPago,
-    'montoRecibido':   montoRecibido,
-    'descuento':       descuento,
-    'mixtoEfectivo':   mixtoEfectivo,
-    'mixtoOtroMetodo': mixtoOtroMetodo,
+    'numero':           numero,
+    'metodoPago':       metodoPago,
+    'montoRecibido':    montoRecibido,
+    'descuento':        descuento,
+    'mixtoEfectivo':    mixtoEfectivo,
+    'mixtoOtroMetodo':  mixtoOtroMetodo,
+    'clienteSnap':      clienteSnap,
+    'separadosCliente': separadosCliente,
     'items': carrito.map((i) => {
       'producto':            i.producto.toJson(),
       'cantidad':            i.cantidad,
@@ -59,13 +65,15 @@ class TicketParkado {
       return item;
     }).toList();
     return TicketParkado(
-      numero:          (j['numero'] as num).toInt(),
-      metodoPago:      j['metodoPago'] as String,
-      montoRecibido:   (j['montoRecibido'] as num).toDouble(),
-      descuento:       (j['descuento'] as num).toDouble(),
-      mixtoEfectivo:   (j['mixtoEfectivo'] as num?)?.toDouble()  ?? 0,
-      mixtoOtroMetodo: (j['mixtoOtroMetodo'] as String?) ?? 'transferencia',
-      carrito:         items,
+      numero:           (j['numero'] as num).toInt(),
+      metodoPago:       j['metodoPago'] as String,
+      montoRecibido:    (j['montoRecibido'] as num).toDouble(),
+      descuento:        (j['descuento'] as num).toDouble(),
+      mixtoEfectivo:    (j['mixtoEfectivo'] as num?)?.toDouble()  ?? 0,
+      mixtoOtroMetodo:  (j['mixtoOtroMetodo'] as String?) ?? 'transferencia',
+      clienteSnap:      j['clienteSnap'] as Map<String, dynamic>?,
+      separadosCliente: (j['separadosCliente'] as num?)?.toInt() ?? 0,
+      carrito:          items,
     );
   }
 }
@@ -305,16 +313,21 @@ class PosProvider extends ChangeNotifier {
 
   /// Guarda el carrito actual como ticket parkado y limpia para uno nuevo.
   /// Solo parka si hay items en el carrito.
-  bool parquearTicket() {
+  bool parquearTicket({
+    Map<String, dynamic>? clienteSnap,
+    int separadosCliente = 0,
+  }) {
     if (_carrito.isEmpty) return false;
     _ticketsParkados.add(TicketParkado(
-      carrito:         List.from(_carrito),
-      metodoPago:      _metodoPago,
-      montoRecibido:   _montoRecibido,
-      descuento:       _descuento,
-      numero:          _numeroActual ?? _contadorTickets++,
-      mixtoEfectivo:   _mixtoEfectivo,
-      mixtoOtroMetodo: _mixtoOtroMetodo,
+      carrito:          List.from(_carrito),
+      metodoPago:       _metodoPago,
+      montoRecibido:    _montoRecibido,
+      descuento:        _descuento,
+      numero:           _numeroActual ?? _contadorTickets++,
+      mixtoEfectivo:    _mixtoEfectivo,
+      mixtoOtroMetodo:  _mixtoOtroMetodo,
+      clienteSnap:      clienteSnap,
+      separadosCliente: separadosCliente,
     ));
     _carrito         = [];
     _montoRecibido   = 0;
@@ -332,17 +345,23 @@ class PosProvider extends ChangeNotifier {
 
   /// Restaura un ticket parkado al carrito activo.
   /// Si el carrito activo tiene items, lo parka primero (conservando su número).
-  void restaurarTicket(int index) {
-    if (index < 0 || index >= _ticketsParkados.length) return;
+  /// Retorna el snapshot restaurado para que el caller pueda recuperar el cliente.
+  TicketParkado? restaurarTicket(int index, {
+    Map<String, dynamic>? clienteSnapActual,
+    int separadosActual = 0,
+  }) {
+    if (index < 0 || index >= _ticketsParkados.length) return null;
     if (_carrito.isNotEmpty) {
       _ticketsParkados.add(TicketParkado(
-        carrito:         List.from(_carrito),
-        metodoPago:      _metodoPago,
-        montoRecibido:   _montoRecibido,
-        descuento:       _descuento,
-        numero:          _numeroActual ?? _contadorTickets++,
-        mixtoEfectivo:   _mixtoEfectivo,
-        mixtoOtroMetodo: _mixtoOtroMetodo,
+        carrito:          List.from(_carrito),
+        metodoPago:       _metodoPago,
+        montoRecibido:    _montoRecibido,
+        descuento:        _descuento,
+        numero:           _numeroActual ?? _contadorTickets++,
+        mixtoEfectivo:    _mixtoEfectivo,
+        mixtoOtroMetodo:  _mixtoOtroMetodo,
+        clienteSnap:      clienteSnapActual,
+        separadosCliente: separadosActual,
       ));
     }
     final snap       = _ticketsParkados.removeAt(index);
@@ -357,6 +376,7 @@ class PosProvider extends ChangeNotifier {
     _successMsg      = '';
     _guardarTickets();
     notifyListeners();
+    return snap;
   }
 
   /// Descarta un ticket parkado sin restaurarlo.

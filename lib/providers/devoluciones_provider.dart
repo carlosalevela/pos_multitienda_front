@@ -45,6 +45,7 @@ class DevolucionesProvider extends ChangeNotifier {
     required String metodoPago,
     required List<Map<String, dynamic>> detalles,
     String? observaciones,
+    int?    cuentaDestinoId,
   }) async {
     _error = null;
     try {
@@ -53,6 +54,7 @@ class DevolucionesProvider extends ChangeNotifier {
         metodoPago: metodoPago,
         detalles: detalles,
         observaciones: observaciones,
+        cuentaDestinoId: cuentaDestinoId,
       );
 
       if (resp['success'] != true) {
@@ -78,6 +80,7 @@ class DevolucionesProvider extends ChangeNotifier {
     String? observaciones,
     String? metodoPagoDiferencia,
     double? montoRecibido,
+    int?    cuentaDestinoId,
   }) async {
     _error = null;
     try {
@@ -90,6 +93,7 @@ class DevolucionesProvider extends ChangeNotifier {
         observaciones: observaciones,
         metodoPagoDiferencia: metodoPagoDiferencia,
         montoRecibido: montoRecibido,
+        cuentaDestinoId: cuentaDestinoId,
       );
 
       if (resp['success'] == true) {

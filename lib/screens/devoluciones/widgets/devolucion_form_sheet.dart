@@ -7,6 +7,7 @@ import '../../../models/producto.dart';
 import '../../../models/cliente.dart';
 import '../../../models/devolucion_model.dart';
 import '../../../providers/auth_provider.dart';
+import '../../../providers/config_provider.dart';
 import '../../../providers/devoluciones_provider.dart';
 import '../../../services/venta_service.dart';
 import '../../../services/inventario_service.dart';
@@ -79,6 +80,8 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
   String _metodoPago            = 'efectivo';
   String _tipoOperacion         = 'devolucion';
   String _metodoPagoDiferencia  = 'efectivo';
+  String _motivoCambio          = 'averia'; // 'averia' | 'producto_danado'
+  int?   _cuentaSeleccionadaId;
   bool   _guardando             = false;
   bool   _cargandoVenta         = false;
 
@@ -332,24 +335,31 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
 
     Map<String, dynamic> resp;
     if (_tipoOperacion == 'cambio') {
+      final motivoLabel = _motivoCambio == 'averia' ? 'Avería' : 'Producto dañado';
+      final obsConMotivo = [
+        'Motivo: $motivoLabel',
+        if (_obsCtrl.text.trim().isNotEmpty) _obsCtrl.text.trim(),
+      ].join(' — ');
       resp = await context.read<DevolucionesProvider>().crearCambio(
         ventaId:              _ventaDisp!.ventaId,
         metodoPago:           _metodoPago,
         detalles:             detallesDevueltos,
         productoReemplazoId:  _productoNuevo!.producto.id,
         cantidadReemplazo:    _productoNuevo!.cantidad,
-        observaciones:        _obsCtrl.text.trim(),
+        observaciones:        obsConMotivo,
         metodoPagoDiferencia: (_saldoPendiente > 0 || _saldoADevolver > 0)
             ? _metodoPagoDiferencia
             : null,
         montoRecibido:        _saldoPendiente > 0 ? montoRecibido : null,
+        cuentaDestinoId:      _cuentaSeleccionadaId,
       );
     } else {
       resp = await context.read<DevolucionesProvider>().crearDevolucion(
-        ventaId:       _ventaDisp!.ventaId,
-        metodoPago:    _metodoPago,
-        detalles:      detallesDevueltos,
-        observaciones: _obsCtrl.text.trim(),
+        ventaId:         _ventaDisp!.ventaId,
+        metodoPago:      _metodoPago,
+        detalles:        detallesDevueltos,
+        observaciones:   _obsCtrl.text.trim(),
+        cuentaDestinoId: _cuentaSeleccionadaId,
       );
     }
 
@@ -431,6 +441,8 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
                       _seccionClienteCambio(),
                       const SizedBox(height: 20),
                       _seccionProductoNuevo(),
+                      const SizedBox(height: 20),
+                      _seccionMotivoCambio(),
                     ],
 
                     // 6. Resumen de saldo (cambio con diferencia)
@@ -441,9 +453,11 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
                       _resumenSaldo(),
                     ],
 
-                    // 7. Método de reembolso (cards visuales)
-                    const SizedBox(height: 24),
-                    _seccionMetodoPago(),
+                    // 7. Método de reembolso — oculto en cambio sin diferencia
+                    if (!(_tipoOperacion == 'cambio' && _diferenciaNeta == 0)) ...[
+                      const SizedBox(height: 24),
+                      _seccionMetodoPago(),
+                    ],
 
                     // 8. Observaciones
                     const SizedBox(height: 20),
@@ -657,9 +671,10 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
           selected: _tipoOperacion == 'devolucion',
           color: _kOrange,
           onTap: () => setState(() {
-            _tipoOperacion  = 'devolucion';
-            _productoNuevo  = null;
-            _resultadosProducto = [];
+            _tipoOperacion        = 'devolucion';
+            _productoNuevo        = null;
+            _resultadosProducto   = [];
+            _cuentaSeleccionadaId = null;
             _busquedaCtrl.clear();
             _montoRecibidoCtrl.clear();
             _limpiarCliente();
@@ -684,11 +699,255 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
   Widget _seccionMetodoPago() {
     final esCambioConDiferencia = _tipoOperacion == 'cambio' && _saldoPendiente > 0;
     final esCambioConSobrante   = _tipoOperacion == 'cambio' && _saldoADevolver > 0;
+    final fmt = NumberFormat.currency(locale: 'es_CO', symbol: '\$', decimalDigits: 0);
+
+    // ── Cambio con diferencia a cobrar: mini-POS ─────────
+    if (esCambioConDiferencia) {
+      final montoRaw   = double.tryParse(_montoRecibidoCtrl.text.trim()) ?? 0;
+      final cambioCaja = montoRaw - _saldoPendiente;
+      final metodosValidos = _metodos.where((m) => m.$1 != 'nota_credito').toList();
+
+      return Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF7ED),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFFED7AA), width: 1.5),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Encabezado
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEA580C).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.payments_outlined, size: 16,
+                    color: Color(0xFFEA580C)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Cobrar diferencia',
+                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700,
+                        color: const Color(0xFFEA580C))),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEA580C),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(fmt.format(_saldoPendiente),
+                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700,
+                        color: Colors.white)),
+              ),
+            ]),
+
+            const SizedBox(height: 14),
+            const Divider(height: 1, color: Color(0xFFFED7AA)),
+            const SizedBox(height: 14),
+
+            // Métodos de pago — chips compactos
+            Text('Método de pago',
+                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade500)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: metodosValidos.map((m) {
+                final sel = _metodoPagoDiferencia == m.$1;
+                return GestureDetector(
+                  onTap: () => setState(() {
+                    _metodoPagoDiferencia = m.$1;
+                    _cuentaSeleccionadaId = null;
+                  }),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 120),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: sel ? const Color(0xFFEA580C) : Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: sel ? const Color(0xFFEA580C) : _kBorder,
+                      ),
+                      boxShadow: sel ? [
+                        BoxShadow(color: const Color(0xFFEA580C).withValues(alpha: 0.25),
+                            blurRadius: 6, offset: const Offset(0, 2)),
+                      ] : null,
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(m.$3, size: 14,
+                          color: sel ? Colors.white : _kTextMuted),
+                      const SizedBox(width: 5),
+                      Text(m.$2, style: GoogleFonts.inter(
+                        fontSize: 12, fontWeight: FontWeight.w600,
+                        color: sel ? Colors.white : _kTextMuted,
+                      )),
+                    ]),
+                  ),
+                );
+              }).toList(),
+            ),
+
+            // Cuenta destino — mini-POS
+            Builder(builder: (ctx) {
+              if (_metodoPagoDiferencia != 'transferencia' &&
+                  _metodoPagoDiferencia != 'tarjeta') return const SizedBox.shrink();
+              final cuentas = ctx.watch<ConfigProvider>().cuentas.where((c) {
+                if (_metodoPagoDiferencia == 'tarjeta') return c.tipo == 'tarjeta';
+                return c.tipo != 'tarjeta';
+              }).toList();
+              if (cuentas.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Cuenta destino',
+                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade500)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: cuentas.map((c) {
+                        final sel = _cuentaSeleccionadaId == c.id;
+                        return GestureDetector(
+                          onTap: () => setState(() => _cuentaSeleccionadaId = c.id),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 120),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: sel ? const Color(0xFFEA580C) : Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: sel ? const Color(0xFFEA580C) : _kBorder),
+                              boxShadow: sel ? [
+                                BoxShadow(color: const Color(0xFFEA580C).withValues(alpha: 0.25),
+                                    blurRadius: 6, offset: const Offset(0, 2)),
+                              ] : null,
+                            ),
+                            child: Row(mainAxisSize: MainAxisSize.min, children: [
+                              Icon(Icons.account_balance_rounded, size: 14,
+                                  color: sel ? Colors.white : _kTextMuted),
+                              const SizedBox(width: 5),
+                              Text(c.nombre, style: GoogleFonts.inter(
+                                fontSize: 12, fontWeight: FontWeight.w600,
+                                color: sel ? Colors.white : _kTextMuted,
+                              )),
+                            ]),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              );
+            }),
+
+            const SizedBox(height: 14),
+
+            // Campo monto recibido
+            Text('Monto recibido del cliente',
+                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade500)),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: _montoRecibidoCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              onChanged: (_) => setState(() {}),
+              style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w700,
+                  color: _kText),
+              decoration: InputDecoration(
+                hintText: fmt.format(_saldoPendiente),
+                hintStyle: GoogleFonts.inter(fontSize: 18, color: Colors.grey.shade300,
+                    fontWeight: FontWeight.w700),
+                prefixText: '\$ ',
+                prefixStyle: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w700,
+                    color: Colors.grey.shade400),
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFFFED7AA))),
+                enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFFFED7AA))),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFFEA580C), width: 1.5)),
+                errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFFDC2626))),
+                focusedErrorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.5)),
+              ),
+              validator: (_) {
+                final v = double.tryParse(_montoRecibidoCtrl.text.trim());
+                if (v == null || v <= 0) return 'Ingresa un monto válido';
+                if (v < _saldoPendiente) return 'Debe cubrir la diferencia';
+                return null;
+              },
+            ),
+
+            // Cambio a devolver
+            if (_metodoPagoDiferencia == 'efectivo' && montoRaw >= _saldoPendiente && montoRaw > 0) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDCFCE7),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF86EFAC)),
+                ),
+                child: Row(children: [
+                  const Icon(Icons.currency_exchange, size: 16, color: Color(0xFF16A34A)),
+                  const SizedBox(width: 8),
+                  Text('Cambio al cliente',
+                      style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF16A34A))),
+                  const Spacer(),
+                  Text(fmt.format(cambioCaja),
+                      style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800,
+                          color: const Color(0xFF16A34A))),
+                ]),
+              ),
+            ] else if (montoRaw > 0 && montoRaw < _saldoPendiente) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFFCA5A5)),
+                ),
+                child: Row(children: [
+                  const Icon(Icons.warning_amber_rounded, size: 16,
+                      color: Color(0xFFDC2626)),
+                  const SizedBox(width: 8),
+                  Text('Falta ${fmt.format(_saldoPendiente - montoRaw)}',
+                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600,
+                          color: const Color(0xFFDC2626))),
+                ]),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    // ── Devolución normal o cambio con sobrante ───────────
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Método de reembolso',
+          esCambioConSobrante ? 'Cómo devolver el sobrante' : 'Método de reembolso',
           style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600,
               color: Colors.grey.shade600),
         ),
@@ -696,27 +955,36 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: _metodos.map((m) {
-            final selected = _metodoPago == m.$1;
+          children: (esCambioConSobrante ? _metodos : _metodos).map((m) {
+            final sel = esCambioConSobrante
+                ? _metodoPagoDiferencia == m.$1
+                : _metodoPago == m.$1;
             return GestureDetector(
-              onTap: () => setState(() => _metodoPago = m.$1),
+              onTap: () => setState(() {
+                if (esCambioConSobrante) {
+                  _metodoPagoDiferencia = m.$1;
+                } else {
+                  _metodoPago = m.$1;
+                }
+                _cuentaSeleccionadaId = null;
+              }),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: selected ? _kGreen.withValues(alpha: 0.08) : Colors.white,
+                  color: sel ? _kGreen.withValues(alpha: 0.08) : Colors.white,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: selected ? _kGreen : _kBorder,
-                    width: selected ? 1.5 : 1,
+                    color: sel ? _kGreen : _kBorder,
+                    width: sel ? 1.5 : 1,
                   ),
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(m.$3, size: 16, color: selected ? _kGreen : _kTextMuted),
+                  Icon(m.$3, size: 16, color: sel ? _kGreen : _kTextMuted),
                   const SizedBox(width: 6),
                   Text(m.$2, style: GoogleFonts.inter(
                     fontSize: 13, fontWeight: FontWeight.w500,
-                    color: selected ? _kGreen : _kTextMuted,
+                    color: sel ? _kGreen : _kTextMuted,
                   )),
                 ]),
               ),
@@ -724,92 +992,119 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
           }).toList(),
         ),
 
-        // Para cambio con sobrante a devolver: método de devolución
-        if (esCambioConSobrante) ...[
-          const SizedBox(height: 20),
-          _FormLabel(
-            label: 'Método de devolución del sobrante',
-            child: DropdownButtonFormField<String>(
-              value: _metodoPagoDiferencia,
-              isDense: true,
-              decoration: _inputDeco(null),
-              style: GoogleFonts.inter(fontSize: 14, color: _kText),
-              items: _metodos
-                  .map((m) => DropdownMenuItem<String>(
-                        value: m.$1,
-                        child: Text(m.$2, style: GoogleFonts.inter(fontSize: 14)),
-                      ))
-                  .toList(),
-              onChanged: (v) => setState(() => _metodoPagoDiferencia = v!),
+        // Cuenta destino — sección normal
+        Builder(builder: (ctx) {
+          final metodoActivo = esCambioConSobrante ? _metodoPagoDiferencia : _metodoPago;
+          if (metodoActivo != 'transferencia' && metodoActivo != 'tarjeta')
+            return const SizedBox.shrink();
+          final cuentas = ctx.watch<ConfigProvider>().cuentas.where((c) {
+            if (metodoActivo == 'tarjeta') return c.tipo == 'tarjeta';
+            return c.tipo != 'tarjeta';
+          }).toList();
+          if (cuentas.isEmpty) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Cuenta destino',
+                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade600)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: cuentas.map((c) {
+                    final sel = _cuentaSeleccionadaId == c.id;
+                    return GestureDetector(
+                      onTap: () => setState(() => _cuentaSeleccionadaId = c.id),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: sel ? _kGreen.withValues(alpha: 0.08) : Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: sel ? _kGreen : _kBorder,
+                            width: sel ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.account_balance_rounded, size: 14,
+                              color: sel ? _kGreen : _kTextMuted),
+                          const SizedBox(width: 5),
+                          Text(c.nombre, style: GoogleFonts.inter(
+                            fontSize: 12, fontWeight: FontWeight.w600,
+                            color: sel ? _kGreen : _kTextMuted,
+                          )),
+                        ]),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
             ),
-          ),
-        ],
+          );
+        }),
+      ],
+    );
+  }
 
-        // Para cambio con diferencia a cobrar: método de la diferencia
-        if (esCambioConDiferencia) ...[
-          const SizedBox(height: 20),
-          _FormLabel(
-            label: 'Método de pago de la diferencia',
-            child: DropdownButtonFormField<String>(
-              value: _metodoPagoDiferencia,
-              isDense: true,
-              decoration: _inputDeco(null),
-              style: GoogleFonts.inter(fontSize: 14, color: _kText),
-              items: _metodos
-                  .where((m) => m.$1 != 'nota_credito')
-                  .map((m) => DropdownMenuItem<String>(
-                        value: m.$1,
-                        child: Text(m.$2, style: GoogleFonts.inter(fontSize: 14)),
-                      ))
-                  .toList(),
-              onChanged: (v) => setState(() => _metodoPagoDiferencia = v!),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _FormLabel(
-            label: 'Monto recibido del cliente',
-            child: TextFormField(
-              controller: _montoRecibidoCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              onChanged: (_) => setState(() {}),
-              decoration: _inputDeco('Ej: 20000'),
-              style: GoogleFonts.inter(fontSize: 14),
-              validator: (_) {
-                if (_tipoOperacion != 'cambio' || _saldoPendiente <= 0) return null;
-                final v = double.tryParse(_montoRecibidoCtrl.text.trim());
-                if (v == null || v <= 0) return 'Ingresa un monto válido';
-                if (v < _saldoPendiente) return 'Debe cubrir la diferencia';
-                return null;
-              },
-            ),
-          ),
-          // Cambio devuelto al cliente
-          Builder(builder: (_) {
-            final montoRaw = double.tryParse(_montoRecibidoCtrl.text.trim()) ?? 0;
-            if (_metodoPagoDiferencia == 'efectivo' && montoRaw >= _saldoPendiente && montoRaw > 0) {
-              final fmt = NumberFormat.currency(locale: 'es_CO', symbol: '\$');
-              return Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+  // ─────────────────────────────────────────────────────
+  //  Motivo del cambio — solo visible en tipoOperacion == cambio
+  // ─────────────────────────────────────────────────────
+
+  Widget _seccionMotivoCambio() {
+    const opciones = [
+      ('averia',          'Avería',          Icons.build_outlined),
+      ('producto_danado', 'Producto dañado', Icons.broken_image_outlined),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Motivo del cambio',
+          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600,
+              color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: opciones.map((o) {
+            final selected = _motivoCambio == o.$1;
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(right: o.$1 == opciones.first.$1 ? 8 : 0),
+                child: GestureDetector(
+                  onTap: () => setState(() => _motivoCambio = o.$1),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                     decoration: BoxDecoration(
-                      color: Colors.green.shade100,
-                      borderRadius: BorderRadius.circular(8),
+                      color: selected ? _kGreen.withValues(alpha: 0.08) : Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: selected ? _kGreen : _kBorder,
+                        width: selected ? 1.5 : 1,
+                      ),
                     ),
-                    child: Text(
-                      'Cambio: ${fmt.format(montoRaw - _saldoPendiente)}',
-                      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600,
-                          color: Colors.green.shade800),
-                    ),
+                    child: Row(children: [
+                      Icon(o.$3, size: 16, color: selected ? _kGreen : _kTextMuted),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(o.$2, style: GoogleFonts.inter(
+                          fontSize: 13, fontWeight: FontWeight.w500,
+                          color: selected ? _kGreen : _kTextMuted,
+                        )),
+                      ),
+                      if (selected)
+                        Icon(Icons.check_circle, size: 14, color: _kGreen),
+                    ]),
                   ),
                 ),
-              );
-            }
-            return const SizedBox.shrink();
-          }),
-        ],
+              ),
+            );
+          }).toList(),
+        ),
       ],
     );
   }

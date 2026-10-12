@@ -111,6 +111,9 @@ class ConfigProvider extends ChangeNotifier {
     if (empresaId != null) _empresaId = empresaId;
     notifyListeners();
 
+    // Cuentas se inician en paralelo pero se awaitan independiente del resto
+    final cuentasFuture = _cuentaService.listar(tiendaId);
+
     try {
       final futures = [
         _service.getConfigTienda(tiendaId),
@@ -120,10 +123,6 @@ class ConfigProvider extends ChangeNotifier {
             (d) => d != null ? {'success': true, 'data': d} : {'success': false},
           ),
       ];
-      _cuentaService.listar(tiendaId).then((lista) {
-        _cuentas = lista;
-        notifyListeners();
-      });
 
       final results = await Future.wait(futures);
 
@@ -174,10 +173,14 @@ class ConfigProvider extends ChangeNotifier {
     } catch (e) {
       _errorMsg = 'Error al cargar configuración';
       debugPrint('❌ ConfigProvider.cargar: $e');
-    } finally {
-      _cargando = false;
-      notifyListeners();
     }
+
+    // Siempre cargar cuentas, independiente de si falló la config tienda
+    _cuentas = await cuentasFuture;
+    debugPrint('✅ ConfigProvider: ${_cuentas.length} cuentas cargadas para tienda $tiendaId');
+
+    _cargando = false;
+    notifyListeners();
   }
 
   // ── Guardar WhatsApp admin (SharedPreferences) ───────────

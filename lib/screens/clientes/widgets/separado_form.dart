@@ -22,7 +22,7 @@ import '../../../services/barcode_service.dart';
 import '../../../services/inventario_service.dart';
 
 // ── Paleta del sistema de diseño ─────────────────────────────
-const _kGreen     = Color(0xFF61DDAA);   // mint — igual que dashboard
+const _kGreen     = Color(0xFF10B981);   // emerald
 const _kGreenDark = Color(0xFF0B7A53);   // verde oscuro para texto/iconos
 const _kDark      = Color(0xFF0F172A);
 const _kCard      = Colors.white;
@@ -132,7 +132,9 @@ class _SeparadoFormState extends State<SeparadoForm> {
   final _formKey   = GlobalKey<FormState>();
   final _abonoCtrl = TextEditingController();
 
-  String _metodoPago = 'efectivo';
+  String    _metodoPago  = 'efectivo';
+  DateTime? _fechaLimite;
+  bool      _fechaError  = false;
   final List<_ItemSep> _items = [];
   StreamSubscription<String>? _barcodeSub;
 
@@ -149,7 +151,8 @@ class _SeparadoFormState extends State<SeparadoForm> {
   @override
   void initState() {
     super.initState();
-    _barcodeSub = BarcodeService.instance.onBarcode.listen(_onBarcode);
+    _fechaLimite = widget.fechaInicial;
+    _barcodeSub  = BarcodeService.instance.onBarcode.listen(_onBarcode);
     if (widget.itemsIniciales.isNotEmpty) {
       for (final ic in widget.itemsIniciales) {
         final item = _ItemSep(
@@ -219,6 +222,10 @@ class _SeparadoFormState extends State<SeparadoForm> {
   // ── Guardar ───────────────────────────────────────────────
   Future<void> _guardar() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_fechaLimite == null) {
+      setState(() => _fechaError = true);
+      _snack('Selecciona una fecha límite', isError: true); return;
+    }
     if (widget.clienteInicial == null) {
       _snack('No hay cliente seleccionado', isError: true); return;
     }
@@ -229,6 +236,9 @@ class _SeparadoFormState extends State<SeparadoForm> {
     if (!cajaAbierta) {
       _snack('No hay caja abierta. Abre la caja primero.', isError: true);
       return;
+    }
+    if (_abono <= 0) {
+      _snack('El abono inicial es obligatorio', isError: true); return;
     }
     if (_abono > _total) {
       _snack('El abono no puede superar el total', isError: true); return;
@@ -249,18 +259,17 @@ class _SeparadoFormState extends State<SeparadoForm> {
     }
 
     final data = {
-      'tienda':   widget.tiendaId,
-      'cliente':  widget.clienteInicial!.id,
-      if (widget.fechaInicial != null)
-        'fecha_limite': DateFormat('yyyy-MM-dd').format(widget.fechaInicial!),
+      'tienda':       widget.tiendaId,
+      'cliente':      widget.clienteInicial!.id,
+      'fecha_limite': DateFormat('yyyy-MM-dd').format(_fechaLimite!),
       'detalles': _items.map((i) => {
         if (i.productoId != null) 'producto': i.productoId,
         'nombre_libre':    i.nombre,
         'cantidad':        i.cantidad,
         'precio_unitario': i.precio,
       }).toList(),
-      if (_abono > 0) 'abono_inicial': _abono,
-      if (_abono > 0) 'metodo_pago':   _metodoPago,
+      'abono_inicial': _abono,
+      'metodo_pago':   _metodoPago,
     };
 
     final prov   = context.read<ClienteProvider>();
@@ -413,7 +422,8 @@ class _SeparadoFormState extends State<SeparadoForm> {
                     const SizedBox(height: 20),
 
                     // ── Abono inicial ────────────────────────
-                    _sectionLabel('Abono inicial', Icons.payments_rounded),
+                    _sectionLabel('Abono inicial', Icons.payments_rounded,
+                        obligatorio: true),
                     const SizedBox(height: 10),
                     _abonoSection(),
 
@@ -481,28 +491,25 @@ class _SeparadoFormState extends State<SeparadoForm> {
     ]),
   );
 
-  // ── Resumen cliente + fecha (read-only) ─────────────────────
+  // ── Resumen cliente + fecha (con date picker) ───────────────
   Widget _resumenClienteFecha() {
     final c = widget.clienteInicial;
-    final f = widget.fechaInicial;
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _kCard,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _kBorder),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-
-        // Cliente
-        Row(children: [
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      // — Card del cliente —
+      Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: _kCard,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _kBorder),
+        ),
+        child: Row(children: [
           Container(
             width: 42, height: 42,
             decoration: BoxDecoration(
               gradient: c != null
-                  ? const LinearGradient(
-                      colors: [_kGreenDark, _kGreen])
+                  ? const LinearGradient(colors: [_kGreenDark, _kGreen])
                   : null,
               color: c == null ? const Color(0xFFE2E8F0) : null,
               borderRadius: BorderRadius.circular(11),
@@ -544,34 +551,98 @@ class _SeparadoFormState extends State<SeparadoForm> {
                     color: _kGreenDark)),
           ),
         ]),
+      ),
 
-        // Fecha (solo si existe)
-        if (f != null) ...[
-          const SizedBox(height: 10),
-          const Divider(color: _kBorder, height: 1),
-          const SizedBox(height: 10),
-          Row(children: [
-            Container(
-              width: 32, height: 32,
-              decoration: BoxDecoration(
-                color: _kAmber.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.event_rounded,
-                  size: 15, color: _kAmber),
+      const SizedBox(height: 16),
+
+      // — Fecha límite (picker obligatorio) —
+      _sectionLabel('Fecha límite', Icons.event_rounded, obligatorio: true),
+      const SizedBox(height: 8),
+      GestureDetector(
+        onTap: _seleccionarFecha,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          decoration: BoxDecoration(
+            color: _kCard,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: _fechaError
+                  ? _kRed
+                  : _fechaLimite != null
+                      ? _kGreenDark.withValues(alpha: 0.5)
+                      : _kBorder,
+              width: _fechaError || _fechaLimite != null ? 1.5 : 1.0,
             ),
-            const SizedBox(width: 10),
-            Text('Fecha límite: ',
-                style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12, color: _kTextSub)),
-            Text(DateFormat('d \'de\' MMMM, yyyy', 'es').format(f),
-                style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12, fontWeight: FontWeight.w700,
-                    color: _kTextHead)),
+          ),
+          child: Row(children: [
+            Container(
+              width: 34, height: 34,
+              decoration: BoxDecoration(
+                color: _fechaLimite != null
+                    ? _kAmber.withValues(alpha: 0.12)
+                    : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Icon(Icons.calendar_month_rounded,
+                  size: 17,
+                  color: _fechaLimite != null ? _kAmber : _kTextSub),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _fechaLimite != null
+                  ? Column(crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min, children: [
+                      Text('Fecha límite de recogida',
+                          style: GoogleFonts.plusJakartaSans(
+                              fontSize: 10, color: _kTextSub)),
+                      const SizedBox(height: 1),
+                      Text(
+                        DateFormat("d 'de' MMMM, yyyy", 'es').format(_fechaLimite!),
+                        style: GoogleFonts.plusJakartaSans(
+                            fontSize: 14, fontWeight: FontWeight.w700,
+                            color: _kTextHead),
+                      ),
+                    ])
+                  : Text('Seleccionar fecha límite',
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13,
+                          color: _fechaError ? _kRed : _kTextSub)),
+            ),
+            Icon(Icons.chevron_right_rounded,
+                size: 18,
+                color: _fechaLimite != null ? _kGreenDark : _kTextSub),
           ]),
-        ],
-      ]),
+        ),
+      ),
+      if (_fechaError)
+        Padding(
+          padding: const EdgeInsets.only(left: 4, top: 5),
+          child: Text('La fecha límite es obligatoria',
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 11, color: _kRed)),
+        ),
+    ]);
+  }
+
+  Future<void> _seleccionarFecha() async {
+    final hoy = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _fechaLimite ?? hoy.add(const Duration(days: 7)),
+      firstDate: hoy,
+      lastDate: hoy.add(const Duration(days: 365)),
+      helpText: 'Fecha límite de recogida',
+      confirmText: 'Confirmar',
+      cancelText: 'Cancelar',
+      locale: const Locale('es'),
     );
+    if (picked != null) {
+      setState(() {
+        _fechaLimite = picked;
+        _fechaError  = false;
+      });
+    }
   }
 
   Widget _sectionLabel(String label, IconData icon,
@@ -815,86 +886,85 @@ class _SeparadoFormState extends State<SeparadoForm> {
     children: [
       _miniField(
         ctrl:    _abonoCtrl,
-        hint:    'Monto del abono (opcional)',
+        hint:    'Monto del abono',
         tipo:    const TextInputType.numberWithOptions(decimal: true),
         prefijo: '\$',
         onChanged: (_) => setState(() {}),
         validator: (v) {
-          if (v == null || v.isEmpty) return null;
+          if (v == null || v.isEmpty) return 'El abono es obligatorio';
           final m = double.tryParse(v);
-          if (m == null || m < 0) return 'Monto inválido';
+          if (m == null || m <= 0) return 'Ingresa un monto mayor a 0';
           if (m > _total) return 'No puede superar el total';
           return null;
         },
       ),
 
-      if (_abono > 0) ...[
-        const SizedBox(height: 14),
-        Text('Método de pago del abono',
-            style: GoogleFonts.plusJakartaSans(
-                fontSize: 12, fontWeight: FontWeight.w600, color: _kTextSub)),
-        const SizedBox(height: 8),
-        Row(children: _metodos.map((m) {
-          final activo = _metodoPago == m.$1;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => _metodoPago = m.$1),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                margin: const EdgeInsets.only(right: 6),
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  color: activo ? _kGreen : _kCard,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: activo ? _kGreen : _kBorder),
-                ),
-                child: Column(children: [
-                  Icon(m.$3, size: 18,
-                      color: activo ? Colors.white : _kTextBody),
-                  const SizedBox(height: 4),
-                  Text(m.$2,
-                      style: GoogleFonts.plusJakartaSans(
-                          fontSize: 10, fontWeight: FontWeight.w700,
-                          color: activo ? Colors.white : _kTextBody)),
-                ]),
+      const SizedBox(height: 14),
+      Text('Método de pago del abono',
+          style: GoogleFonts.plusJakartaSans(
+              fontSize: 12, fontWeight: FontWeight.w600, color: _kTextSub)),
+      const SizedBox(height: 8),
+      Row(children: _metodos.map((m) {
+        final activo = _metodoPago == m.$1;
+        return Expanded(
+          child: GestureDetector(
+            onTap: () => setState(() => _metodoPago = m.$1),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              margin: const EdgeInsets.only(right: 6),
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                color: activo ? _kGreenDark : _kCard,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: activo ? _kGreenDark : _kBorder),
               ),
-            ),
-          );
-        }).toList()),
-
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: _saldo == 0
-                ? _kGreen.withValues(alpha: 0.08)
-                : _kAmber.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: _saldo == 0
-                  ? _kGreen.withValues(alpha: 0.25)
-                  : _kAmber.withValues(alpha: 0.25)),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(children: [
-                Icon(
-                  _saldo == 0
-                      ? Icons.check_circle_rounded
-                      : Icons.pending_rounded,
-                  size: 16,
-                  color: _saldo == 0 ? _kGreenDark : _kAmber,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _saldo == 0 ? 'Pagado en su totalidad' : 'Saldo pendiente',
-                  style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12, fontWeight: FontWeight.w600,
-                      color: _saldo == 0 ? _kGreenDark : _kAmber),
-                ),
+              child: Column(children: [
+                Icon(m.$3, size: 18,
+                    color: activo ? Colors.white : _kTextBody),
+                const SizedBox(height: 4),
+                Text(m.$2,
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 10, fontWeight: FontWeight.w700,
+                        color: activo ? Colors.white : _kTextBody)),
               ]),
+            ),
+          ),
+        );
+      }).toList()),
+
+      const SizedBox(height: 12),
+      if (_abono > 0) Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: _saldo == 0
+              ? _kGreen.withValues(alpha: 0.08)
+              : _kAmber.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _saldo == 0
+                ? _kGreen.withValues(alpha: 0.25)
+                : _kAmber.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(children: [
+              Icon(
+                _saldo == 0
+                    ? Icons.check_circle_rounded
+                    : Icons.pending_rounded,
+                size: 16,
+                color: _saldo == 0 ? _kGreenDark : _kAmber,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _saldo == 0 ? 'Pagado en su totalidad' : 'Saldo pendiente',
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12, fontWeight: FontWeight.w600,
+                    color: _saldo == 0 ? _kGreenDark : _kAmber),
+              ),
+            ]),
               Text(
                 widget.fmt.format(_saldo),
                 style: GoogleFonts.plusJakartaSans(
@@ -904,7 +974,6 @@ class _SeparadoFormState extends State<SeparadoForm> {
             ],
           ),
         ),
-      ],
     ],
   );
 

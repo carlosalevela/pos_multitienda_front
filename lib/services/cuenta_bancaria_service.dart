@@ -1,5 +1,7 @@
 // lib/services/cuenta_bancaria_service.dart
 
+import 'package:flutter/foundation.dart';
+
 import '../core/api_client.dart';
 import '../models/cuenta_bancaria.dart';
 
@@ -7,10 +9,13 @@ class CuentaBancariaService {
   Future<List<CuentaBancaria>> listar(int tiendaId) async {
     try {
       final res = await ApiClient.instance.get('/config/cuentas/$tiendaId/');
-      return (res.data as List)
+      final lista = (res.data as List)
           .map((j) => CuentaBancaria.fromJson(j as Map<String, dynamic>))
           .toList();
-    } catch (_) {
+      debugPrint('✅ CuentaBancariaService.listar: ${lista.length} cuentas');
+      return lista;
+    } catch (e) {
+      debugPrint('❌ CuentaBancariaService.listar error: $e');
       return [];
     }
   }

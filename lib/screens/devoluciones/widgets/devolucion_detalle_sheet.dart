@@ -161,7 +161,14 @@ class DevolucionDetalleSheet extends StatelessWidget {
   // ─────────────────────────────────────────────────────
 
   Widget _seccionInfo() {
-    final date = DateFormat('dd/MM/yyyy HH:mm').format(dev.createdAt);
+    final date      = DateFormat('dd/MM/yyyy · HH:mm').format(dev.createdAt);
+    final esCambio  = dev.tipo == 'cambio';
+    // Limpiar "Motivo: Avería — " del texto de observaciones para mostrar solo la parte humana
+    final obsRaw    = dev.observaciones;
+    final obsDisplay = obsRaw.startsWith('Motivo:')
+        ? obsRaw.contains(' — ') ? obsRaw.split(' — ').skip(1).join(' — ') : ''
+        : obsRaw;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -170,10 +177,16 @@ class DevolucionDetalleSheet extends StatelessWidget {
         border: Border.all(color: _kBorder),
       ),
       child: Column(children: [
-        _InfoRow(icon: Icons.payment_rounded,      label: 'Método',   value: _metodoLabel(dev.metodoDevolucion)),
-        _InfoRow(icon: Icons.calendar_today_rounded, label: 'Fecha',   value: date),
-        if (dev.observaciones.isNotEmpty)
-          _InfoRow(icon: Icons.notes_rounded,      label: 'Notas',    value: dev.observaciones),
+        // Para devolución normal mostrar método; para cambio el método va en la sección de total
+        if (!esCambio)
+          _InfoRow(icon: Icons.payment_rounded, label: 'Método',
+              value: _metodoLabel(dev.metodoDevolucion)),
+        if (esCambio && dev.metodoPagoDiferencia != null && (dev.diferencia ?? 0) > 0)
+          _InfoRow(icon: Icons.payment_rounded, label: 'Pago diferencia',
+              value: _metodoLabel(dev.metodoPagoDiferencia!)),
+        _InfoRow(icon: Icons.calendar_today_rounded, label: 'Fecha', value: date),
+        if (obsDisplay.isNotEmpty)
+          _InfoRow(icon: Icons.notes_rounded, label: 'Notas', value: obsDisplay),
       ]),
     );
   }
@@ -293,37 +306,118 @@ class DevolucionDetalleSheet extends StatelessWidget {
   // ─────────────────────────────────────────────────────
 
   Widget _seccionTotal() {
-    final esCambio = dev.tipo == 'cambio';
+    final esCambio   = dev.tipo == 'cambio';
+    final tipoDif    = (dev.tipoDiferencia ?? 'exacto').toLowerCase();
+    final dif        = dev.diferencia ?? 0.0;
+    final subtotalNuevo = dev.subtotalReemplazo ?? 0.0;
+
+    // ── Cambio: resumen en tabla ─────────────────────────
+    if (esCambio) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _kSurface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _kBorder),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Resumen del cambio',
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700,
+                  color: _kTextMuted, letterSpacing: 0.3)),
+          const SizedBox(height: 12),
+          _SummaryRow(
+            label: 'Producto devuelto',
+            value: fmt.format(dev.totalDevuelto),
+            color: _kOrange,
+          ),
+          if (subtotalNuevo > 0) ...[
+            const SizedBox(height: 6),
+            _SummaryRow(
+              label: 'Producto nuevo',
+              value: fmt.format(subtotalNuevo),
+              color: _kGreen,
+            ),
+          ],
+          if (tipoDif != 'exacto' && dif > 0) ...[
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 10),
+              child: Divider(height: 1, color: _kBorder),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: tipoDif == 'cobrar'
+                    ? const Color(0xFFFFF7ED)
+                    : const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: tipoDif == 'cobrar'
+                      ? const Color(0xFFFED7AA)
+                      : const Color(0xFFBFDBFE),
+                ),
+              ),
+              child: Row(children: [
+                Icon(
+                  tipoDif == 'cobrar'
+                      ? Icons.arrow_upward_rounded
+                      : Icons.arrow_downward_rounded,
+                  size: 16,
+                  color: tipoDif == 'cobrar'
+                      ? const Color(0xFFEA580C)
+                      : const Color(0xFF2563EB),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    tipoDif == 'cobrar' ? 'Cobrado al cliente' : 'Devuelto al cliente',
+                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600,
+                        color: tipoDif == 'cobrar'
+                            ? const Color(0xFFEA580C)
+                            : const Color(0xFF2563EB)),
+                  ),
+                ),
+                Text(fmt.format(dif),
+                    style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800,
+                        color: tipoDif == 'cobrar'
+                            ? const Color(0xFFEA580C)
+                            : const Color(0xFF2563EB))),
+              ]),
+            ),
+          ] else if (tipoDif == 'exacto') ...[
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 10),
+              child: Divider(height: 1, color: _kBorder),
+            ),
+            Row(children: [
+              const Icon(Icons.check_circle_outline, size: 16, color: _kGreen),
+              const SizedBox(width: 8),
+              Text('Cambio sin diferencia de precio',
+                  style: GoogleFonts.inter(fontSize: 12, color: _kGreen,
+                      fontWeight: FontWeight.w500)),
+            ]),
+          ],
+        ]),
+      );
+    }
+
+    // ── Devolución normal ────────────────────────────────
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: esCambio ? _kMintLight : _kOrange.withValues(alpha: 0.06),
+        color: _kOrange.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: esCambio
-                ? _kGreen.withValues(alpha: 0.2)
-                : _kOrange.withValues(alpha: 0.2)),
+        border: Border.all(color: _kOrange.withValues(alpha: 0.2)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(
-              esCambio ? 'Valor reconocido' : 'Total devuelto',
-              style: GoogleFonts.inter(fontSize: 12, color: _kTextMuted,
-                  fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              esCambio ? 'Método: ${_metodoLabel(dev.metodoDevolucion)}' : '',
-              style: GoogleFonts.inter(fontSize: 11, color: _kTextMuted),
-            ),
-          ]),
+          Text('Total devuelto',
+              style: GoogleFonts.inter(fontSize: 13, color: _kTextMuted,
+                  fontWeight: FontWeight.w500)),
           Text(
             fmt.format(dev.totalDevuelto),
-            style: GoogleFonts.inter(
-                fontWeight: FontWeight.bold, fontSize: 22,
-                color: esCambio ? _kGreen : _kOrange),
+            style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 22,
+                color: _kOrange),
           ),
         ],
       ),
@@ -462,6 +556,23 @@ class _ProductoRow extends StatelessWidget {
       ]),
     );
   }
+}
+
+class _SummaryRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color  color;
+  const _SummaryRow({required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(label, style: GoogleFonts.inter(fontSize: 13, color: _kTextMuted)),
+      Text(value, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700,
+          color: color)),
+    ],
+  );
 }
 
 class _ChipEstado extends StatelessWidget {

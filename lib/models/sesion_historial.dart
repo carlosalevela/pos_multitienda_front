@@ -36,6 +36,12 @@ class SesionHistorial {
   final double ingresosManual;
   // Gastos detalle
   final List<Map<String, dynamic>> gastosDetalle;
+  // Ventas detalle (productos por transacción)
+  final List<Map<String, dynamic>> ventasDetalle;
+  // Devoluciones detalle
+  final List<Map<String, dynamic>> devolucionesDetalle;
+  // Cuentas bancarias del turno
+  final List<Map<String, dynamic>> cuentasResumen;
   // Cuadre
   final double montoFinalSistema;
   final double montoFinalReal;
@@ -77,6 +83,9 @@ class SesionHistorial {
     this.cancelacionesEfectivo = 0,
     this.ingresosManual = 0,
     this.gastosDetalle = const [],
+    this.ventasDetalle = const [],
+    this.devolucionesDetalle = const [],
+    this.cuentasResumen = const [],
     required this.montoFinalSistema,
     required this.montoFinalReal,
     required this.diferencia,
@@ -116,6 +125,12 @@ class SesionHistorial {
     cancelacionesEfectivo:   double.tryParse(j['cancelaciones_efectivo']?.toString()     ?? '0') ?? 0.0,
     ingresosManual:          double.tryParse(j['ingresos_manual']?.toString()            ?? '0') ?? 0.0,
     gastosDetalle:           (j['gastos_detalle'] as List<dynamic>?)
+        ?.map((e) => Map<String, dynamic>.from(e as Map))
+        .toList() ?? const [],
+    ventasDetalle:           (j['ventas_detalle'] as List<dynamic>?)
+        ?.map((e) => Map<String, dynamic>.from(e as Map))
+        .toList() ?? const [],
+    devolucionesDetalle:     (j['devoluciones_detalle'] as List<dynamic>?)
         ?.map((e) => Map<String, dynamic>.from(e as Map))
         .toList() ?? const [],
     montoFinalSistema:     double.tryParse(

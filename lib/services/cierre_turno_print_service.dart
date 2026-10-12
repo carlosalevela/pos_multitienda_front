@@ -28,6 +28,11 @@ class CierreTurnoPrintService {
     final tiendaId = context.read<AuthProvider>().tiendaId;
 
     try {
+      // Fetch resumen por cuenta destino — se pasa a todos los caminos
+      final resumenCuentas = tiendaId > 0
+          ? await CuentaBancariaService().resumen(tiendaId, sesionId: sesion.id)
+          : <Map<String, dynamic>>[];
+
       final paperSize = config.tipoPapel == '58mm' ? PaperSize.mm58 : PaperSize.mm80;
 
       if (config.tipoPapel != 'pdf' && ThermalPrinterService.isWebUsbSupported) {
@@ -37,7 +42,9 @@ class CierreTurnoPrintService {
           final bytes = await ThermalPrinterService.buildCierreTurno(
             sesion: sesion, empresaNombre: empresaNombre,
             metodosPago: metodosPago, totalGastos: totalGastos,
-            paperSize: paperSize,
+            paperSize: paperSize, resumenCuentas: resumenCuentas,
+            gastosSesion: gastosSesion, topProductos: topProductos,
+            separadosDia: separadosDia,
           );
           await ThermalPrinterService.printBytes(device, bytes);
           return;
@@ -47,16 +54,13 @@ class CierreTurnoPrintService {
         final bytes = await ThermalPrinterService.buildCierreTurno(
           sesion: sesion, empresaNombre: empresaNombre,
           metodosPago: metodosPago, totalGastos: totalGastos,
-          paperSize: paperSize,
+          paperSize: paperSize, resumenCuentas: resumenCuentas,
+          gastosSesion: gastosSesion, topProductos: topProductos,
+          separadosDia: separadosDia,
         );
         await WindowsPrinterService.printRaw(bytes);
         return;
       }
-
-      // Fetch resumen por cuenta destino
-      final resumenCuentas = tiendaId > 0
-          ? await CuentaBancariaService().resumen(tiendaId, sesionId: sesion.id)
-          : <Map<String, dynamic>>[];
 
       // Fallback: PDF A4
       await ReportePdfService.generarCierreTurno(

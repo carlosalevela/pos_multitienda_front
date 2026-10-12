@@ -124,7 +124,23 @@ Future<void> exportarCierrePDF(SesionHistorial sesion, {String tipoPapel = '80mm
       _flujoCajaCard(sesion, difColor, difBg, difLabel, difStr),
       pw.SizedBox(height: 22),
 
-      // 4. Abonos separados (si hay)
+      // 4. Detalle de ventas (si hay)
+      if (sesion.ventasDetalle.isNotEmpty) ...[
+        _sectionLabel('Detalle de Ventas del Turno'),
+        pw.SizedBox(height: 8),
+        _ventasDetalleTable(sesion),
+        pw.SizedBox(height: 22),
+      ],
+
+      // 4b. Cuentas bancarias (si hay)
+      if (sesion.cuentasResumen.isNotEmpty) ...[
+        _sectionLabel('Ingresos por Cuenta Bancaria'),
+        pw.SizedBox(height: 8),
+        _cuentasTable(sesion),
+        pw.SizedBox(height: 22),
+      ],
+
+      // 5. Abonos separados (si hay)
       if (sesion.abonosTotal > 0) ...[
         _sectionLabel('Recaudacion de Separados'),
         pw.SizedBox(height: 8),
@@ -726,78 +742,287 @@ pw.Widget _abonosCard(SesionHistorial sesion) => pw.Container(
 // ════════════════════════════════════════════════════════
 
 pw.Widget _devolucionesDetail(SesionHistorial sesion) {
-  final tieneDirectas  = sesion.devolucionesDirectasEf > 0;
-  final tieneCobrar    = sesion.cambiosCobrarEf > 0;
-  final tieneDevolver  = sesion.cambiosDevEf > 0;
-  final tieneCambiosSinEf = sesion.numCambiosProducto > 0 && !tieneDevolver && !tieneCobrar;
-  final netoMostrar    = sesion.devolucionesEfectivo;
+  final detalle = sesion.devolucionesDetalle;
+  final netoMostrar = sesion.devolucionesEfectivo;
 
-  const colWidths = {
-    0: pw.FlexColumnWidth(3.2),
-    1: pw.FlexColumnWidth(1.3),
-    2: pw.FlexColumnWidth(1.5),
-  };
+  final tableBorder = pw.TableBorder(
+    top:              pw.BorderSide(color: _pNavy,   width: 1.0),
+    bottom:           pw.BorderSide(color: _pOutVar, width: 0.8),
+    left:             pw.BorderSide(color: _pOutVar, width: 0.8),
+    right:            pw.BorderSide(color: _pOutVar, width: 0.8),
+    horizontalInside: pw.BorderSide(color: _pOutVar, width: 0.4),
+    verticalInside:   pw.BorderSide(color: _pOutVar, width: 0.4),
+  );
 
-  pw.TableRow fila(String label, String cant, double v) => pw.TableRow(children: [
-    _tdLabel(label),
-    _tdNumRight(cant),
-    _tdNum(v),
-  ]);
+  String fmtMetodo(String m) {
+    if (m == 'efectivo')    return 'Efectivo';
+    if (m == 'tarjeta')     return 'Datáfono';
+    if (m == 'nota_credito') return 'N. Crédito';
+    return 'Transf.';
+  }
+
+  String fmtTipo(String tipo, String tipoDif) {
+    if (tipo == 'devolucion') return 'Devolución';
+    if (tipoDif == 'cobrar')  return 'Cambio+Cobro';
+    if (tipoDif == 'devolver') return 'Cambio+Dev.';
+    return 'Cambio Exacto';
+  }
+
+  String fmtImpacto(Map<String, dynamic> d) {
+    final tipo    = d['tipo']?.toString() ?? '';
+    final tipoDif = d['tipo_diferencia']?.toString() ?? '';
+    final dev     = double.tryParse(d['total_devuelto']?.toString() ?? '0') ?? 0;
+    final dif     = double.tryParse(d['diferencia']?.toString() ?? '0') ?? 0;
+    if (tipo == 'devolucion') return '-${_m(dev)}';
+    if (tipoDif == 'cobrar')  return '+${_m(dif)}';
+    if (tipoDif == 'devolver') return '-${_m(dif)}';
+    return 'Exacto';
+  }
 
   return pw.Table(
-    border: pw.TableBorder(
-      top:              pw.BorderSide(color: _pNavy,   width: 1.0),
-      bottom:           pw.BorderSide(color: _pOutVar, width: 0.8),
-      left:             pw.BorderSide(color: _pOutVar, width: 0.8),
-      right:            pw.BorderSide(color: _pOutVar, width: 0.8),
-      horizontalInside: pw.BorderSide(color: _pOutVar, width: 0.4),
-      verticalInside:   pw.BorderSide(color: _pOutVar, width: 0.4),
-    ),
-    columnWidths: colWidths,
+    border: tableBorder,
+    columnWidths: const {
+      0: pw.FlexColumnWidth(1.4),
+      1: pw.FlexColumnWidth(1.4),
+      2: pw.FlexColumnWidth(1.5),
+      3: pw.FlexColumnWidth(1.6),
+      4: pw.FlexColumnWidth(1.2),
+    },
     children: [
       pw.TableRow(
         decoration: const pw.BoxDecoration(color: _pNavy),
         children: [
-          _th('TIPO DE DEVOLUCION'),
-          _th('CANT',           align: pw.TextAlign.right),
-          _th('IMPACTO EF.',    align: pw.TextAlign.right),
+          _th('FACTURA'),
+          _th('TIPO'),
+          _th('METODO'),
+          _th('CUENTA / PRODUCTO'),
+          _th('IMPACTO', align: pw.TextAlign.right),
         ],
       ),
-      if (tieneDirectas)
-        fila('Devolucion directa en efectivo\n(dinero devuelto al cliente)',
-            '${sesion.numDevoluciones - sesion.numCambiosProducto}',
-            -sesion.devolucionesDirectasEf),
-      if (tieneDevolver)
-        fila('Cambio con sobrante\n(se devuelve diferencia al cliente)',
-            '—', -sesion.cambiosDevEf),
-      if (tieneCobrar)
-        fila('Cambio con cobro adicional\n(cliente pagó la diferencia)',
-            '—', sesion.cambiosCobrarEf),
-      if (tieneCambiosSinEf)
-        fila('Cambio de producto\n(sin impacto en efectivo)',
-            '${sesion.numCambiosProducto}', 0),
-      // Total neto
+      if (detalle.isEmpty)
+        pw.TableRow(children: [
+          _tdLabel('Sin detalle disponible'),
+          _tdLabel(''), _tdLabel(''), _tdLabel(''), _tdLabel(''),
+        ])
+      else
+        ...detalle.map((d) {
+          final tipo    = d['tipo']?.toString() ?? '';
+          final tipoDif = d['tipo_diferencia']?.toString() ?? '';
+          final metodo  = d['metodo']?.toString() ?? '';
+          final cuenta  = d['cuenta_nombre']?.toString() ?? '';
+          final reempl  = d['producto_reemplazo']?.toString() ?? '';
+          final factura = d['venta_numero']?.toString() ?? 'DEV-${d['id']}';
+          final cuentaLabel = cuenta.isNotEmpty ? cuenta : (reempl.isNotEmpty ? reempl : '—');
+
+          return pw.TableRow(children: [
+            _tdLabel(factura),
+            _tdLabel(fmtTipo(tipo, tipoDif)),
+            pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+              child: pw.Text(fmtMetodo(metodo),
+                  textAlign: pw.TextAlign.center,
+                  style: pw.TextStyle(fontSize: 9, color: _pOnVar)),
+            ),
+            _tdLabel(cuentaLabel),
+            pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+              child: pw.Text(fmtImpacto(d),
+                  textAlign: pw.TextAlign.right,
+                  style: pw.TextStyle(fontSize: 9, color: _pOnSurf)),
+            ),
+          ]);
+        }),
+      // Fila de total neto
       pw.TableRow(
         decoration: const pw.BoxDecoration(color: _pSurfLow),
         children: [
-          _tdLabel('NETO EFECTIVO DEVOLUCIONES', bold: true),
-          _tdNumRight('${sesion.numDevoluciones}', bold: true),
-          _tdNum(-netoMostrar, bold: true),
+          _tdLabel('NETO EFECTIVO DEVOLUCIONES (${sesion.numDevoluciones})', bold: true),
+          _tdLabel('', bold: false),
+          _tdLabel('', bold: false),
+          _tdLabel('', bold: false),
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            child: pw.Text(_m(-netoMostrar),
+                textAlign: pw.TextAlign.right,
+                style: pw.TextStyle(
+                    fontSize: 9, fontWeight: pw.FontWeight.bold, color: _pOnSurf)),
+          ),
         ],
       ),
     ],
   );
 }
 
-// Celda de texto numerica (sin color segun valor, solo texto)
-pw.Widget _tdNumRight(String text, {bool bold = false}) => pw.Padding(
-  padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-  child: pw.Text(text,
-      textAlign: pw.TextAlign.right,
-      style: pw.TextStyle(
-          fontSize: 9, color: _pOnSurf,
-          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
-);
+
+// ════════════════════════════════════════════════════════
+// DETALLE DE VENTAS
+// ════════════════════════════════════════════════════════
+
+pw.Widget _ventasDetalleTable(SesionHistorial sesion) {
+  final detalle = sesion.ventasDetalle;
+
+  final tableBorder = pw.TableBorder(
+    top:              pw.BorderSide(color: _pNavy,   width: 1.0),
+    bottom:           pw.BorderSide(color: _pOutVar, width: 0.8),
+    left:             pw.BorderSide(color: _pOutVar, width: 0.8),
+    right:            pw.BorderSide(color: _pOutVar, width: 0.8),
+    horizontalInside: pw.BorderSide(color: _pOutVar, width: 0.4),
+    verticalInside:   pw.BorderSide(color: _pOutVar, width: 0.4),
+  );
+
+  String fmtMetodo(String m) {
+    if (m == 'efectivo')      return 'Efectivo';
+    if (m == 'tarjeta')       return 'Datáfono';
+    if (m == 'transferencia') return 'Transf.';
+    if (m == 'mixto')         return 'Mixto';
+    return m;
+  }
+
+  final rows = <pw.TableRow>[
+    pw.TableRow(
+      decoration: const pw.BoxDecoration(color: _pNavy),
+      children: [
+        _th('FACTURA'),
+        _th('HORA'),
+        _th('CLIENTE'),
+        _th('MÉTODO',    align: pw.TextAlign.center),
+        _th('PRODUCTOS'),
+        _th('TOTAL',     align: pw.TextAlign.right),
+      ],
+    ),
+  ];
+
+  if (detalle.isEmpty) {
+    rows.add(pw.TableRow(children: [
+      _tdLabel('Sin ventas registradas'),
+      _tdLabel(''), _tdLabel(''), _tdLabel(''), _tdLabel(''), _tdLabel(''),
+    ]));
+  } else {
+    for (final v in detalle) {
+      final factura  = v['numero_factura']?.toString() ?? '';
+      final hora     = v['hora']?.toString() ?? '';
+      final cliente  = v['cliente']?.toString() ?? 'Consumidor Final';
+      final metodo   = v['metodo_pago']?.toString() ?? '';
+      final total    = double.tryParse(v['total']?.toString() ?? '0') ?? 0.0;
+      final productos = (v['productos'] as List? ?? [])
+          .map((p) => '${p['producto']} ×${(double.tryParse(p['cantidad'].toString()) ?? 0).toStringAsFixed(0)}')
+          .join('\n');
+
+      rows.add(pw.TableRow(children: [
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: pw.Text(factura,
+              style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: _pGreen)),
+        ),
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: pw.Text(hora,
+              style: pw.TextStyle(fontSize: 8, color: _pOutline)),
+        ),
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: pw.Text(cliente,
+              style: pw.TextStyle(fontSize: 8, color: _pOnVar)),
+        ),
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: pw.Text(fmtMetodo(metodo),
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(fontSize: 8, color: _pOnVar)),
+        ),
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: pw.Text(productos,
+              style: pw.TextStyle(fontSize: 8, color: _pOnVar, lineSpacing: 1.3)),
+        ),
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: pw.Text(_m(total),
+              textAlign: pw.TextAlign.right,
+              style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: _pOnSurf)),
+        ),
+      ]));
+    }
+
+    // Fila total
+    rows.add(pw.TableRow(
+      decoration: const pw.BoxDecoration(color: _pSurfLow),
+      children: [
+        _tdLabel('TOTAL  (${detalle.length} ventas)', bold: true),
+        _tdLabel(''), _tdLabel(''), _tdLabel(''), _tdLabel(''),
+        _tdNum(sesion.ventasTotal, bold: true),
+      ],
+    ));
+  }
+
+  return pw.Table(
+    border: tableBorder,
+    columnWidths: const {
+      0: pw.FlexColumnWidth(1.4),
+      1: pw.FlexColumnWidth(0.8),
+      2: pw.FlexColumnWidth(1.6),
+      3: pw.FlexColumnWidth(1.0),
+      4: pw.FlexColumnWidth(2.8),
+      5: pw.FlexColumnWidth(1.2),
+    },
+    children: rows,
+  );
+}
+
+// ════════════════════════════════════════════════════════
+// CUENTAS BANCARIAS
+// ════════════════════════════════════════════════════════
+
+pw.Widget _cuentasTable(SesionHistorial sesion) {
+  final cuentas = sesion.cuentasResumen;
+
+  final tableBorder = pw.TableBorder(
+    top:              pw.BorderSide(color: _pNavy,   width: 1.0),
+    bottom:           pw.BorderSide(color: _pOutVar, width: 0.8),
+    left:             pw.BorderSide(color: _pOutVar, width: 0.8),
+    right:            pw.BorderSide(color: _pOutVar, width: 0.8),
+    horizontalInside: pw.BorderSide(color: _pOutVar, width: 0.4),
+    verticalInside:   pw.BorderSide(color: _pOutVar, width: 0.4),
+  );
+
+  return pw.Table(
+    border: tableBorder,
+    columnWidths: const {
+      0: pw.FlexColumnWidth(2.5),
+      1: pw.FlexColumnWidth(1.5),
+      2: pw.FlexColumnWidth(1.4),
+      3: pw.FlexColumnWidth(1.4),
+    },
+    children: [
+      pw.TableRow(
+        decoration: const pw.BoxDecoration(color: _pNavy),
+        children: [
+          _th('CUENTA'),
+          _th('TIPO'),
+          _th('ESTE TURNO',  align: pw.TextAlign.right),
+          _th('ACUMULADO',   align: pw.TextAlign.right),
+        ],
+      ),
+      ...cuentas.map((c) {
+        final nombre   = c['nombre']?.toString() ?? '—';
+        final tipo     = c['tipo_display']?.toString() ?? '';
+        final turno    = double.tryParse(c['sesion_total']?.toString()    ?? '0') ?? 0.0;
+        final acum     = double.tryParse(c['total_acumulado']?.toString() ?? '0') ?? 0.0;
+        return pw.TableRow(children: [
+          _tdLabel(nombre),
+          _tdLabel(tipo),
+          _tdNum(turno),
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            child: pw.Text(_m(acum),
+                textAlign: pw.TextAlign.right,
+                style: pw.TextStyle(fontSize: 9, color: _pOutline)),
+          ),
+        ]);
+      }),
+    ],
+  );
+}
 
 // ════════════════════════════════════════════════════════
 // 5. NOTA DE CIERRE / OBSERVACIONES

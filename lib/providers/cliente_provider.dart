@@ -311,12 +311,14 @@ class ClienteProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> abonarSeparado(int id, double monto, String metodoPago) async {
+  Future<bool> abonarSeparado(int id, double monto, String metodoPago,
+      {int? cuentaDestinoId}) async {
     _guardando = true;
     error      = null;
     notifyListeners();
     try {
-      final result = await _service.abonarSeparado(id, monto, metodoPago);
+      final result = await _service.abonarSeparado(id, monto, metodoPago,
+          cuentaDestinoId: cuentaDestinoId);
 
       if (result['success'] == true) {
         final data = result['data'] as Map<String, dynamic>;

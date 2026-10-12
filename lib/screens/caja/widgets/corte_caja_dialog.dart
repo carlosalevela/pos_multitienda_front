@@ -4,10 +4,12 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/caja_provider.dart';
 import '../../../providers/config_provider.dart';
 import '../../../models/resumen_cierre.dart';
 import '../../../models/sesion_historial.dart';
+import '../../../services/cuenta_bancaria_service.dart';
 import 'pdf/cierre_pdf.dart';
 
 // ── Enterprise palette ─────────────────────────────────────────
@@ -44,6 +46,7 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
   final  _montoCtrl      = TextEditingController();
   final  _obsCtrl        = TextEditingController();
   final  _fmt            = NumberFormat('#,##0', 'en_US');
+  List<Map<String, dynamic>> _resumenCuentas = [];
 
   late AnimationController _stepCtrl;
   late Animation<double>   _fadeAnim;
@@ -62,6 +65,16 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
       end:   Offset.zero,
     ).animate(CurvedAnimation(parent: _stepCtrl, curve: Curves.easeOut));
     _stepCtrl.forward();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _cargarResumenCuentas());
+  }
+
+  Future<void> _cargarResumenCuentas() async {
+    final resumen  = context.read<CajaProvider>().resumenCierre;
+    final tiendaId = context.read<AuthProvider>().tiendaId;
+    if (resumen == null || tiendaId <= 0) return;
+    final data = await CuentaBancariaService()
+        .resumen(tiendaId, sesionId: resumen.sesionId);
+    if (mounted) setState(() => _resumenCuentas = data);
   }
 
   @override
@@ -258,7 +271,7 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
         const SizedBox(height: 16),
 
         // Fila 1: Ventas | Gastos
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Expanded(child: _DataCard(
             titulo: 'Ventas del Turno',
             icono: Icons.trending_up_rounded,
@@ -272,11 +285,10 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                 _ItemRow('Mixto',       r.ventas.mixto,         _cAmber,  Icons.compare_arrows_rounded),
               const _CardDiv(),
               _TotalRow('TOTAL VENTAS', _f(r.ventas.total), _cNavy),
-              const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerRight,
-                child: _Chip('${r.ventas.numTransacciones} transacciones', _cBlue, _cBlueLt),
-              ),
+              const SizedBox(height: 6),
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                _Chip('${r.ventas.numTransacciones} transacciones', _cBlue, _cBlueLt),
+              ]),
             ]),
           )),
           const SizedBox(width: 12),
@@ -286,7 +298,9 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
             accentColor: _cRed,
             accentBg: _cRedLt,
             child: r.gastos.detalle.isEmpty
-                ? const _EmptyHint('Sin gastos registrados en este turno')
+                ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const _EmptyHint('Sin gastos registrados en este turno'),
+                  ])
                 : Column(children: [
                     ...r.gastos.detalle.map(
                       (g) => _GastoRow(g.categoria, g.metodoPago, g.monto)),
@@ -294,18 +308,20 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                     _TotalRow('TOTAL GASTOS', '-${_f(r.gastos.total)}', _cRed),
                   ]),
           )),
-        ]),
+        ])),
         const SizedBox(height: 12),
 
         // Fila 2: Abonos | Devoluciones
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Expanded(child: _DataCard(
             titulo: 'Abonos / Separados',
             icono: Icons.bookmark_added_rounded,
             accentColor: _cSky,
             accentBg: _cSkyLt,
             child: r.abonos.total <= 0
-                ? const _EmptyHint('Sin abonos recibidos en este turno')
+                ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const _EmptyHint('Sin abonos recibidos en este turno'),
+                  ])
                 : Column(children: [
                     if (r.abonos.efectivo > 0)
                       _ItemRow('Efectivo',      r.abonos.efectivo,      _cGreen,  Icons.payments_rounded),
@@ -315,27 +331,19 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                       _ItemRow('Transferencia', r.abonos.transferencia, _cPurple, Icons.swap_horiz_rounded),
                     const _CardDiv(),
                     _TotalRow('TOTAL ABONOS', _f(r.abonos.total), _cSky),
-                    const SizedBox(height: 4),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: _Chip(
+                    const SizedBox(height: 6),
+                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                      Row(children: [
+                        const Icon(Icons.info_outline_rounded, size: 10, color: _cTextMuted),
+                        const SizedBox(width: 4),
+                        Text('Solo efectivo en caja',
+                            style: GoogleFonts.inter(fontSize: 9, color: _cTextMuted)),
+                      ]),
+                      _Chip(
                         '${r.abonos.cantidad} abono${r.abonos.cantidad != 1 ? "s" : ""}',
                         _cSky, _cSkyLt,
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Row(children: [
-                        const Icon(Icons.info_outline_rounded, size: 11, color: _cTextMuted),
-                        const SizedBox(width: 5),
-                        Expanded(
-                          child: Text(
-                            'Tarjeta y transferencia no afectan el cajon fisico.',
-                            style: GoogleFonts.inter(fontSize: 10, color: _cTextMuted),
-                          ),
-                        ),
-                      ]),
-                    ),
+                    ]),
                   ]),
           )),
           const SizedBox(width: 12),
@@ -345,15 +353,18 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
             accentColor: _cAmber,
             accentBg: _cAmberLt,
             child: r.devoluciones.cantidad == 0
-                ? const _EmptyHint('Sin devoluciones en este turno')
-                : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const _EmptyHint('Sin devoluciones en este turno'),
+                  ])
+                : Column(children: [
                     if (r.devoluciones.cambiosProducto > 0) ...[
-                      _DevRow(
-                        icono:  Icons.swap_horiz_rounded,
-                        color:  _cPurple,
-                        label:  'Cambio por producto',
-                        valor:  '${r.devoluciones.cambiosProducto} cambio${r.devoluciones.cambiosProducto != 1 ? "s" : ""}',
-                        sub:    'Sin salida de efectivo',
+                      _MontoRow(
+                        'Cambios de producto',
+                        r.devoluciones.cambiosProducto.toDouble(),
+                        isNeg: false,
+                        isCount: true,
+                        countLabel: '${r.devoluciones.cambiosProducto} cambio${r.devoluciones.cambiosProducto != 1 ? "s" : ""}',
+                        subLabel: 'Sin salida de efectivo',
                       ),
                       if (r.devoluciones.efectivo > 0 ||
                           r.devoluciones.cambiosDevolver > 0 ||
@@ -376,17 +387,64 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                         r.devoluciones.netoEfectivo > 0 ? _cRed : _cGreen,
                       ),
                     ],
-                    const SizedBox(height: 4),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: _Chip(
+                    const SizedBox(height: 6),
+                    Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                      _Chip(
                         '${r.devoluciones.cantidad} devolucion${r.devoluciones.cantidad != 1 ? "es" : ""}',
                         _cAmber, _cAmberLt,
                       ),
-                    ),
+                    ]),
                   ]),
           )),
-        ]),
+        ])),
+        const SizedBox(height: 12),
+
+        // Card ingresos por cuenta — ancho completo
+        if (_resumenCuentas.isNotEmpty)
+          _DataCard(
+            titulo: 'Ingresos por Cuenta',
+            icono: Icons.account_balance_wallet_rounded,
+            accentColor: _cPurple,
+            accentBg: const Color(0xFFEDE7F6),
+            child: Column(children: [
+              ..._resumenCuentas.map((c) {
+                final nombre   = c['nombre']?.toString()       ?? '—';
+                final tipo     = c['tipo_display']?.toString() ?? '';
+                final turno    = double.tryParse(c['sesion_total']?.toString()    ?? '0') ?? 0;
+                final acum     = double.tryParse(c['total_acumulado']?.toString() ?? '0') ?? 0;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Row(children: [
+                    const Icon(Icons.account_balance_wallet_outlined,
+                        size: 14, color: _cPurple),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min, children: [
+                        Text(nombre,
+                            style: GoogleFonts.inter(
+                                fontSize: 12, fontWeight: FontWeight.w600,
+                                color: _cText)),
+                        Text(tipo,
+                            style: GoogleFonts.inter(
+                                fontSize: 10, color: _cTextMuted)),
+                      ]),
+                    ),
+                    Column(crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min, children: [
+                      Text(_f(turno),
+                          style: GoogleFonts.inter(
+                              fontSize: 13, fontWeight: FontWeight.w700,
+                              color: _cPurple)),
+                      Text('acum. ${_f(acum)}',
+                          style: GoogleFonts.inter(
+                              fontSize: 10, color: _cTextMuted)),
+                    ]),
+                  ]),
+                );
+              }),
+            ]),
+          ),
         const SizedBox(height: 12),
 
         // Card calculo caja fisica — ancho completo
@@ -575,44 +633,45 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(children: [
+            // Hero resultado
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(28),
+              padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
               decoration: BoxDecoration(
                 color: bgColor,
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5),
+                border: Border.all(color: color.withValues(alpha: 0.25), width: 1.5),
               ),
               child: Column(children: [
                 Container(
-                  width: 58, height: 58,
+                  width: 64, height: 64,
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: color.withValues(alpha: 0.35)),
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5),
                   ),
-                  child: Icon(icono, color: color, size: 28),
+                  child: Icon(icono, color: color, size: 30),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
                 Text(resultado,
                     style: GoogleFonts.inter(
                         color: color, fontWeight: FontWeight.w800,
-                        fontSize: 12, letterSpacing: 1.5)),
-                if (!esExacto) ...[
-                  const SizedBox(height: 6),
+                        fontSize: 11, letterSpacing: 2.0)),
+                const SizedBox(height: 8),
+                if (!esExacto)
                   Text(_f(dif.abs()),
                       style: GoogleFonts.inter(
                           color: color, fontWeight: FontWeight.w800,
-                          fontSize: 44, letterSpacing: -2)),
-                ] else ...[
-                  const SizedBox(height: 6),
+                          fontSize: 48, letterSpacing: -2.5))
+                else
                   Text('Todo cuadra perfectamente',
-                      style: GoogleFonts.inter(color: color, fontSize: 13)),
-                ],
+                      style: GoogleFonts.inter(
+                          color: color, fontSize: 14, fontWeight: FontWeight.w500)),
               ]),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
 
+            // Desglose contado vs esperado
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
@@ -622,11 +681,15 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
               ),
               child: Column(children: [
                 _ResRow('Contado fisico', _f(_montoIngresado), _cText),
+                const SizedBox(height: 4),
                 _ResRow('Esperado',       _f(r.montoEsperadoCaja), _cTextSec),
-                const Divider(color: _cBorder, height: 20),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10),
+                  child: Divider(color: _cBorder, height: 1),
+                ),
                 _ResRow(
                   esSobrante ? 'Sobrante' : esExacto ? 'Diferencia' : 'Faltante',
-                  '${dif >= 0 ? '+' : '-'}${_f(dif.abs())}',
+                  '${dif >= 0 ? '+' : ''}${_f(dif)}',
                   color,
                   bold: true,
                 ),
@@ -663,24 +726,35 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
       // Columna derecha: comprobante
       Expanded(
         flex: 4,
-        child: Container(
-          color: _cBg,
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-              child: Text('COMPROBANTE DE CIERRE',
-                  style: GoogleFonts.inter(
-                      color: _cTextMuted, fontSize: 10,
-                      fontWeight: FontWeight.w700, letterSpacing: 1.5)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+            decoration: const BoxDecoration(
+              color: _cNavy,
+              borderRadius: BorderRadius.only(
+                topRight: Radius.circular(0),
+              ),
             ),
-            Expanded(
+            child: Row(children: [
+              const Icon(Icons.receipt_long_rounded, color: Colors.white54, size: 14),
+              const SizedBox(width: 8),
+              Text('COMPROBANTE DE CIERRE',
+                  style: GoogleFonts.inter(
+                      color: Colors.white70, fontSize: 10,
+                      fontWeight: FontWeight.w700, letterSpacing: 1.5)),
+            ]),
+          ),
+          Expanded(
+            child: Container(
+              color: _cBg,
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                padding: const EdgeInsets.all(16),
                 child: _buildTicket(r, resultado, color, hora, dif),
               ),
             ),
-          ]),
-        ),
+          ),
+        ]),
       ),
     ]);
   }
@@ -889,6 +963,9 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                     cambiosDevEf:            r.devoluciones.cambiosDevolver,
                     numDevoluciones:         r.devoluciones.cantidad,
                     numCambiosProducto:      r.devoluciones.cambiosProducto,
+                    devolucionesDetalle:     r.devoluciones.detalle,
+                    ventasDetalle:           r.ventasDetalle,
+                    cuentasResumen:          _resumenCuentas,
                     montoFinalSistema:    r.montoEsperadoCaja,
                     montoFinalReal:       montoFinal,
                     diferencia:           montoFinal - r.montoEsperadoCaja,
@@ -1058,7 +1135,6 @@ class _DataCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: _cSurface,
         borderRadius: BorderRadius.circular(14),
@@ -1068,21 +1144,33 @@ class _DataCard extends StatelessWidget {
         )],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Container(
-            width: 26, height: 26,
-            decoration: BoxDecoration(color: accentBg, borderRadius: BorderRadius.circular(7)),
-            child: Icon(icono, color: accentColor, size: 13),
+        // Header
+        Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+          decoration: BoxDecoration(
+            color: accentBg.withValues(alpha: 0.5),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+            border: Border(bottom: BorderSide(color: accentColor.withValues(alpha: 0.12))),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(titulo,
-                style: GoogleFonts.inter(
-                    fontWeight: FontWeight.w700, fontSize: 12, color: _cText)),
-          ),
-        ]),
-        const SizedBox(height: 12),
-        child,
+          child: Row(children: [
+            Container(
+              width: 28, height: 28,
+              decoration: BoxDecoration(color: accentBg, borderRadius: BorderRadius.circular(8)),
+              child: Icon(icono, color: accentColor, size: 14),
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Text(titulo,
+                  style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w700, fontSize: 12, color: _cText)),
+            ),
+          ]),
+        ),
+        // Body
+        Padding(
+          padding: const EdgeInsets.all(14),
+          child: child,
+        ),
       ]),
     );
   }
@@ -1151,70 +1239,58 @@ class _GastoRow extends StatelessWidget {
 }
 
 class _MontoRow extends StatelessWidget {
-  final String label;
-  final double monto;
-  final bool   isNeg;
-  const _MontoRow(this.label, this.monto, {required this.isNeg});
+  final String  label;
+  final double  monto;
+  final bool    isNeg;
+  final bool    isCount;
+  final String? countLabel;
+  final String? subLabel;
+  const _MontoRow(this.label, this.monto, {
+    required this.isNeg,
+    this.isCount = false,
+    this.countLabel,
+    this.subLabel,
+  });
   static final _fmt = NumberFormat('#,##0', 'en_US');
 
   @override
   Widget build(BuildContext context) {
-    final color = isNeg ? _cRed : _cGreen;
+    final color = isCount ? _cPurple : (isNeg ? _cRed : _cGreen);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style: GoogleFonts.inter(
-                  fontSize: 12, color: _cTextSec, fontWeight: FontWeight.w500)),
-          Text('${isNeg ? '-' : '+'}\$${_fmt.format(monto)}',
-              style: GoogleFonts.inter(
-                  fontSize: 13, color: color, fontWeight: FontWeight.w700)),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label,
+                  style: GoogleFonts.inter(
+                      fontSize: 12, color: _cTextSec, fontWeight: FontWeight.w500)),
+              if (subLabel != null)
+                Text(subLabel!,
+                    style: GoogleFonts.inter(
+                        fontSize: 10, color: _cTextMuted, fontStyle: FontStyle.italic)),
+            ],
+          )),
+          const SizedBox(width: 8),
+          isCount
+              ? Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: _cPurple.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(countLabel ?? '',
+                      style: GoogleFonts.inter(
+                          fontSize: 11, color: _cPurple, fontWeight: FontWeight.w700)),
+                )
+              : Text('${isNeg ? '-' : '+'}\$${_fmt.format(monto)}',
+                  style: GoogleFonts.inter(
+                      fontSize: 13, color: color, fontWeight: FontWeight.w700)),
         ],
       ),
-    );
-  }
-}
-
-class _DevRow extends StatelessWidget {
-  final IconData icono;
-  final Color    color;
-  final String   label, valor, sub;
-  const _DevRow({
-    required this.icono, required this.color,
-    required this.label, required this.valor, required this.sub,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(icono, size: 10, color: color),
-            const SizedBox(width: 3),
-            Text(label,
-                style: GoogleFonts.inter(
-                    fontSize: 10, fontWeight: FontWeight.w700, color: color)),
-          ]),
-        ),
-        const Spacer(),
-        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text(valor,
-              style: GoogleFonts.inter(
-                  fontSize: 11, fontWeight: FontWeight.w700, color: color)),
-          Text(sub,
-              style: GoogleFonts.inter(
-                  fontSize: 10, color: _cTextMuted, fontStyle: FontStyle.italic)),
-        ]),
-      ]),
     );
   }
 }

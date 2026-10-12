@@ -296,19 +296,36 @@ class ReporteTabla extends StatelessWidget {
         final hora = (d['created_at']?.toString() ?? '').length >= 19
             ? d['created_at'].toString().substring(11, 16)
             : '';
-        final total =
-            double.tryParse(d['total_devuelto']?.toString() ?? '0') ??
-                0;
-        final metodo =
-            d['metodo_devolucion']?.toString() ?? '';
-        final factura =
-            d['venta_numero'] ?? 'DEV-${d['id']}';
-        final empleado = d['empleado_nombre'] ?? '';
-        final productos =
+        final tipo         = d['tipo']?.toString() ?? '';
+        final tipoDif      = d['tipo_diferencia']?.toString() ?? '';
+        final devTotal     = double.tryParse(d['total_devuelto']?.toString() ?? '0') ?? 0;
+        final diferencia   = double.tryParse(d['diferencia']?.toString() ?? '0') ?? 0;
+        final metodo       = d['metodo_devolucion']?.toString() ?? '';
+        final cuentaNombre = d['cuenta_destino_nombre']?.toString() ?? '';
+        final factura      = d['venta_numero'] ?? 'DEV-${d['id']}';
+        final empleado     = d['empleado_nombre'] ?? '';
+        final productos    =
             (d['productos_devueltos'] as List? ?? [])
                 .map((p) =>
                     '${p['producto']} x${(double.tryParse(p['cantidad'].toString()) ?? 0).toStringAsFixed(0)}')
                 .join(', ');
+
+        // Monto efectivo real según tipo
+        String montoLabel;
+        Color  montoColor;
+        if (tipo == 'devolucion') {
+          montoLabel = '-\$${fmtNum(devTotal)}';
+          montoColor = kDevColor;
+        } else if (tipoDif == 'cobrar') {
+          montoLabel = '+\$${fmtNum(diferencia)}';
+          montoColor = const Color(0xFF16A34A);
+        } else if (tipoDif == 'devolver') {
+          montoLabel = '-\$${fmtNum(diferencia)}';
+          montoColor = kDevColor;
+        } else {
+          montoLabel = 'Exacto';
+          montoColor = Colors.grey.shade500;
+        }
 
         return DataRow(
           color: WidgetStateProperty.all(
@@ -326,18 +343,26 @@ class ReporteTabla extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.poppins(fontSize: 11))),
             DataCell(Text(empleado)),
-            DataCell(Row(children: [
-              Icon(iconMetodo(metodo),
-                  size: 13,
-                  color: colorMetodo(metodo)),
-              const SizedBox(width: 5),
-              Flexible(
-                  child: Text(labelMetodo(metodo))),
-            ])),
-            DataCell(Text('-\$${fmtNum(total)}',
+            DataCell(Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Icon(iconMetodo(metodo), size: 13, color: colorMetodo(metodo)),
+                  const SizedBox(width: 5),
+                  Text(labelMetodo(metodo),
+                      style: GoogleFonts.poppins(fontSize: 12)),
+                ]),
+                if (cuentaNombre.isNotEmpty)
+                  Text(cuentaNombre,
+                      style: GoogleFonts.poppins(
+                          fontSize: 10, color: const Color(0xFF5C6BC0))),
+              ],
+            )),
+            DataCell(Text(montoLabel,
                 style: GoogleFonts.poppins(
                     fontWeight: FontWeight.bold,
-                    color: kDevColor))),
+                    color: montoColor))),
             DataCell(Text('—',
                 style: GoogleFonts.poppins(
                     color: Colors.grey.shade400))),

@@ -73,6 +73,7 @@ class DevolucionesService {
     required String metodoPago,
     required List<Map<String, dynamic>> detalles,
     String? observaciones,
+    int?    cuentaDestinoId,
   }) async {
     try {
       final response = await ApiClient.instance.post(
@@ -83,6 +84,7 @@ class DevolucionesService {
           'detalles': detalles,
           if (observaciones != null && observaciones.isNotEmpty)
             'observaciones': observaciones,
+          if (cuentaDestinoId != null) 'cuenta_destino': cuentaDestinoId,
         },
       );
 
@@ -106,6 +108,7 @@ class DevolucionesService {
     String? observaciones,
     String? metodoPagoDiferencia,
     double? montoRecibido,
+    int?    cuentaDestinoId,
   }) async {
     try {
       final response = await ApiClient.instance.post(
@@ -121,6 +124,7 @@ class DevolucionesService {
           if (montoRecibido != null) 'monto_recibido': montoRecibido,
           if (observaciones != null && observaciones.isNotEmpty)
             'observaciones': observaciones,
+          if (cuentaDestinoId != null) 'cuenta_destino': cuentaDestinoId,
         },
       );
 

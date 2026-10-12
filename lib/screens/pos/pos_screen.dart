@@ -28,9 +28,9 @@ import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import '../devoluciones/widgets/devolucion_form_sheet.dart';
 
 // ── Design system (Material You / Enterprise POS) ─────────
-const _kGreen          = Color(0xFF61DDAA);   // mint — igual que dashboard _C.green
-const _kGreenDark      = Color(0xFF0B7A53);   // verde oscuro — igual que _C.greenDark
-const _kGreenLight     = Color(0xFFE8FFF4);   // fondo verde suave
+const _kGreen          = Color(0xFF10B981);   // emerald
+const _kGreenDark      = Color(0xFF0B7A53);   // verde oscuro
+const _kGreenLight     = Color(0xFFF0FDF4);   // fondo verde suave
 const _kSurface        = Color(0xFFF7F9FB);
 const _kCard           = Colors.white;
 const _kSurfaceLow     = Color(0xFFF2F4F6);
@@ -98,6 +98,7 @@ class _PosScreenState extends State<PosScreen> {
       _cargarCategorias();
       _cargarTodos();
       context.read<PosProvider>().cargarTicketsGuardados();
+      _cargarConfig();
     });
   }
 
@@ -116,6 +117,17 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   // ── Carga inicial ────────────────────────────────────────
+
+  Future<void> _cargarConfig() async {
+    final auth = context.read<AuthProvider>();
+    final tiendaId = auth.tiendaId;
+    if (tiendaId <= 0) return;
+    final empresaId = int.tryParse(auth.empresaId);
+    final config = context.read<ConfigProvider>();
+    if (!config.cargada) {
+      await config.cargar(tiendaId, empresaId: empresaId);
+    }
+  }
 
   Future<void> _cargarAlertas() async {
     final tid = context.read<AuthProvider>().tiendaId;
@@ -268,9 +280,10 @@ class _PosScreenState extends State<PosScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pos   = context.watch<PosProvider>();
-    final auth  = context.watch<AuthProvider>();
-    final notif = context.watch<NotificacionesProvider>();
+    final pos    = context.watch<PosProvider>();
+    final auth   = context.watch<AuthProvider>();
+    final notif  = context.watch<NotificacionesProvider>();
+    context.watch<ConfigProvider>(); // garantiza rebuild cuando cargan cuentas
 
     return Container(
       color: _kSurface,
@@ -657,8 +670,19 @@ class _PosScreenState extends State<PosScreen> {
         label: isMobile ? '' : 'Nuevo ticket',
         color: _kGreenDark,
         onTap: () {
-          final ok = pos.parquearTicket();
-          if (!ok) _showSnack('El carrito está vacío', _kAmber);
+          final ok = pos.parquearTicket(
+            clienteSnap:      _clienteSnap(_clienteSeleccionado),
+            separadosCliente: _separadosCliente,
+          );
+          if (ok) {
+            setState(() {
+              _clienteSeleccionado = null;
+              _separadosCliente    = 0;
+            });
+            _descuentoCtrl.clear();
+          } else {
+            _showSnack('El carrito está vacío', _kAmber);
+          }
         },
       ),
 
@@ -1220,7 +1244,20 @@ class _PosScreenState extends State<PosScreen> {
                     total: e.value.total,
                     items: e.value.items,
                     isActive: false,
-                    onTap: () => pos.restaurarTicket(e.key),
+                    onTap: () {
+                      final snap = pos.restaurarTicket(
+                        e.key,
+                        clienteSnapActual: _clienteSnap(_clienteSeleccionado),
+                        separadosActual:   _separadosCliente,
+                      );
+                      setState(() {
+                        _clienteSeleccionado = snap?.clienteSnap != null
+                            ? Cliente.fromJson(snap!.clienteSnap!)
+                            : null;
+                        _separadosCliente    = snap?.separadosCliente ?? 0;
+                      });
+                      _descuentoCtrl.clear();
+                    },
                     onClose: () => _confirmarDescartarTicket(pos, e.key),
                   ),
                 ),
@@ -1282,18 +1319,33 @@ class _PosScreenState extends State<PosScreen> {
 
     return Container(
       margin: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
-        color: _kGreenLight,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _kGreenDark.withValues(alpha: 0.22)),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 6, offset: const Offset(0, 2)),
+        ],
       ),
       child: Row(children: [
-        // Avatar con inicial
+        // Barra de acento izquierda
+        Container(
+          width: 4,
+          height: 48,
+          decoration: BoxDecoration(
+            color: tierColor,
+            borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(10),
+                bottomLeft: Radius.circular(10)),
+          ),
+        ),
+        const SizedBox(width: 10),
+        // Avatar
         Container(
           width: 30, height: 30,
           decoration: BoxDecoration(
-            color: tierColor.withValues(alpha: 0.14),
+            color: tierColor.withValues(alpha: 0.12),
             shape: BoxShape.circle,
           ),
           child: Center(
@@ -1302,7 +1354,7 @@ class _PosScreenState extends State<PosScreen> {
                     color: tierColor, fontSize: 13, fontWeight: FontWeight.w800)),
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         // Nombre + tier
         Expanded(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1343,13 +1395,36 @@ class _PosScreenState extends State<PosScreen> {
             context.read<PosProvider>().setDescuento(0);
             _descuentoCtrl.clear();
           },
-          child: const Padding(
-            padding: EdgeInsets.all(4),
-            child: Icon(Icons.close_rounded, size: 15, color: _kTextMuted),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+            child: const Icon(Icons.close_rounded, size: 14, color: _kTextMuted),
           ),
         ),
       ]),
     );
+  }
+
+  Map<String, dynamic>? _clienteSnap(Cliente? c) {
+    if (c == null) return null;
+    return {
+      'id':              c.id,
+      'nombre':          c.nombre,
+      'apellido':        c.apellido,
+      'cedula_nit':      c.cedulaNit,
+      'telefono':        c.telefono,
+      'email':           c.email,
+      'direccion':       c.direccion,
+      'activo':          c.activo,
+      'created_at':      c.createdAt.toIso8601String(),
+      'total_acumulado': c.totalAcumulado.toString(),
+      'limite_credito':  c.limiteCredito.toString(),
+      if (c.tierInfo != null) 'tier_info': {
+        'id':            c.tierInfo!.id,
+        'nombre':        c.tierInfo!.nombre,
+        'descuento_pct': c.tierInfo!.descuentoPct.toString(),
+        'color_hex':     c.tierInfo!.colorHex,
+      },
+    };
   }
 
   // Convierte un hex string a Color
@@ -1361,20 +1436,26 @@ class _PosScreenState extends State<PosScreen> {
     }
   }
 
-  Widget _buildSeparadosBadge() => Container(
-    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-    color: const Color(0xFFD5E3FD),
-    child: Row(children: [
-      const Icon(Icons.bookmark_rounded, size: 14, color: Color(0xFF3A485C)),
-      const SizedBox(width: 8),
-      Text(
-        'Este cliente tiene $_separadosCliente '
-        'apartado${_separadosCliente > 1 ? 's' : ''} pendiente${_separadosCliente > 1 ? 's' : ''}',
-        style: GoogleFonts.inter(
-            fontSize: 11, fontWeight: FontWeight.w600,
-            color: const Color(0xFF3A485C)),
+  Widget _buildSeparadosBadge() => Padding(
+    padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7ED),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFFED7AA)),
       ),
-    ]),
+      child: Row(children: [
+        const Icon(Icons.bookmark_rounded, size: 13, color: Color(0xFFEA580C)),
+        const SizedBox(width: 7),
+        Text(
+          '$_separadosCliente apartado${_separadosCliente > 1 ? 's' : ''} pendiente${_separadosCliente > 1 ? 's' : ''}',
+          style: GoogleFonts.inter(
+              fontSize: 11, fontWeight: FontWeight.w600,
+              color: const Color(0xFF9A3412)),
+        ),
+      ]),
+    ),
   );
 
   // ── Items del carrito ────────────────────────────────────
@@ -1740,15 +1821,19 @@ class _PosScreenState extends State<PosScreen> {
       // Quick actions — 4 íconos
       Row(children: [
         _quickIcon(Icons.percent_rounded,
+            label: 'Aplicar descuento',
             onTap: () => _mostrarDialogPorcentaje(pos)),
         const SizedBox(width: 6),
         _quickIcon(Icons.print_rounded,
+            label: 'Cobrar e imprimir',
             onTap: () => _cobrarEImprimir(pos, auth)),
         const SizedBox(width: 6),
         _quickIcon(Icons.replay_rounded,
+            label: 'Registrar devolución',
             onTap: () => DevolucionFormSheet.show(context, onCreada: (_) {})),
         const SizedBox(width: 6),
         _quickIcon(Icons.delete_sweep_rounded,
+            label: 'Vaciar carrito',
             color: _kError, bg: _kErrorBg,
             onTap: () => _confirmarLimpiar(pos)),
       ]),
@@ -1757,18 +1842,24 @@ class _PosScreenState extends State<PosScreen> {
 
   Widget _quickIcon(IconData icon,
       {required VoidCallback onTap,
+      required String label,
       Color color = _kTextSub,
       Color bg = _kSurfaceLow}) =>
     Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 9),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(8),
+      child: Tooltip(
+        message: label,
+        preferBelow: false,
+        verticalOffset: 32,
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 18, color: color),
           ),
-          child: Icon(icon, size: 18, color: color),
         ),
       ),
     );
@@ -1970,7 +2061,16 @@ class _PosScreenState extends State<PosScreen> {
   // ── Selector de cuenta destino (Nequi, DaviPlata, Datáfono…) ──
 
   Widget _buildCuentaSelector(PosProvider pos) {
-    final cuentas = context.read<ConfigProvider>().cuentas;
+    final todasCuentas = context.watch<ConfigProvider>().cuentas;
+    final metodo = pos.metodoPago;
+
+    // Filtrar por método de pago
+    final cuentas = todasCuentas.where((c) {
+      if (metodo == 'tarjeta')        return c.tipo == 'tarjeta';
+      if (metodo == 'transferencia')  return c.tipo != 'tarjeta';
+      return true; // mixto: muestra todas
+    }).toList();
+
     if (cuentas.isEmpty) return const SizedBox.shrink();
 
     return Column(
@@ -2009,11 +2109,22 @@ class _PosScreenState extends State<PosScreen> {
                     Icon(_iconoCuenta(c.tipo), size: 13,
                         color: sel ? _kGreenDark : _kTextMuted),
                     const SizedBox(width: 5),
-                    Text(c.nombre,
-                      style: GoogleFonts.inter(
-                          fontSize: 11,
-                          fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
-                          color: sel ? _kGreenDark : _kText)),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(c.nombre,
+                          style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: sel ? FontWeight.w700 : FontWeight.w600,
+                              color: sel ? _kGreenDark : _kText)),
+                        Text(c.tipoDisplay,
+                          style: GoogleFonts.inter(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w400,
+                              color: sel ? _kGreenDark : _kTextMuted)),
+                      ],
+                    ),
                   ]),
                 ),
               );
@@ -2225,9 +2336,14 @@ class _PosScreenState extends State<PosScreen> {
 
   void _abrirSeparado(PosProvider pos, AuthProvider auth) {
     if (_clienteSeleccionado == null) {
-      _showSnack('Primero asocia un cliente para crear un separado', _kAmber);
+      // Abrir picker de cliente y después el formulario de separado
+      _mostrarAsociarClienteParaSeparado(pos, auth);
       return;
     }
+    _abrirSeparadoForm(pos, auth);
+  }
+
+  void _abrirSeparadoForm(PosProvider pos, AuthProvider auth) {
     SeparadoForm.mostrar(
       context,
       tiendaId:       auth.tiendaId,
@@ -2247,6 +2363,121 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
+  void _mostrarAsociarClienteParaSeparado(PosProvider pos, AuthProvider auth) {
+    final clienteProv = context.read<ClienteProvider>();
+    clienteProv.cargarClientesSimple(q: '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final buscarCtrl = TextEditingController();
+        bool buscando = false;
+        return StatefulBuilder(
+          builder: (ctx, setS) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(children: [
+              const Icon(Icons.person_search_rounded, color: _kGreenDark, size: 20),
+              const SizedBox(width: 8),
+              Text('¿A nombre de quién?',
+                  style: GoogleFonts.inter(
+                      fontSize: 15, fontWeight: FontWeight.w700, color: _kText)),
+            ]),
+            content: SizedBox(
+              width: 360, height: 300,
+              child: Column(children: [
+                TextField(
+                  controller: buscarCtrl,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: 'Buscar cliente por nombre o cédula…',
+                    hintStyle: GoogleFonts.inter(color: _kTextMuted, fontSize: 13),
+                    prefixIcon: const Icon(Icons.search_rounded, size: 18, color: _kGreenDark),
+                    suffixIcon: buscando
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(width: 16, height: 16,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: _kGreenDark)))
+                        : null,
+                    filled: true, fillColor: _kSurfaceLow,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: _kBorder)),
+                    enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: _kBorder)),
+                    focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: _kGreen, width: 2)),
+                  ),
+                  onChanged: (v) async {
+                    if (v.length < 2) return;
+                    setS(() => buscando = true);
+                    await clienteProv.cargarClientesSimple(q: v);
+                    if (ctx.mounted) setS(() => buscando = false);
+                  },
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: Consumer<ClienteProvider>(
+                    builder: (_, cp, _) => cp.clientesSimple.isEmpty
+                        ? Center(
+                            child: Text('Escribe al menos 2 caracteres',
+                                style: GoogleFonts.inter(color: _kTextMuted, fontSize: 13)))
+                        : ListView.builder(
+                            itemCount: cp.clientesSimple.length,
+                            itemBuilder: (_, i) {
+                              final c = cp.clientesSimple[i];
+                              return ListTile(
+                                dense: true,
+                                leading: Container(
+                                  width: 36, height: 36,
+                                  decoration: const BoxDecoration(
+                                      color: _kGreenLight, shape: BoxShape.circle),
+                                  child: Center(
+                                    child: Text(
+                                      c.nombre.isNotEmpty ? c.nombre[0].toUpperCase() : '?',
+                                      style: GoogleFonts.inter(
+                                          color: _kGreenDark, fontSize: 14,
+                                          fontWeight: FontWeight.w800),
+                                    ),
+                                  ),
+                                ),
+                                title: Text(c.nombreCompleto,
+                                    style: GoogleFonts.inter(
+                                        fontSize: 13, fontWeight: FontWeight.w600,
+                                        color: _kText)),
+                                subtitle: (c.cedulaNit != null && c.cedulaNit!.isNotEmpty)
+                                    ? Text(c.cedulaNit!,
+                                        style: GoogleFonts.inter(
+                                            fontSize: 11, color: _kTextMuted))
+                                    : null,
+                                onTap: () {
+                                  setState(() => _clienteSeleccionado = c);
+                                  Navigator.pop(ctx);
+                                  _abrirSeparadoForm(pos, auth);
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                ),
+              ]),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text('Cancelar',
+                    style: GoogleFonts.inter(color: _kTextMuted)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _mostrarAsociarCliente() {
     final clienteProv = context.read<ClienteProvider>();
     clienteProv.cargarClientesSimple(q: '');
@@ -2254,11 +2485,12 @@ class _PosScreenState extends State<PosScreen> {
     showDialog(
       context: context,
       builder: (ctx) {
-        final buscarCtrl   = TextEditingController();
-        final nombreCtrl   = TextEditingController();
-        final apellidoCtrl = TextEditingController();
-        final telefonoCtrl = TextEditingController();
-        final cedulaCtrl   = TextEditingController();
+        final buscarCtrl      = TextEditingController();
+        final nombreCtrl      = TextEditingController();
+        final apellidoCtrl    = TextEditingController();
+        final telefonoCtrl    = TextEditingController();
+        final cedulaCtrl      = TextEditingController();
+        final limiteCreditoCtrl = TextEditingController();
         bool buscando  = false;
         bool creando   = false;
         bool guardando = false;
@@ -2436,6 +2668,10 @@ class _PosScreenState extends State<PosScreen> {
                 const SizedBox(height: 10),
                 _inputCrear(cedulaCtrl, 'Cédula / NIT (opcional)', Icons.badge_rounded,
                     tipo: TextInputType.number),
+                const SizedBox(height: 10),
+                _inputCrear(limiteCreditoCtrl, 'Límite de crédito (opcional)',
+                    Icons.credit_score_rounded,
+                    tipo: const TextInputType.numberWithOptions(decimal: false)),
                 const SizedBox(height: 6),
                 Align(
                   alignment: Alignment.centerLeft,
@@ -2458,12 +2694,17 @@ class _PosScreenState extends State<PosScreen> {
                     return;
                   }
                   setS(() { guardando = true; errorCrear = null; });
+                  final limiteStr = limiteCreditoCtrl.text.trim();
+                  final tiendaId  = context.read<AuthProvider>().tiendaId;
                   final res = await ClienteService().crearCliente({
                     'nombre':    nombre,
                     'apellido':  apellidoCtrl.text.trim(),
                     'telefono':  tel,
                     if (cedulaCtrl.text.trim().isNotEmpty)
                       'cedula_nit': cedulaCtrl.text.trim(),
+                    if (limiteStr.isNotEmpty)
+                      'limite_credito': double.tryParse(limiteStr) ?? 0,
+                    if (tiendaId > 0) 'tienda': tiendaId,
                     'email':     '',
                     'direccion': '',
                     'activo':    true,

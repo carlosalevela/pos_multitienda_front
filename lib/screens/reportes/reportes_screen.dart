@@ -944,7 +944,9 @@ class _ReportesScreenState extends State<ReportesScreen> {
     } else {
       hora = '--:--';
     }
-    final metodo    = v['metodo_pago']?.toString() ?? '';
+    final metodo        = v['metodo_pago']?.toString() ?? '';
+    final cuentaNombre  = v['cuenta_destino_nombre']?.toString();
+    final cuentaTipo    = v['cuenta_destino_tipo']?.toString();
     final total     = double.tryParse(
         v['total']?.toString() ?? '0') ?? 0;
     final factura   = v['numero_factura']?.toString() ?? '#--';
@@ -994,7 +996,9 @@ class _ReportesScreenState extends State<ReportesScreen> {
             ),
             Expanded(
               flex: 2,
-              child: _paymentChip(metodo),
+              child: _paymentChip(metodo,
+                  cuentaNombre: cuentaNombre,
+                  cuentaTipo: cuentaTipo),
             ),
             Expanded(
               flex: 2,
@@ -1011,7 +1015,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
     );
   }
 
-  Widget _paymentChip(String metodo) {
+  Widget _paymentChip(String metodo, {String? cuentaNombre, String? cuentaTipo}) {
     Color bg;
     Color fg;
     switch (metodo.toLowerCase()) {
@@ -1032,7 +1036,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
         bg = _kSurfCont;
         fg = _kOutline;
     }
-    return Container(
+    final chip = Container(
       padding: const EdgeInsets.symmetric(
           horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -1046,6 +1050,25 @@ class _ReportesScreenState extends State<ReportesScreen> {
             fontWeight: FontWeight.w700,
             color: fg),
       ),
+    );
+
+    if (cuentaNombre == null) return chip;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        chip,
+        const SizedBox(height: 3),
+        Text(
+          cuentaTipo != null ? '$cuentaNombre · $cuentaTipo' : cuentaNombre,
+          style: GoogleFonts.inter(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: _kOnSurfVar),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
     );
   }
 
@@ -1554,8 +1577,6 @@ class _ReportesScreenState extends State<ReportesScreen> {
   // ── Devoluciones sidebar ───────────────────────────────────
 
   Widget _buildDevolucionesSidebar(ReportesProvider rep) {
-    final total = rep.totalDevoluciones;
-
     return _sideCard(
       title: 'DEVOLUCIONES',
       trailingIcon: Icons.assignment_return_rounded,
@@ -1569,16 +1590,35 @@ class _ReportesScreenState extends State<ReportesScreen> {
                   'cancelada')
               .take(5)
               .map((d) {
-            final factura = d['venta_numero']?.toString() ??
-                'DEV-${d['id']}';
-            final tipo    = d['tipo']?.toString() ?? '';
-            final devTotal = double.tryParse(
-                    d['total_devuelto']?.toString() ?? '0') ??
-                0;
+            final factura    = d['venta_numero']?.toString() ?? 'DEV-${d['id']}';
+            final tipo       = d['tipo']?.toString() ?? '';
+            final tipoDif    = d['tipo_diferencia']?.toString() ?? '';
+            final devTotal   = double.tryParse(d['total_devuelto']?.toString() ?? '0') ?? 0;
+            final diferencia = double.tryParse(d['diferencia']?.toString() ?? '0') ?? 0;
             final esDevolucion = tipo == 'devolucion';
-            final label = esDevolucion ? 'Devolución' : 'Cambio';
-            final labelColor =
-                esDevolucion ? _kError : const Color(0xFFF57C00);
+            final label      = esDevolucion ? 'Devolución' : 'Cambio';
+            final labelColor = esDevolucion ? _kError : const Color(0xFFF57C00);
+            final metodo     = d['metodo_devolucion']?.toString() ?? d['metodo_pago_diferencia']?.toString() ?? '';
+            final cuentaNombre = d['cuenta_destino_nombre']?.toString() ?? '';
+            final mostrarCuenta = cuentaNombre.isNotEmpty &&
+                (metodo == 'transferencia' || metodo == 'tarjeta');
+
+            // Monto efectivo real del movimiento de caja
+            String montoLabel;
+            Color  montoColor;
+            if (esDevolucion) {
+              montoLabel = '-\$${fmtNum(devTotal)}';
+              montoColor = _kError;
+            } else if (tipoDif == 'cobrar') {
+              montoLabel = '+\$${fmtNum(diferencia)}';
+              montoColor = const Color(0xFF16A34A);
+            } else if (tipoDif == 'devolver') {
+              montoLabel = '-\$${fmtNum(diferencia)}';
+              montoColor = _kError;
+            } else {
+              montoLabel = 'Exacto';
+              montoColor = const Color(0xFF78909C);
+            }
 
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 5),
@@ -1593,29 +1633,42 @@ class _ReportesScreenState extends State<ReportesScreen> {
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
                                 color: _kOnSurface)),
-                        Container(
-                          margin: const EdgeInsets.only(top: 2),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: labelColor.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(4),
+                        const SizedBox(height: 2),
+                        Row(children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: labelColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(label,
+                                style: GoogleFonts.inter(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    color: labelColor,
+                                    letterSpacing: 0.05)),
                           ),
-                          child: Text(label,
+                          if (mostrarCuenta) ...[
+                            const SizedBox(width: 5),
+                            Flexible(child: Text(
+                              cuentaNombre,
+                              overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.inter(
                                   fontSize: 9,
-                                  fontWeight: FontWeight.w700,
-                                  color: labelColor,
-                                  letterSpacing: 0.05)),
-                        ),
+                                  color: const Color(0xFF5C6BC0),
+                                  fontWeight: FontWeight.w500),
+                            )),
+                          ],
+                        ]),
                       ],
                     ),
                   ),
-                  Text('-\$${fmtNum(devTotal)}',
+                  Text(montoLabel,
                       style: GoogleFonts.inter(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          color: _kError)),
+                          color: montoColor)),
                 ],
               ),
             );
@@ -1626,16 +1679,22 @@ class _ReportesScreenState extends State<ReportesScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Total devuelto',
+              Text('Neto efectivo',
                   style: GoogleFonts.inter(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                       color: _kOutline)),
-              Text('-\$${fmtNum(total)}',
-                  style: GoogleFonts.inter(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: _kError)),
+              Text(
+                rep.impactoCajaDevoluciones >= 0
+                    ? '+\$${fmtNum(rep.impactoCajaDevoluciones)}'
+                    : '-\$${fmtNum(rep.impactoCajaDevoluciones.abs())}',
+                style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: rep.impactoCajaDevoluciones >= 0
+                        ? const Color(0xFF16A34A)
+                        : _kError),
+              ),
             ],
           ),
         ],

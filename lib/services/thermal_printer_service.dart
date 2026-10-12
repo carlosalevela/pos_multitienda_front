@@ -13,6 +13,7 @@
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/contabilidad_models.dart';
 import '../models/devolucion_model.dart';
 import '../models/item_carrito.dart';
 import '../models/separado.dart';
@@ -199,17 +200,27 @@ class ThermalPrinterService {
       ],
 
       // ── Método y diferencia ─────────────────────────────────
-      ...gen.row([
-        PosColumn(text: 'Metodo:', width: 4, styles: const PosStyles()),
-        PosColumn(text: _metodoLabel(dev.metodoDevolucion), width: 8, styles: PosStyles(align: PosAlign.right)),
-      ]),
-      if (esCambio && (dev.diferencia ?? 0) > 0)
+      if (!esCambio)
+        ...gen.row([
+          PosColumn(text: 'Metodo:', width: 4, styles: const PosStyles()),
+          PosColumn(text: _metodoLabel(dev.metodoDevolucion), width: 8,
+              styles: PosStyles(align: PosAlign.right)),
+        ]),
+      if (esCambio && (dev.diferencia ?? 0) > 0) ...[
         ...gen.row([
           PosColumn(
-            text: dev.tipoDiferencia == 'cobrar' ? 'Cobrado:' : 'Devuelto:',
-            width: 5, styles: const PosStyles()),
-          PosColumn(text: '\$${fmt.format(dev.diferencia!)}', width: 7, styles: PosStyles(align: PosAlign.right)),
+            text: dev.tipoDiferencia == 'cobrar' ? 'Cobrado al cliente:' : 'Devuelto al cliente:',
+            width: 7, styles: PosStyles(bold: true)),
+          PosColumn(text: '\$${fmt.format(dev.diferencia!)}', width: 5,
+              styles: PosStyles(align: PosAlign.right, bold: true)),
         ]),
+        if (dev.metodoPagoDiferencia != null)
+          ...gen.row([
+            PosColumn(text: 'Metodo pago:', width: 5, styles: const PosStyles()),
+            PosColumn(text: _metodoLabel(dev.metodoPagoDiferencia!), width: 7,
+                styles: PosStyles(align: PosAlign.right)),
+          ]),
+      ],
       if (dev.observaciones.isNotEmpty)
         ...gen.text('Obs: ${dev.observaciones}'),
       ...gen.hr(),
@@ -658,11 +669,15 @@ class ThermalPrinterService {
 
   /// Genera bytes ESC/POS para el recibo de cierre de turno.
   static Future<List<int>> buildCierreTurno({
-    required SesionCaja          sesion,
-    required String              empresaNombre,
-    required Map<String, double> metodosPago,
-    required double              totalGastos,
-    PaperSize                    paperSize = PaperSize.mm80,
+    required SesionCaja                  sesion,
+    required String                      empresaNombre,
+    required Map<String, double>         metodosPago,
+    required double                      totalGastos,
+    PaperSize                            paperSize      = PaperSize.mm80,
+    List<Map<String, dynamic>>           resumenCuentas = const [],
+    List<Map<String, dynamic>>           gastosSesion   = const [],
+    List<TopProducto>                    topProductos   = const [],
+    List<Map<String, dynamic>>           separadosDia   = const [],
   }) async {
     final profile = await CapabilityProfile.load();
     final gen     = Generator(paperSize, profile);
@@ -674,8 +689,9 @@ class ThermalPrinterService {
 
     String _ml(String m) => switch (m) {
       'tarjeta'       => 'Tarjeta',
-      'transferencia' => 'Transferencia',
+      'transferencia' => 'Transf.',
       'mixto'         => 'Mixto',
+      'credito'       => 'Credito',
       _               => 'Efectivo',
     };
 
@@ -713,34 +729,160 @@ class ThermalPrinterService {
       ...gen.hr(),
 
       // ── Ventas por método ──────────────────────────────────
-      ...gen.text('VENTAS POR METODO', styles: PosStyles(bold: true)),
-      ...metodosPago.entries.expand((e) => [
-        ...gen.row([
-          PosColumn(text: '${_ml(e.key)}:', width: 6, styles: const PosStyles()),
-          PosColumn(text: '\$${fmt.format(e.value)}', width: 6,
-            styles: PosStyles(align: PosAlign.right, bold: true)),
-        ]),
-      ]),
+      ...gen.text('--- VENTAS DEL TURNO ---',
+        styles: PosStyles(align: PosAlign.center, bold: true)),
+      ...metodosPago.entries
+          .where((e) => e.value > 0)
+          .expand((e) => gen.row([
+            PosColumn(text: '${_ml(e.key)}:', width: 6, styles: const PosStyles()),
+            PosColumn(text: '\$${fmt.format(e.value)}', width: 6,
+              styles: PosStyles(align: PosAlign.right, bold: true)),
+          ])),
       ...gen.row([
         PosColumn(text: 'TOTAL VENTAS:', width: 7, styles: PosStyles(bold: true)),
         PosColumn(text: '\$${fmt.format(sesion.ventasTotal)}', width: 5,
           styles: PosStyles(bold: true, align: PosAlign.right)),
       ]),
+      ...gen.row([
+        PosColumn(text: 'Transacciones:', width: 7, styles: const PosStyles()),
+        PosColumn(text: '${sesion.numTransacciones}', width: 5,
+          styles: PosStyles(align: PosAlign.right)),
+      ]),
       ...gen.hr(),
+
+      // ── Ingresos por cuenta ────────────────────────────────
+      if (resumenCuentas.isNotEmpty) ...[
+        ...gen.text('-- INGRESOS POR CUENTA --',
+          styles: PosStyles(align: PosAlign.center, bold: true)),
+        ...resumenCuentas.expand((c) {
+          final nombre = c['nombre']?.toString() ?? '—';
+          final tipo   = c['tipo_display']?.toString() ?? '';
+          final turno  = double.tryParse(c['sesion_total']?.toString() ?? '0') ?? 0;
+          return gen.row([
+            PosColumn(text: '$nombre ($tipo):', width: 7, styles: const PosStyles()),
+            PosColumn(text: '\$${fmt.format(turno)}', width: 5,
+              styles: PosStyles(align: PosAlign.right, bold: true)),
+          ]);
+        }),
+        ...gen.hr(),
+      ],
+
+      // ── Abonos de separados ────────────────────────────────
+      if (sesion.abonosTotal > 0) ...[
+        ...gen.text('---- ABONOS SEPARADOS ----',
+          styles: PosStyles(align: PosAlign.center, bold: true)),
+        if (sesion.abonosEfectivo > 0)
+          ...gen.row([
+            PosColumn(text: 'Efectivo:', width: 6, styles: const PosStyles()),
+            PosColumn(text: '\$${fmt.format(sesion.abonosEfectivo)}', width: 6,
+              styles: PosStyles(align: PosAlign.right)),
+          ]),
+        if (sesion.abonosTarjeta > 0)
+          ...gen.row([
+            PosColumn(text: 'Tarjeta:', width: 6, styles: const PosStyles()),
+            PosColumn(text: '\$${fmt.format(sesion.abonosTarjeta)}', width: 6,
+              styles: PosStyles(align: PosAlign.right)),
+          ]),
+        if (sesion.abonosTransferencia > 0)
+          ...gen.row([
+            PosColumn(text: 'Transf.:', width: 6, styles: const PosStyles()),
+            PosColumn(text: '\$${fmt.format(sesion.abonosTransferencia)}', width: 6,
+              styles: PosStyles(align: PosAlign.right)),
+          ]),
+        ...gen.row([
+          PosColumn(text: 'TOTAL ABONOS:', width: 7, styles: PosStyles(bold: true)),
+          PosColumn(text: '\$${fmt.format(sesion.abonosTotal)}', width: 5,
+            styles: PosStyles(bold: true, align: PosAlign.right)),
+        ]),
+        ...gen.row([
+          PosColumn(text: '(${sesion.numAbonos} abono${sesion.numAbonos != 1 ? "s" : ""})',
+            width: 12, styles: PosStyles(align: PosAlign.center)),
+        ]),
+        ...gen.hr(),
+      ],
 
       // ── Gastos ─────────────────────────────────────────────
       if (totalGastos > 0) ...[
+        ...gen.text('----- GASTOS DEL TURNO -----',
+          styles: PosStyles(align: PosAlign.center, bold: true)),
+        ...gastosSesion.expand((g) {
+          final cat   = g['categoria']?.toString()   ?? '—';
+          final desc  = g['descripcion']?.toString() ?? '';
+          final monto = double.tryParse(g['monto']?.toString() ?? '0') ?? 0;
+          final label = desc.isNotEmpty ? '$cat: $desc' : cat;
+          return gen.row([
+            PosColumn(text: label.length > 18 ? '${label.substring(0, 17)}.' : label,
+              width: 7, styles: const PosStyles()),
+            PosColumn(text: '-\$${fmt.format(monto)}', width: 5,
+              styles: PosStyles(align: PosAlign.right)),
+          ]);
+        }),
         ...gen.row([
-          PosColumn(text: 'GASTOS:', width: 7, styles: PosStyles(bold: true)),
+          PosColumn(text: 'TOTAL GASTOS:', width: 7, styles: PosStyles(bold: true)),
           PosColumn(text: '-\$${fmt.format(totalGastos)}', width: 5,
             styles: PosStyles(bold: true, align: PosAlign.right)),
         ]),
         ...gen.hr(),
       ],
 
-      // ── Balance ────────────────────────────────────────────
+      // ── Top productos ──────────────────────────────────────
+      if (topProductos.isNotEmpty) ...[
+        ...gen.text('----- TOP PRODUCTOS ------',
+          styles: PosStyles(align: PosAlign.center, bold: true)),
+        ...topProductos.take(5).toList().asMap().entries.expand((entry) {
+          final i = entry.key + 1;
+          final p = entry.value;
+          return [
+            ...gen.text('$i. ${p.producto}',
+              styles: const PosStyles(bold: true)),
+            ...gen.row([
+              PosColumn(text: '   ${p.totalVendido.toStringAsFixed(0)} uds.',
+                width: 6, styles: const PosStyles()),
+              PosColumn(text: '\$${fmt.format(p.totalIngresos)}', width: 6,
+                styles: PosStyles(align: PosAlign.right)),
+            ]),
+          ];
+        }),
+        ...gen.hr(),
+      ],
+
+      // ── Separados del día ──────────────────────────────────
+      if (separadosDia.isNotEmpty) ...[
+        ...gen.text('---- SEPARADOS DEL DIA ---',
+          styles: PosStyles(align: PosAlign.center, bold: true)),
+        ...separadosDia.expand((s) {
+          final cliente = s['cliente_nombre']?.toString() ?? '—';
+          final total   = double.tryParse(s['total']?.toString()           ?? '0') ?? 0;
+          final abonado = double.tryParse(s['abono_acumulado']?.toString() ?? '0') ?? 0;
+          final saldo   = double.tryParse(s['saldo_pendiente']?.toString() ?? '0') ?? 0;
+          final estado  = (s['estado']?.toString() ?? 'pendiente').toUpperCase();
+          return [
+            ...gen.text(cliente, styles: const PosStyles(bold: true)),
+            ...gen.row([
+              PosColumn(text: 'Total:', width: 3, styles: const PosStyles()),
+              PosColumn(text: '\$${fmt.format(total)}', width: 4,
+                styles: PosStyles(align: PosAlign.right)),
+              PosColumn(text: 'Abono:', width: 3, styles: const PosStyles()),
+              PosColumn(text: '\$${fmt.format(abonado)}', width: 2,
+                styles: PosStyles(align: PosAlign.right)),
+            ]),
+            ...gen.row([
+              PosColumn(text: 'Saldo:', width: 4, styles: const PosStyles()),
+              PosColumn(text: '\$${fmt.format(saldo)}', width: 4,
+                styles: PosStyles(align: PosAlign.right)),
+              PosColumn(text: estado, width: 4,
+                styles: PosStyles(align: PosAlign.right, bold: true)),
+            ]),
+          ];
+        }),
+        ...gen.hr(),
+      ],
+
+      // ── Balance / Efectivo esperado ────────────────────────
+      ...gen.text('------- BALANCE ---------',
+        styles: PosStyles(align: PosAlign.center, bold: true)),
       ...gen.row([
-        PosColumn(text: 'Saldo inicial:', width: 7, styles: const PosStyles()),
+        PosColumn(text: 'Fondo inicial:', width: 7, styles: const PosStyles()),
         PosColumn(text: '\$${fmt.format(sesion.saldo_inicial)}', width: 5,
           styles: PosStyles(align: PosAlign.right)),
       ]),

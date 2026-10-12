@@ -214,13 +214,14 @@ class ClienteService {
   }
 
   Future<Map<String, dynamic>> abonarSeparado(
-      int id, double monto, String metodoPago) async {
+      int id, double monto, String metodoPago, {int? cuentaDestinoId}) async {
     try {
       final r = await ApiClient.instance.post(
         '/clientes/separados/$id/abonar/',
         data: {
           'monto':       monto.toStringAsFixed(2),
           'metodo_pago': metodoPago,
+          if (cuentaDestinoId != null) 'cuenta_destino': cuentaDestinoId,
         },
       );
       return {'success': true, 'data': r.data};
