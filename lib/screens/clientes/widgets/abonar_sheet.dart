@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -93,6 +94,7 @@ class _AbonarSheetState extends State<AbonarSheet> {
     if (!mounted) return;
 
     if (ok) {
+      if (_metodoPago == 'efectivo') unawaited(_kickCajon());
       final imprimir = await showDialog<bool>(
         context:            context,
         barrierDismissible: true,
@@ -233,6 +235,19 @@ class _AbonarSheetState extends State<AbonarSheet> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ));
     }
+  }
+
+  Future<void> _kickCajon() async {
+    try {
+      if (ThermalPrinterService.isWebUsbSupported) {
+        if (!await ThermalPrinterService.hasCashDrawer()) return;
+        final dev = await ThermalPrinterService.getAutoDevice();
+        if (dev != null) await ThermalPrinterService.kickDrawer(dev);
+      } else if (!kIsWeb && await ThermalPrinterService.hasCashDrawer()) {
+        final bytes = await ThermalPrinterService.buildDrawerBytes();
+        await WindowsPrinterService.printRaw(bytes);
+      }
+    } catch (_) {}
   }
 
   Future<void> _imprimirReciboAbono(double monto, String metodo) async {

@@ -549,6 +549,18 @@ pw.Widget _flujoCajaCard(
     );
   }
 
+  // Fila de ventas por método (sin signo)
+  pw.Widget filaMetodo(String label, double v) => pw.Padding(
+    padding: const pw.EdgeInsets.symmetric(vertical: 2.5),
+    child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+      pw.Text(label, style: pw.TextStyle(fontSize: 9, color: _pOnVar)),
+      pw.Text(_m(v),  style: pw.TextStyle(fontSize: 9, color: _pOnVar)),
+    ]),
+  );
+
+  final totalMetodos = s.ventasEfectivo + s.ventasTarjeta + s.ventasTransferencia
+      + s.ventasMixto;
+
   return pw.Container(
     decoration: pw.BoxDecoration(
       border:       pw.Border.all(color: _pOutVar, width: 0.8),
@@ -559,30 +571,61 @@ pw.Widget _flujoCajaCard(
       pw.Padding(
         padding: const pw.EdgeInsets.fromLTRB(16, 10, 16, 14),
         child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [
-          // ── Ingresos ──
-          fila('(+) Base inicial de caja',    s.saldoInicial),
+
+          // ── Bloque 1: Resumen ventas del turno por método ──
+          pw.Text('Ventas del turno',
+              style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold,
+                  color: _pNavyMuted, letterSpacing: 0.4)),
+          pw.SizedBox(height: 5),
+          if (s.ventasEfectivo > 0)
+            filaMetodo('Efectivo',        s.ventasEfectivo),
+          if (s.ventasTarjeta > 0)
+            filaMetodo('Tarjeta',         s.ventasTarjeta),
+          if (s.ventasTransferencia > 0)
+            filaMetodo('Transferencia',   s.ventasTransferencia),
+          if (s.ventasMixto > 0)
+            filaMetodo('Mixto',           s.ventasMixto),
+          pw.SizedBox(height: 4),
+          pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+            pw.Text('TOTAL VENTAS',
+                style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: _pGreen)),
+            pw.Text(_m(totalMetodos),
+                style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: _pGreen)),
+          ]),
+
+          // ── Separador ──
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(vertical: 8),
+            child: pw.Divider(color: _pOutVar, thickness: 0.6),
+          ),
+
+          // ── Bloque 2: Flujo de caja en efectivo ──
+          pw.Text('Flujo de caja en efectivo',
+              style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold,
+                  color: _pNavyMuted, letterSpacing: 0.4)),
+          pw.SizedBox(height: 5),
+          fila('(+) Base inicial (apertura)',  s.saldoInicial),
           fila('(+) Ventas en efectivo',       s.ventasEfectivo),
           if (s.ventasMixtoEfectivo > 0)
-            fila('(+) Ventas mixto (efectivo)', s.ventasMixtoEfectivo),
+            fila('(+) Ventas mixto (ef.)',     s.ventasMixtoEfectivo),
           if (s.abonosEfectivo > 0)
             fila('(+) Ingresos separados',     s.abonosEfectivo),
           if (s.abonosCreditoEfectivo > 0)
-            fila('(+) Abonos pagos clientes',  s.abonosCreditoEfectivo),
+            fila('(+) Abonos crédito clientes',s.abonosCreditoEfectivo),
           if (s.ingresosManual > 0)
             fila('(+) Ingresos manuales',      s.ingresosManual),
-          // ── Egresos ──
           if (s.devolucionesEfectivo > 0)
-            fila('(-) Devoluciones (neto ef.)', s.devolucionesEfectivo, suma: false),
+            fila('(-) Devoluciones (ef.)',     s.devolucionesEfectivo, suma: false),
           if (s.cancelacionesEfectivo > 0)
-            fila('(-) Cancelaciones separados', s.cancelacionesEfectivo, suma: false),
+            fila('(-) Cancelaciones sep.',     s.cancelacionesEfectivo, suma: false),
           if (s.gastosTotal > 0)
-            fila('(-) Gastos del turno',        s.gastosTotal, suma: false),
-          // ── Divisor ──
+            fila('(-) Gastos del turno',       s.gastosTotal, suma: false),
+
+          // ── Divisor totales ──
           pw.Padding(
             padding: const pw.EdgeInsets.symmetric(vertical: 6),
             child: pw.Divider(color: _pNavy, thickness: 0.8),
           ),
-          // ── Total esperado ──
           pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
             pw.Text('(=) EFECTIVO ESPERADO',
                 style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: _pOnSurf)),
@@ -597,7 +640,6 @@ pw.Widget _flujoCajaCard(
                 style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: _pOnSurf)),
           ]),
           pw.SizedBox(height: 10),
-          // ── Resultado ──
           pw.Container(
             width: double.infinity,
             padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),

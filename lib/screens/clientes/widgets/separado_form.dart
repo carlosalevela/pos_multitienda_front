@@ -20,6 +20,8 @@ import '../../../services/windows_printer_service.dart';
 import '../../../models/producto.dart';
 import '../../../services/barcode_service.dart';
 import '../../../services/inventario_service.dart';
+import '../../../providers/config_provider.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart' show PaperSize;
 
 // ── Paleta del sistema de diseño ─────────────────────────────
 const _kGreen     = Color(0xFF10B981);   // emerald
@@ -334,13 +336,16 @@ class _SeparadoFormState extends State<SeparadoForm> {
 
   Future<void> _imprimirSeparado(Separado separado) async {
     final empresaNombre = context.read<AuthProvider>().empresaNombre;
-    final nombre = empresaNombre.isNotEmpty ? empresaNombre : separado.tiendaNombre;
+    final nombre        = empresaNombre.isNotEmpty ? empresaNombre : separado.tiendaNombre;
+    final tipoPapel     = context.read<ConfigProvider>().tipoPapel;
+    final paperSize     = tipoPapel == '58mm' ? PaperSize.mm58 : PaperSize.mm80;
+
     if (ThermalPrinterService.isWebUsbSupported) {
       try {
         final dev = await ThermalPrinterService.getAutoDevice();
         if (dev != null) {
           final bytes = await ThermalPrinterService.buildSeparadoRecibo(
-              separado, empresaNombre: nombre);
+              separado, empresaNombre: nombre, paperSize: paperSize);
           await ThermalPrinterService.printBytes(dev, bytes);
           unawaited(ReciboPdfService.imprimirSeparado(
             separado: separado, empresaNombre: nombre, soloGuardar: true,
@@ -351,7 +356,7 @@ class _SeparadoFormState extends State<SeparadoForm> {
     } else if (!kIsWeb && await WindowsPrinterService.hasSavedPrinter()) {
       try {
         final bytes = await ThermalPrinterService.buildSeparadoRecibo(
-            separado, empresaNombre: nombre);
+            separado, empresaNombre: nombre, paperSize: paperSize);
         await WindowsPrinterService.printRaw(bytes);
         unawaited(ReciboPdfService.imprimirSeparado(
           separado: separado, empresaNombre: nombre, soloGuardar: true,

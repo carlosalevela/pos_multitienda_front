@@ -41,7 +41,7 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
 
   bool   _mayoreoHabilitado   = false;
   String _politica            = 'retener';
-  String _tipoPapel           = '80mm';
+  String _tipoPapel           = '58mm';
   int    _copias              = 1;
   bool   _mostrarLogo         = true;
   bool   _mostrarNit          = true;

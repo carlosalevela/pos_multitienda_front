@@ -38,8 +38,11 @@ class InventarioProvider extends ChangeNotifier {
   // ── Cargar productos ──────────────────────────────────
   Future<void> cargarProductos({
     String? q,
-    int? tiendaId,
-    String activo = 'true',
+    int?    tiendaId,
+    String  activo = 'true',
+    int?    categoriaId,
+    double? precioMin,
+    double? precioMax,
   }) async {
     _tiendaIdActual = tiendaId;
     _activoFiltro = activo;
@@ -49,9 +52,12 @@ class InventarioProvider extends ChangeNotifier {
 
     try {
       final result = await _service.getProductos(
-        q: q,
-        tiendaId: _tiendaIdActual,
-        activo: activo,
+        q:           q,
+        tiendaId:    _tiendaIdActual,
+        activo:      activo,
+        categoriaId: categoriaId,
+        precioMin:   precioMin,
+        precioMax:   precioMax,
       );
 
       if (result['success'] == true) {
@@ -76,6 +82,10 @@ class InventarioProvider extends ChangeNotifier {
     int? tiendaId,
     String? alerta,
     String activo = 'true',
+    String? q,
+    int?    categoriaId,
+    double? precioMin,
+    double? precioMax,
   }) async {
     _tiendaIdActual = tiendaId;
     _activoFiltro = activo;
@@ -85,9 +95,13 @@ class InventarioProvider extends ChangeNotifier {
 
     try {
       final result = await _service.getInventario(
-        tiendaId: _tiendaIdActual,
-        alerta: alerta,
-        activo: activo,
+        tiendaId:    _tiendaIdActual,
+        alerta:      alerta,
+        activo:      activo,
+        q:           q,
+        categoriaId: categoriaId,
+        precioMin:   precioMin,
+        precioMax:   precioMax,
       );
 
       if (result['success'] == true) {

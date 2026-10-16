@@ -1,8 +1,12 @@
+import 'dart:async' show unawaited;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../providers/caja_provider.dart';
 import '../../../providers/auth_provider.dart';
+import '../../../services/thermal_printer_service.dart';
+import '../../../services/windows_printer_service.dart';
 
 class CajaCerradaCard extends StatelessWidget {
   final CajaProvider          caja;
@@ -133,7 +137,10 @@ class CajaCerradaCard extends StatelessWidget {
                     tiendaId:     auth.tiendaId,
                     saldoInicial: double.tryParse(saldoCtrl.text) ?? 0,
                   );
-                  if (ok) onCajaAbierta?.call();
+                  if (ok) {
+                    unawaited(_abrirCajon());
+                    onCajaAbierta?.call();
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _green,
@@ -158,4 +165,17 @@ class CajaCerradaCard extends StatelessWidget {
       ]),
     );
   }
+}
+
+Future<void> _abrirCajon() async {
+  try {
+    if (ThermalPrinterService.isWebUsbSupported) {
+      if (!await ThermalPrinterService.hasCashDrawer()) return;
+      final dev = await ThermalPrinterService.getOrRequestDevice();
+      if (dev != null) await ThermalPrinterService.kickDrawer(dev);
+    } else if (!kIsWeb && await ThermalPrinterService.hasCashDrawer()) {
+      final bytes = await ThermalPrinterService.buildDrawerBytes();
+      await WindowsPrinterService.printRaw(bytes);
+    }
+  } catch (_) {}
 }

@@ -40,6 +40,18 @@ class _InventarioScreenState extends State<InventarioScreen>
   int?                       _hoveredRow;
   bool                       _exportando = false;
 
+  // Filtros avanzados
+  int?    _filtCategoriaId;
+  String? _filtCategoriaName;
+  double? _filtPrecioMin;
+  double? _filtPrecioMax;
+  String? _filtAlerta; // null | 'bajo' | 'agotado' | 'con_averias'
+  bool get _hayFiltrosActivos =>
+      _filtCategoriaId != null ||
+      _filtPrecioMin   != null ||
+      _filtPrecioMax   != null ||
+      _filtAlerta      != null;
+
   // Insights panel data
   Map<String, dynamic>?      _dashboard;
   List<Map<String, dynamic>> _topProductos     = [];
@@ -879,7 +891,13 @@ class _InventarioScreenState extends State<InventarioScreen>
             ),
             onChanged: (val) =>
                 context.read<InventarioProvider>().cargarProductos(
-                  q: val, tiendaId: _tiendaActiva, activo: _activoFiltro),
+                  q:           val,
+                  tiendaId:    _tiendaActiva,
+                  activo:      _activoFiltro,
+                  categoriaId: _filtCategoriaId,
+                  precioMin:   _filtPrecioMin,
+                  precioMax:   _filtPrecioMax,
+                ),
           ),
         ),
       ),
@@ -904,6 +922,44 @@ class _InventarioScreenState extends State<InventarioScreen>
             Text('OK', style: _t(size: 11, weight: FontWeight.w700, color: _green)),
           ],
         ]),
+      ),
+      const SizedBox(width: 10),
+      // Botón filtros avanzados
+      GestureDetector(
+        onTap: () => _abrirFiltros(context),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            color:        _hayFiltrosActivos ? _green : _surfLow,
+            borderRadius: BorderRadius.circular(999),
+            border:       Border.all(
+              color: _hayFiltrosActivos ? _green : _border,
+            ),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.tune_rounded, size: 16,
+                color: _hayFiltrosActivos ? Colors.white : _muted2),
+            const SizedBox(width: 5),
+            Text('Filtros',
+                style: _t(size: 12, weight: FontWeight.w600,
+                    color: _hayFiltrosActivos ? Colors.white : _muted2)),
+            if (_hayFiltrosActivos) ...[
+              const SizedBox(width: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+                child: Text(
+                  _contarFiltros().toString(),
+                  style: _t(size: 10, weight: FontWeight.w700, color: Colors.white),
+                ),
+              ),
+            ],
+          ]),
+        ),
       ),
       if (!esCajero) ...[
         const SizedBox(width: 10),
@@ -963,6 +1019,226 @@ class _InventarioScreenState extends State<InventarioScreen>
       ),
     );
   }
+
+  int _contarFiltros() {
+    int n = 0;
+    if (_filtCategoriaId != null) n++;
+    if (_filtPrecioMin   != null) n++;
+    if (_filtPrecioMax   != null) n++;
+    if (_filtAlerta      != null) n++;
+    return n;
+  }
+
+  void _aplicarFiltros() {
+    context.read<InventarioProvider>().cargarProductos(
+      q:           _searchCtrl.text.trim().isEmpty ? null : _searchCtrl.text.trim(),
+      tiendaId:    _tiendaActiva,
+      activo:      _activoFiltro,
+      categoriaId: _filtCategoriaId,
+      precioMin:   _filtPrecioMin,
+      precioMax:   _filtPrecioMax,
+    );
+  }
+
+  void _limpiarFiltros() {
+    setState(() {
+      _filtCategoriaId   = null;
+      _filtCategoriaName = null;
+      _filtPrecioMin     = null;
+      _filtPrecioMax     = null;
+      _filtAlerta        = null;
+    });
+    _aplicarFiltros();
+  }
+
+  Future<void> _abrirFiltros(BuildContext ctx) async {
+    final inv = ctx.read<InventarioProvider>();
+    if (inv.categorias.isEmpty) await inv.cargarCategorias();
+    if (!ctx.mounted) return;
+    final categorias = inv.categorias; // List<Map<String,dynamic>>
+
+    // Controladores locales al sheet
+    final precioMinCtrl = TextEditingController(
+        text: _filtPrecioMin != null ? _filtPrecioMin!.toStringAsFixed(0) : '');
+    final precioMaxCtrl = TextEditingController(
+        text: _filtPrecioMax != null ? _filtPrecioMax!.toStringAsFixed(0) : '');
+
+    int?    tmpCatId   = _filtCategoriaId;
+    String? tmpCatName = _filtCategoriaName;
+    String? tmpAlerta  = _filtAlerta;
+
+    showModalBottomSheet(
+      context: ctx,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx2, setS) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: EdgeInsets.fromLTRB(
+              20, 16, 20, MediaQuery.of(ctx2).viewInsets.bottom + 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle
+              Center(child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE2E8F0),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              )),
+              const SizedBox(height: 16),
+
+              // Header
+              Row(children: [
+                const Icon(Icons.tune_rounded, size: 20, color: Color(0xFF191C1E)),
+                const SizedBox(width: 8),
+                Text('Filtros avanzados',
+                    style: _t(size: 16, weight: FontWeight.w700, color: _text)),
+                const Spacer(),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx2);
+                    _limpiarFiltros();
+                  },
+                  child: Text('Limpiar',
+                      style: _t(size: 13, color: _danger, weight: FontWeight.w600)),
+                ),
+              ]),
+              const SizedBox(height: 16),
+
+              // ── Categoría ─────────────────────────────
+              Text('Categoría', style: _t(size: 12, weight: FontWeight.w600, color: _muted)),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6, runSpacing: 6,
+                children: [
+                  _chipFiltro(
+                    label: 'Todas',
+                    sel: tmpCatId == null,
+                    onTap: () => setS(() { tmpCatId = null; tmpCatName = null; }),
+                  ),
+                  ...categorias.map((c) {
+                    final id   = c['id'] as int;
+                    final nom  = c['nombre'] as String? ?? '';
+                    return _chipFiltro(
+                      label: nom,
+                      sel:   tmpCatId == id,
+                      onTap: () => setS(() { tmpCatId = id; tmpCatName = nom; }),
+                    );
+                  }),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // ── Rango de precio ────────────────────────
+              Text('Rango de precio', style: _t(size: 12, weight: FontWeight.w600, color: _muted)),
+              const SizedBox(height: 6),
+              Row(children: [
+                Expanded(child: _precioField('Precio mínimo', precioMinCtrl)),
+                const SizedBox(width: 10),
+                Expanded(child: _precioField('Precio máximo', precioMaxCtrl)),
+              ]),
+              const SizedBox(height: 16),
+
+              // ── Alerta de stock ────────────────────────
+              Text('Estado de stock', style: _t(size: 12, weight: FontWeight.w600, color: _muted)),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                children: [
+                  _chipFiltro(label: 'Todos',       sel: tmpAlerta == null,          onTap: () => setS(() => tmpAlerta = null)),
+                  _chipFiltro(label: 'Stock bajo',  sel: tmpAlerta == 'bajo',        onTap: () => setS(() => tmpAlerta = 'bajo')),
+                  _chipFiltro(label: 'Agotados',    sel: tmpAlerta == 'agotado',     onTap: () => setS(() => tmpAlerta = 'agotado')),
+                  _chipFiltro(label: 'Con averías', sel: tmpAlerta == 'con_averias', onTap: () => setS(() => tmpAlerta = 'con_averias')),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // ── Aplicar ────────────────────────────────
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _green,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () {
+                    final pMin = double.tryParse(precioMinCtrl.text.replaceAll(',', ''));
+                    final pMax = double.tryParse(precioMaxCtrl.text.replaceAll(',', ''));
+                    setState(() {
+                      _filtCategoriaId   = tmpCatId;
+                      _filtCategoriaName = tmpCatName;
+                      _filtPrecioMin     = pMin;
+                      _filtPrecioMax     = pMax;
+                      _filtAlerta        = tmpAlerta;
+                    });
+                    Navigator.pop(ctx2);
+                    _aplicarFiltros();
+                  },
+                  child: Text('Aplicar filtros',
+                      style: _t(size: 14, weight: FontWeight.w700, color: Colors.white)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _chipFiltro({
+    required String   label,
+    required bool     sel,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color:        sel ? _green : _surfLow,
+          borderRadius: BorderRadius.circular(99),
+          border:       Border.all(color: sel ? _green : _border),
+        ),
+        child: Text(label,
+            style: _t(size: 12, weight: FontWeight.w600,
+                color: sel ? Colors.white : _muted)),
+      ),
+    );
+  }
+
+  Widget _precioField(String hint, TextEditingController ctrl) => TextField(
+        controller: ctrl,
+        keyboardType: TextInputType.number,
+        style: _t(size: 13),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: _t(size: 12, color: _muted2),
+          prefixText: '\$ ',
+          prefixStyle: _t(size: 13, weight: FontWeight.w600),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          filled: true,
+          fillColor: _surfLow,
+          border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: _border)),
+          enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: _border)),
+          focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: _green, width: 1.5)),
+        ),
+      );
 
   // ══════════════════════════════════════════════════════
   // TABLA PLANA
@@ -2765,7 +3041,7 @@ class _AjusteStockSheetState extends State<_AjusteStockSheet> {
   final _obsCtrl  = TextEditingController();
   final _service  = InventarioService();
 
-  String _tipo     = 'entrada'; // 'entrada' | 'salida' | 'ajuste'
+  String _tipo     = 'entrada'; // 'entrada' | 'salida' | 'ajuste' | 'averia'
   bool   _enviando = false;
   String _error    = '';
 
@@ -2776,6 +3052,7 @@ class _AjusteStockSheetState extends State<_AjusteStockSheet> {
   static const _muted   = Color(0xFF64748B);
   static const _red     = Color(0xFFDC2626);
   static const _indigo  = Color(0xFF3730A3);
+  static const _orange  = Color(0xFFB45309);
 
   @override
   void dispose() {
@@ -2789,6 +3066,7 @@ class _AjusteStockSheetState extends State<_AjusteStockSheet> {
     'entrada' => _greenDk,
     'salida'  => _red,
     'ajuste'  => _indigo,
+    'averia'  => _orange,
     _         => _greenDk,
   };
 
@@ -2809,14 +3087,16 @@ class _AjusteStockSheetState extends State<_AjusteStockSheet> {
       );
       if (!mounted) return;
       if (result['success'] == true) {
-        final nuevoStock = result['data']?['stock_actual'] ?? '—';
+        final nuevoStock   = result['data']?['stock_actual'] ?? '—';
+        final stockAverias = result['data']?['stock_averias'];
         widget.onAjustado();
         Navigator.pop(context);
+        final msg = _tipo == 'averia'
+            ? 'Avería registrada · ${widget.producto.nombre} · averías: $stockAverias u.'
+            : 'Stock ajustado · ${widget.producto.nombre} → $nuevoStock u.';
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-            'Stock ajustado · ${widget.producto.nombre} → $nuevoStock u.',
-          ),
-          backgroundColor: _greenDk,
+          content: Text(msg),
+          backgroundColor: _tipo == 'averia' ? _orange : _greenDk,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           margin: const EdgeInsets.all(16),
@@ -2902,9 +3182,10 @@ class _AjusteStockSheetState extends State<_AjusteStockSheet> {
             border: Border.all(color: _border),
           ),
           child: Row(children: [
-            _tipoBtn('entrada', 'Entrada',  Icons.add_circle_outline_rounded,  _greenDk),
-            _tipoBtn('salida',  'Salida',   Icons.remove_circle_outline_rounded, _red),
-            _tipoBtn('ajuste',  'Ajuste',   Icons.swap_vert_rounded,             _indigo),
+            _tipoBtn('entrada', 'Entrada',  Icons.add_circle_outline_rounded,    _greenDk),
+            _tipoBtn('salida',  'Salida',   Icons.remove_circle_outline_rounded,  _red),
+            _tipoBtn('ajuste',  'Ajuste',   Icons.swap_vert_rounded,              _indigo),
+            _tipoBtn('averia',  'Avería',   Icons.warning_amber_rounded,          _orange),
           ]),
         ),
         const SizedBox(height: 6),
@@ -2913,6 +3194,7 @@ class _AjusteStockSheetState extends State<_AjusteStockSheet> {
             'entrada' => 'Suma unidades al stock actual',
             'salida'  => 'Resta unidades del stock actual',
             'ajuste'  => 'Reemplaza el stock con el valor exacto',
+            'averia'  => 'Mueve unidades al stock de averías',
             _         => '',
           },
           style: GoogleFonts.inter(fontSize: 11, color: _muted),
@@ -2924,13 +3206,18 @@ class _AjusteStockSheetState extends State<_AjusteStockSheet> {
           controller: _cantCtrl,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: InputDecoration(
-            labelText: _tipo == 'ajuste' ? 'Nuevo stock total' : 'Cantidad',
+            labelText: switch (_tipo) {
+              'ajuste'  => 'Nuevo stock total',
+              'averia'  => 'Unidades averiadas',
+              _         => 'Cantidad',
+            },
             labelStyle: GoogleFonts.inter(fontSize: 13, color: _muted),
-            prefixIcon: Icon(
-              _tipo == 'entrada'
-                ? Icons.add_rounded
-                : _tipo == 'salida' ? Icons.remove_rounded : Icons.sync_rounded,
-              size: 18, color: accent),
+            prefixIcon: Icon(switch (_tipo) {
+              'entrada' => Icons.add_rounded,
+              'salida'  => Icons.remove_rounded,
+              'averia'  => Icons.warning_amber_rounded,
+              _         => Icons.sync_rounded,
+            }, size: 18, color: accent),
             suffixText: 'u.',
             filled: true,
             fillColor: _surface,

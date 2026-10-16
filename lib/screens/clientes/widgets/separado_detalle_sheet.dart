@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../models/separado.dart';
 import '../../../providers/auth_provider.dart';
+import '../../../providers/config_provider.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart' show PaperSize;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../../services/recibo_pdf_service.dart';
 import '../../../services/thermal_printer_service.dart';
@@ -564,7 +566,9 @@ class SeparadoDetalleSheet extends StatelessWidget {
 
   // ── Imprimir ──────────────────────────────────────────────
   Future<void> _imprimir(BuildContext context) async {
-    final auth          = context.read<AuthProvider>();
+    final tipoPapel = context.read<ConfigProvider>().tipoPapel;
+    final paperSize = tipoPapel == '58mm' ? PaperSize.mm58 : PaperSize.mm80;
+    final auth      = context.read<AuthProvider>();
     final empresaNombre = auth.empresaNombre.isNotEmpty
         ? auth.empresaNombre
         : separado.tiendaNombre;
@@ -574,7 +578,7 @@ class SeparadoDetalleSheet extends StatelessWidget {
         final dev = await ThermalPrinterService.getAutoDevice();
         if (dev != null) {
           final bytes = await ThermalPrinterService.buildSeparadoRecibo(
-              separado, empresaNombre: empresaNombre);
+              separado, empresaNombre: empresaNombre, paperSize: paperSize);
           await ThermalPrinterService.printBytes(dev, bytes);
           return;
         }
@@ -582,7 +586,7 @@ class SeparadoDetalleSheet extends StatelessWidget {
     } else if (!kIsWeb && await WindowsPrinterService.hasSavedPrinter()) {
       try {
         final bytes = await ThermalPrinterService.buildSeparadoRecibo(
-            separado, empresaNombre: empresaNombre);
+            separado, empresaNombre: empresaNombre, paperSize: paperSize);
         await WindowsPrinterService.printRaw(bytes);
         return;
       } catch (_) {}

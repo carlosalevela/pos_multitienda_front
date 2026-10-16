@@ -204,6 +204,12 @@ class _TiendasScreenState extends State<TiendasScreen> {
                     color: Colors.red.shade300, size: 20),
                 onPressed: () => _confirmarDesactivar(context, prov, t),
               ),
+            IconButton(
+              tooltip: 'Eliminar permanentemente',
+              icon: Icon(Icons.delete_forever_rounded,
+                  color: Colors.red.shade700, size: 20),
+              onPressed: () => _confirmarEliminar(context, prov, t),
+            ),
           ],
         ),
       ),
@@ -471,4 +477,97 @@ class _TiendasScreenState extends State<TiendasScreen> {
       ),
     );
   }
+
+  // ── Confirmar eliminar permanentemente ───────────────
+  void _confirmarEliminar(
+      BuildContext context, TiendaProvider prov, Tienda t) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Row(children: [
+          Icon(Icons.delete_forever_rounded, color: Colors.red.shade700, size: 22),
+          const SizedBox(width: 8),
+          Text('¿Eliminar tienda?',
+              style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold, color: Colors.red.shade700)),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Esto eliminará permanentemente "${t.nombre}" y todos sus datos:',
+              style: GoogleFonts.poppins(fontSize: 13),
+            ),
+            const SizedBox(height: 10),
+            _itemEliminar('Inventario de la tienda'),
+            _itemEliminar('Movimientos de inventario'),
+            _itemEliminar('Sesiones de caja'),
+            _itemEliminar('Compras asignadas'),
+            _itemEliminar('Documentos y gastos'),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.shade200),
+              ),
+              child: Row(children: [
+                Icon(Icons.info_outline, size: 16, color: Colors.amber.shade800),
+                const SizedBox(width: 6),
+                Expanded(child: Text(
+                  'Si tiene ventas registradas, no se podrá eliminar.',
+                  style: GoogleFonts.poppins(
+                      fontSize: 11, color: Colors.amber.shade900),
+                )),
+              ]),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancelar',
+                style: GoogleFonts.poppins(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final res = await prov.eliminarTienda(t.id);
+              if (!context.mounted) return;
+              if (res['success'] != true) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(res['error'] ?? 'Error al eliminar'),
+                  backgroundColor: Colors.red.shade600,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  margin: const EdgeInsets.all(16),
+                ));
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+            child: Text('Eliminar permanentemente',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _itemEliminar(String texto) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(children: [
+          Icon(Icons.remove_rounded, size: 14, color: Colors.red.shade400),
+          const SizedBox(width: 6),
+          Text(texto, style: GoogleFonts.poppins(fontSize: 12, color: Colors.red.shade700)),
+        ]),
+      );
 }

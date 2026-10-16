@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +7,8 @@ import '../../../models/sesion_caja.dart';
 import '../../../models/sesion_historial.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/caja_provider.dart';
+import '../../../services/thermal_printer_service.dart';
+import '../../../services/windows_printer_service.dart';
 import 'detalle_cierre_sheet.dart';
 
 // ── Paleta ─────────────────────────────────────────────────────
@@ -472,6 +475,49 @@ class _CierrePanel extends StatelessWidget {
               foregroundColor: Colors.white,
               elevation: 2,
               shadowColor: _C.green.withValues(alpha: 0.3),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity, height: 44,
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.shopping_bag_outlined, size: 16),
+            label: Text('Abrir Cajón',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13)),
+            onPressed: () async {
+              bool abierto = false;
+              try {
+                if (ThermalPrinterService.isWebUsbSupported) {
+                  final device = await ThermalPrinterService.getAutoDevice();
+                  if (device != null && await ThermalPrinterService.hasCashDrawer()) {
+                    await ThermalPrinterService.kickDrawer(device);
+                    abierto = true;
+                  }
+                } else if (!kIsWeb && await ThermalPrinterService.hasCashDrawer()) {
+                  final bytes = await ThermalPrinterService.buildDrawerBytes();
+                  await WindowsPrinterService.printRaw(bytes);
+                  abierto = true;
+                }
+              } catch (_) {}
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(
+                    abierto ? 'Cajón abierto' : 'Sin impresora configurada',
+                    style: GoogleFonts.inter(color: Colors.white),
+                  ),
+                  backgroundColor: abierto ? _C.green : _C.textFaint,
+                  behavior: SnackBarBehavior.floating,
+                  duration: const Duration(seconds: 2),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  margin: const EdgeInsets.all(16),
+                ));
+              }
+            },
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _C.textSecond,
+              side: BorderSide(color: _C.border),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),

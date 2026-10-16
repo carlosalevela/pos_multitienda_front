@@ -1,5 +1,6 @@
 import 'dart:async' show unawaited;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,6 +8,8 @@ import 'package:intl/intl.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/caja_provider.dart';
 import '../../../providers/config_provider.dart';
+import '../../../services/thermal_printer_service.dart';
+import '../../../services/windows_printer_service.dart';
 import '../../../models/resumen_cierre.dart';
 import '../../../models/sesion_historial.dart';
 import '../../../services/cuenta_bancaria_service.dart';
@@ -929,6 +932,7 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
               );
               if (ok && mounted) {
                 Navigator.pop(context);
+                unawaited(_kickCajonCierre());
                 if (r != null) {
                   unawaited(exportarCierrePDF(SesionHistorial(
                     id:                   r.sesionId,
@@ -1604,4 +1608,17 @@ class _ActionBtn extends StatelessWidget {
       ),
     );
   }
+}
+
+Future<void> _kickCajonCierre() async {
+  try {
+    if (ThermalPrinterService.isWebUsbSupported) {
+      if (!await ThermalPrinterService.hasCashDrawer()) return;
+      final dev = await ThermalPrinterService.getOrRequestDevice();
+      if (dev != null) await ThermalPrinterService.kickDrawer(dev);
+    } else if (!kIsWeb && await ThermalPrinterService.hasCashDrawer()) {
+      final bytes = await ThermalPrinterService.buildDrawerBytes();
+      await WindowsPrinterService.printRaw(bytes);
+    }
+  } catch (_) {}
 }

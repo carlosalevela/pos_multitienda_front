@@ -45,7 +45,7 @@ class ConfigProvider extends ChangeNotifier {
   static const _kMetaVentaDiaria = 'pos_meta_venta_diaria';
 
   // ── Config Impresión ──────────────────────────────────────
-  String _tipoPapel            = '80mm';
+  String _tipoPapel            = '58mm';
   int    _copias               = 1;
   bool   _mostrarLogo          = true;
   bool   _mostrarNit           = true;
@@ -149,7 +149,7 @@ class ConfigProvider extends ChangeNotifier {
 
       if (resI['success'] == true) {
         final d = resI['data'] as Map<String, dynamic>;
-        _tipoPapel         = d['tipo_papel']         as String? ?? '80mm';
+        _tipoPapel         = d['tipo_papel']         as String? ?? '58mm';
         _copias            = d['copias']             as int?    ?? 1;
         _mostrarLogo       = d['mostrar_logo']       as bool?   ?? true;
         _mostrarNit        = d['mostrar_nit']        as bool?   ?? true;
@@ -314,6 +314,12 @@ class ConfigProvider extends ChangeNotifier {
       _cargando = false;
       notifyListeners();
     }
+  }
+
+  Future<void> recargarCuentas(int tiendaId) async {
+    _cuentas = await _cuentaService.listar(tiendaId);
+    debugPrint('✅ ConfigProvider.recargarCuentas: ${_cuentas.length} cuentas');
+    notifyListeners();
   }
 
   void limpiar() {

@@ -621,11 +621,11 @@ class _DashboardBodyState extends State<_DashboardBody> {
 
         // Bitácora + métodos de pago
         isWide
-            ? Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            ? IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Expanded(flex: 6, child: _MovementsCard(movements: movements)),
                 const SizedBox(width: 20),
                 Expanded(flex: 5, child: _MetodosPagoCard(metodos: _metodosPago, periodo: _periodo)),
-              ])
+              ]))
             : Column(children: [
                 _MovementsCard(movements: movements),
                 const SizedBox(height: 20),
@@ -636,14 +636,14 @@ class _DashboardBodyState extends State<_DashboardBody> {
         if (_ventasPorTienda.isNotEmpty || _desempeno.isNotEmpty) ...[
           const SizedBox(height: 24),
           if (isWide)
-            Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               if (_ventasPorTienda.isNotEmpty)
                 Expanded(child: _VentasPorTiendaCard(ventas: _ventasPorTienda, periodo: _periodo)),
               if (_ventasPorTienda.isNotEmpty && _desempeno.isNotEmpty)
                 const SizedBox(width: 20),
               if (_desempeno.isNotEmpty)
                 Expanded(child: _SucursalesCard(desempeno: _desempeno)),
-            ])
+            ]))
           else
             Column(children: [
               if (_ventasPorTienda.isNotEmpty)

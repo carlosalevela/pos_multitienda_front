@@ -30,14 +30,18 @@ class InventarioService {
     int?    tiendaId,
     int?    categoriaId,
     String  activo = 'true',
+    double? precioMin,
+    double? precioMax,
   }) async {
     try {
       final response = await ApiClient.instance.get(
         '/productos/',
         queryParameters: {
           if (q != null && q.isNotEmpty) 'q': q,
-          if (tiendaId   != null) 'tienda_id': tiendaId.toString(),
-          if (categoriaId != null) 'categoria': categoriaId.toString(),
+          if (tiendaId    != null) 'tienda_id':  tiendaId.toString(),
+          if (categoriaId != null) 'categoria':  categoriaId.toString(),
+          if (precioMin   != null) 'precio_min': precioMin.toStringAsFixed(0),
+          if (precioMax   != null) 'precio_max': precioMax.toStringAsFixed(0),
           'activo': activo,
         },
       );
@@ -123,13 +127,21 @@ class InventarioService {
     int?    tiendaId,
     String? alerta,
     String  activo = 'true',
+    String? q,
+    int?    categoriaId,
+    double? precioMin,
+    double? precioMax,
   }) async {
     try {
       final response = await ApiClient.instance.get(
         '/productos/inventario/',
         queryParameters: {
-          if (tiendaId != null) 'tienda_id': tiendaId.toString(),
-          if (alerta   != null) 'alerta':    alerta,
+          if (tiendaId     != null) 'tienda_id':  tiendaId.toString(),
+          if (alerta       != null) 'alerta':      alerta,
+          if (q != null && q.isNotEmpty) 'q':      q,
+          if (categoriaId  != null) 'categoria':   categoriaId.toString(),
+          if (precioMin    != null) 'precio_min':  precioMin.toStringAsFixed(0),
+          if (precioMax    != null) 'precio_max':  precioMax.toStringAsFixed(0),
           'activo': activo,
         },
       );

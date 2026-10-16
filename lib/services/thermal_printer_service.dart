@@ -66,6 +66,14 @@ class ThermalPrinterService {
   static Future<bool> hasCashDrawer() async =>
       (await SharedPreferences.getInstance()).getBool(_kHasCaja) ?? false;
 
+  /// Genera los bytes ESC/POS para abrir el cajón sin enviarlos.
+  /// Útil para enviarlo por otro canal (ej. WindowsPrinterService).
+  static Future<List<int>> buildDrawerBytes() async {
+    final profile = await CapabilityProfile.load();
+    final gen     = Generator(PaperSize.mm80, profile);
+    return gen.drawer(pin: PosDrawer.pin2);
+  }
+
   // ── Builder página de prueba ──────────────────────────────
 
   static Future<List<int>> buildTestPage() async {
@@ -74,6 +82,7 @@ class ThermalPrinterService {
     final now     = DateFormat('dd/MM/yyyy  HH:mm:ss').format(DateTime.now());
 
     return [
+      ...gen.setGlobalCodeTable('CP850'),
       ...gen.text(
         'POS MULTITIENDA',
         styles: PosStyles(
@@ -133,6 +142,7 @@ class ThermalPrinterService {
         : cantReemplazo.toStringAsFixed(2);
 
     final bytes = <int>[
+      ...gen.setGlobalCodeTable('CP850'),
       // ── Encabezado ─────────────────────────────────────────
       ...gen.text(empresaNombre.toUpperCase(),
         styles: PosStyles(align: PosAlign.center, bold: true,
@@ -210,8 +220,8 @@ class ThermalPrinterService {
         ...gen.row([
           PosColumn(
             text: dev.tipoDiferencia == 'cobrar' ? 'Cobrado al cliente:' : 'Devuelto al cliente:',
-            width: 7, styles: PosStyles(bold: true)),
-          PosColumn(text: '\$${fmt.format(dev.diferencia!)}', width: 5,
+            width: 8, styles: PosStyles(bold: true)),
+          PosColumn(text: '\$${fmt.format(dev.diferencia!)}', width: 4,
               styles: PosStyles(align: PosAlign.right, bold: true)),
         ]),
         if (dev.metodoPagoDiferencia != null)
@@ -294,6 +304,7 @@ class ThermalPrinterService {
     final totalItems = items.fold(0,   (s, i) => s + i.cantidad);
 
     return [
+      ...gen.setGlobalCodeTable('CP850'),
       // ── Encabezado ──────────────────────────────────────────
       ...gen.text(empresaNombre.toUpperCase(),
         styles: PosStyles(align: PosAlign.center, bold: true,
@@ -434,6 +445,7 @@ class ThermalPrinterService {
     final sepId   = 'SEP-${separado.id}';
 
     return [
+      ...gen.setGlobalCodeTable('CP850'),
       // ── Encabezado ─────────────────────────────────────────
       ...gen.text(empresaNombre.toUpperCase(),
         styles: PosStyles(align: PosAlign.center, bold: true,
@@ -573,6 +585,7 @@ class ThermalPrinterService {
     final nuevoSaldo = (separado.saldoPendiente - monto).clamp(0.0, double.infinity);
 
     return [
+      ...gen.setGlobalCodeTable('CP850'),
       // ── Encabezado ─────────────────────────────────────────
       ...gen.text(empresaNombre.toUpperCase(),
         styles: PosStyles(align: PosAlign.center, bold: true,
@@ -696,6 +709,7 @@ class ThermalPrinterService {
     };
 
     return [
+      ...gen.setGlobalCodeTable('CP850'),
       // ── Encabezado ─────────────────────────────────────────
       ...gen.text(empresaNombre.toUpperCase(),
         styles: PosStyles(align: PosAlign.center, bold: true,
@@ -758,11 +772,15 @@ class ThermalPrinterService {
           final nombre = c['nombre']?.toString() ?? '—';
           final tipo   = c['tipo_display']?.toString() ?? '';
           final turno  = double.tryParse(c['sesion_total']?.toString() ?? '0') ?? 0;
-          return gen.row([
-            PosColumn(text: '$nombre ($tipo):', width: 7, styles: const PosStyles()),
-            PosColumn(text: '\$${fmt.format(turno)}', width: 5,
-              styles: PosStyles(align: PosAlign.right, bold: true)),
-          ]);
+          return [
+            ...gen.row([
+              PosColumn(text: nombre, width: 7, styles: const PosStyles()),
+              PosColumn(text: '\$${fmt.format(turno)}', width: 5,
+                styles: PosStyles(align: PosAlign.right, bold: true)),
+            ]),
+            if (tipo.isNotEmpty)
+              ...gen.text('  $tipo', styles: const PosStyles()),
+          ];
         }),
         ...gen.hr(),
       ],
@@ -928,6 +946,7 @@ class ThermalPrinterService {
         : sesion.diferencia > 0 ? 'SOBRANTE' : 'FALTANTE';
 
     return [
+      ...gen.setGlobalCodeTable('CP850'),
       // ── Encabezado ─────────────────────────────────────────
       ...gen.text(sesion.tiendaNombre.toUpperCase(),
         styles: PosStyles(align: PosAlign.center, bold: true,

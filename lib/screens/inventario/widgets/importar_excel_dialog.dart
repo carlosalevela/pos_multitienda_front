@@ -65,6 +65,10 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
   List<int>? _bytesArchivo;
   String     _nombreArchivoRaw = '';
 
+  // Debug: qué detectó el parser
+  List<String>    _dbgHeaders = [];
+  Map<String,int> _dbgColMap  = {};
+
   String _busqueda = '';
   late final TextEditingController _busCtrl;
 
@@ -76,7 +80,8 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
   // ══════════════════════════════════════════════════════
   static const _mapa = <String, List<String>>{
     'nombre': [
-      'nombre', 'name', 'producto', 'productos', 'descripcion_corta',
+      'nombre', 'nombre_del_producto', 'nombre_producto',
+      'name', 'producto', 'productos', 'descripcion_corta',
       'articulo', 'articulos', 'item', 'items', 'bien', 'servicio',
       'denominacion', 'titulo', 'title',
     ],
@@ -86,7 +91,8 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
       'comentario', 'comentarios', 'detalle_producto',
     ],
     'codigo_barras': [
-      'codigo_barras', 'codigo', 'codigos', 'barcode', 'ean', 'ean13',
+      'codigo_barras', 'codigo_de_barras', 'codigo', 'codigos',
+      'barcode', 'ean', 'ean13',
       'ref', 'referencia', 'referencias', 'sku', 'upc', 'gtin',
       'cod', 'cod_barras', 'codigo_producto', 'clave', 'clave_producto',
     ],
@@ -97,12 +103,12 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
       'seccion', 'secciones', 'rubro',
     ],
     'precio_venta': [
-      'precio_venta', 'precio', 'precios', 'pventa', 'price',
-      'valor', 'valores', 'venta', 'precio_publico', 'p_venta',
-      'precio_al_publico', 'precio_cliente', 'pvp', 'sale_price',
+      'precio_venta', 'pventa', 'price', 'sale_price',
+      'precio_publico', 'p_venta', 'precio_al_publico', 'precio_cliente', 'pvp',
+      'venta',
     ],
     'precio_compra': [
-      'precio_compra', 'costo', 'costos', 'cost', 'compra',
+      'precio_compra', 'costo', 'costos', 'cost',
       'pcompra', 'p_compra', 'precio_costo', 'costo_unitario',
       'purchase_price', 'landed_cost',
     ],
@@ -113,8 +119,8 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
     ],
     'stock_actual': [
       'stock_actual', 'stock', 'cantidad', 'cantidades', 'qty',
-      'existencia', 'existencias', 'inventory', 'disponible',
-      'disponibles', 'unidades', 'saldo', 'inventario',
+      'existencia', 'existencias', 'disponible',
+      'disponibles', 'unidades', 'saldo',
     ],
     'stock_minimo': [
       'stock_minimo', 'minimo', 'min', 'stock_min', 'min_stock',
@@ -141,15 +147,16 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
 
   bool _matchAlias(String rawHeader, List<String> aliases) {
     final h = _norm(rawHeader);
-    if (h.isEmpty) return false;
+    if (h.isEmpty || h.length < 3) return false;
     for (final alias in aliases) {
       final a = alias;
       if (h == a) return true;
       if (h.contains(a)) return true;
-      if (a.contains(h)) return true;
+      // Only allow alias-contains-h when h is long enough to be unambiguous
+      if (h.length >= 5 && a.contains(h)) return true;
       final aWords = a.split('_').where((w) => w.length > 2).toList();
-      final hWords = h.split('_');
-      if (aWords.isNotEmpty &&
+      final hWords = h.split('_').where((w) => w.length > 2).toList();
+      if (aWords.isNotEmpty && hWords.isNotEmpty &&
           aWords.every((w) => hWords.any((hw) => hw.contains(w) || w.contains(hw)))) {
         return true;
       }
@@ -268,7 +275,7 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
         final candidatos = rows[ri].map(_readCell).toList();
         final matches    = candidatos.where((h) =>
           _mapa.entries.any((e) => _matchAlias(h, e.value))).length;
-        if (matches >= 1) { headerRowIdx = ri; headers = candidatos; break; }
+        if (matches >= 2) { headerRowIdx = ri; headers = candidatos; break; }
       }
 
       if (headers.isEmpty) {
@@ -277,6 +284,18 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
       }
 
       final colMap = <String, int>{};
+      // Pase 1: coincidencia exacta normalizada (evita que matching fuzzy robe columnas)
+      for (int i = 0; i < headers.length; i++) {
+        if (headers[i].isEmpty) continue;
+        final h = _norm(headers[i]);
+        if (h.isEmpty) continue;
+        for (final entry in _mapa.entries) {
+          if (!colMap.containsKey(entry.key) && entry.value.contains(h)) {
+            colMap[entry.key] = i;
+          }
+        }
+      }
+      // Pase 2: matching fuzzy solo para campos que aún no se asignaron
       for (int i = 0; i < headers.length; i++) {
         if (headers[i].isEmpty) continue;
         for (final entry in _mapa.entries) {
@@ -289,6 +308,8 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
 
       debugPrint('📊 Encabezados detectados: $headers');
       debugPrint('📌 Columnas mapeadas:      $colMap');
+      _dbgHeaders = List<String>.from(headers);
+      _dbgColMap  = Map<String,int>.from(colMap);
 
       if (!colMap.containsKey('nombre')) {
         _mostrarError(
@@ -909,6 +930,24 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
   Widget _vistaPrevisualizar() {
     final filtradas = _filasFiltradas;
     return Column(children: [
+      // ── Panel de debug (temporal) ──────────────────────
+      if (_dbgColMap.isNotEmpty)
+        Container(
+          margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF3CD),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: const Color(0xFFFFCA28)),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Columnas detectadas (fila ${_dbgHeaders.isNotEmpty ? _dbgHeaders.indexWhere((h) => h.isNotEmpty) : "?"}):', style: _inter(size: 10, weight: FontWeight.w700)),
+            const SizedBox(height: 2),
+            Text(_dbgColMap.entries.map((e) => '${e.key}→col${e.value}').join('  '), style: _inter(size: 10)),
+            const SizedBox(height: 2),
+            Text('Headers: ${_dbgHeaders.where((h) => h.isNotEmpty).join(' | ')}', style: _inter(size: 9, color: _muted), maxLines: 2, overflow: TextOverflow.ellipsis),
+          ]),
+        ),
       Padding(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
         child: Row(children: [

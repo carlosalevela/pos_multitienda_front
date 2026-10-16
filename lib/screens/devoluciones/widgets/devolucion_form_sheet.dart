@@ -1,4 +1,6 @@
+import 'dart:async' show unawaited;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -12,6 +14,8 @@ import '../../../providers/devoluciones_provider.dart';
 import '../../../services/venta_service.dart';
 import '../../../services/inventario_service.dart';
 import '../../../services/cliente_service.dart';
+import '../../../services/thermal_printer_service.dart';
+import '../../../services/windows_printer_service.dart';
 
 const _kGreen     = Color(0xFF006C49);
 const _kMintLight = Color(0xFFE8FFF4);
@@ -374,6 +378,12 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
           devCreada = DevolucionModel.fromJson(rawData);
         }
       } catch (_) {}
+
+      // Abrir cajón si hay movimiento de efectivo
+      final metodoEfectivo = _tipoOperacion == 'devolucion'
+          ? _metodoPago == 'efectivo'
+          : _metodoPagoDiferencia == 'efectivo';
+      if (metodoEfectivo) unawaited(_kickCajonDevolucion());
 
       Navigator.pop(context);
       widget.onCreada(devCreada);
@@ -2068,4 +2078,17 @@ class _BuscadorVentasSheetState extends State<_BuscadorVentasSheet> {
       ),
     ]),
   );
+}
+
+Future<void> _kickCajonDevolucion() async {
+  try {
+    if (ThermalPrinterService.isWebUsbSupported) {
+      if (!await ThermalPrinterService.hasCashDrawer()) return;
+      final dev = await ThermalPrinterService.getAutoDevice();
+      if (dev != null) await ThermalPrinterService.kickDrawer(dev);
+    } else if (!kIsWeb && await ThermalPrinterService.hasCashDrawer()) {
+      final bytes = await ThermalPrinterService.buildDrawerBytes();
+      await WindowsPrinterService.printRaw(bytes);
+    }
+  } catch (_) {}
 }

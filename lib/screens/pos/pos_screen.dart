@@ -126,6 +126,9 @@ class _PosScreenState extends State<PosScreen> {
     final config = context.read<ConfigProvider>();
     if (!config.cargada) {
       await config.cargar(tiendaId, empresaId: empresaId);
+    } else {
+      // Siempre refrescar cuentas por si se agregaron nuevas en el admin
+      unawaited(config.recargarCuentas(tiendaId));
     }
   }
 
@@ -1758,18 +1761,23 @@ class _PosScreenState extends State<PosScreen> {
             onTap: pos.procesando ? null : () async {
               final clienteAntes     = _clienteSeleccionado;
               final tierNombreAntes  = clienteAntes?.tierInfo?.nombre;
+              final metodoPago       = pos.metodoPago;
               _montoCtrl.clear();
               _descuentoCtrl.clear();
               final ok = await pos.cobrar(auth.tiendaId, clienteId: clienteAntes?.id);
               if (!mounted) return;
               setState(() => _clienteSeleccionado = null);
-              if (ok && clienteAntes != null) {
-                final feedback = pos.ultimaVenta?['tier_feedback'] as Map<String, dynamic>?;
-                if (feedback != null) {
-                  final tierData    = feedback['tier_actual']    as Map<String, dynamic>?;
-                  final siguienteT  = feedback['siguiente_tier'] as Map<String, dynamic>?;
-                  if (tierData != null || siguienteT != null) {
-                    _mostrarTierFeedback(clienteAntes, feedback, tierNombreAntes);
+              if (ok) {
+                final esCash = metodoPago == 'efectivo' || metodoPago == 'mixto';
+                if (esCash) unawaited(_kickCajon());
+                if (clienteAntes != null) {
+                  final feedback = pos.ultimaVenta?['tier_feedback'] as Map<String, dynamic>?;
+                  if (feedback != null) {
+                    final tierData    = feedback['tier_actual']    as Map<String, dynamic>?;
+                    final siguienteT  = feedback['siguiente_tier'] as Map<String, dynamic>?;
+                    if (tierData != null || siguienteT != null) {
+                      _mostrarTierFeedback(clienteAntes, feedback, tierNombreAntes);
+                    }
                   }
                 }
               }
@@ -2893,6 +2901,10 @@ class _PosScreenState extends State<PosScreen> {
           clienteNombre: clienteNombre,
         );
         await WindowsPrinterService.printRaw(bytes);
+        if (esCash && await ThermalPrinterService.hasCashDrawer()) {
+          final drawerBytes = await ThermalPrinterService.buildDrawerBytes();
+          await WindowsPrinterService.printRaw(drawerBytes);
+        }
         unawaited(ReciboPdfService.imprimirRecibo(
           items: items, numeroFactura: factura,
           tiendaNombre: auth.tiendaNombre, empresaNombre: auth.empresaNombre,
@@ -2926,6 +2938,22 @@ class _PosScreenState extends State<PosScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ));
     }
+
+    // Fallback: PDF mode — intentar abrir cajón silenciosamente si aplica.
+    if (esCash) unawaited(_kickCajon());
+  }
+
+  Future<void> _kickCajon() async {
+    try {
+      if (ThermalPrinterService.isWebUsbSupported) {
+        if (!await ThermalPrinterService.hasCashDrawer()) return;
+        final dev = await ThermalPrinterService.getAutoDevice();
+        if (dev != null) await ThermalPrinterService.kickDrawer(dev);
+      } else if (!kIsWeb && await ThermalPrinterService.hasCashDrawer()) {
+        final bytes = await ThermalPrinterService.buildDrawerBytes();
+        await WindowsPrinterService.printRaw(bytes);
+      }
+    } catch (_) {}
   }
 
   void _mostrarDialogPorcentaje(PosProvider pos) {

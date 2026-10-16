@@ -189,6 +189,33 @@ class TiendaProvider extends ChangeNotifier {
     }
   }
 
+  // ── Eliminar tienda permanentemente ─────────────────
+  Future<Map<String, dynamic>> eliminarTienda(int id) async {
+    _guardando = true;
+    _errorMsg = '';
+    _successMsg = '';
+    notifyListeners();
+
+    try {
+      final result = await _service.eliminarTienda(id);
+
+      if (result['success'] == true) {
+        _successMsg = 'Sucursal eliminada permanentemente';
+        tiendas.removeWhere((t) => t.id == id);
+        return {'success': true};
+      }
+
+      _errorMsg = result['error'] ?? 'Error al eliminar sucursal';
+      return {'success': false, 'error': _errorMsg};
+    } catch (_) {
+      _errorMsg = 'Error inesperado al eliminar sucursal';
+      return {'success': false, 'error': _errorMsg};
+    } finally {
+      _guardando = false;
+      notifyListeners();
+    }
+  }
+
   // ── Cargar empleados de una tienda ───────────────────
   Future<void> cargarEmpleadosTienda(int tiendaId) async {
     _cargandoEmpleados = true;

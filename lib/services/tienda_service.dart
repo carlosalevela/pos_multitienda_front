@@ -146,6 +146,20 @@ class TiendaService {
     }
   }
 
+  Future<Map<String, dynamic>> eliminarTienda(int id) async {
+    try {
+      final r = await ApiClient.instance.delete(
+        '/tiendas/$id/',
+        queryParameters: {'eliminar': 'true'},
+      );
+      return {'success': true, 'detail': r.data['detail']};
+    } on DioException catch (e) {
+      return {'success': false, 'error': _extractError(e, 'Error al eliminar tienda')};
+    } catch (e) {
+      return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
+
   Future<Map<String, dynamic>?> getEmpleadosPorTienda(int tiendaId) async {
     try {
       final r = await ApiClient.instance.get('/tiendas/$tiendaId/empleados/');
