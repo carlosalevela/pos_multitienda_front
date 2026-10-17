@@ -728,6 +728,9 @@ class _InventarioScreenState extends State<InventarioScreen>
     final perdidasMes = d != null
         ? _toDouble(d['perdidas_mes_valor'])
         : 0.0;
+    final perdidasCantidad = d != null
+        ? (d['perdidas_mes_cantidad'] as num? ?? 0).toInt()
+        : 0;
 
     return Row(children: [
       if (!esCajero) ...[
@@ -767,12 +770,17 @@ class _InventarioScreenState extends State<InventarioScreen>
       const SizedBox(width: 12),
       Expanded(child: _kpiCard(
         icon:      Icons.inventory_2_rounded,
-        iconBg:    _surfHigh,
-        iconColor: _muted2,
+        iconBg:    perdidasCantidad > 0 ? _dangerBg : _surfHigh,
+        iconColor: perdidasCantidad > 0 ? _danger   : _muted2,
         label:     'DAÑOS / PÉRDIDAS',
-        value:     '${Constants.moneda}${_formatNum(perdidasMes)}',
-        sub:       'Reportados este mes',
-        accent:    _muted2,
+        value:     perdidasMes > 0
+            ? '${Constants.moneda}${_formatNum(perdidasMes)}'
+            : '$perdidasCantidad',
+        valueSuffix: perdidasMes > 0 ? null : ' unid.',
+        sub:       perdidasCantidad > 0
+            ? '$perdidasCantidad unid. reportadas este mes'
+            : 'Reportados este mes',
+        accent:    perdidasCantidad > 0 ? _danger : _muted2,
       )),
     ]);
   }
