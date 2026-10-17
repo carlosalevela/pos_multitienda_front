@@ -3,7 +3,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../../models/sesion_historial.dart';
+import '../../../providers/config_provider.dart';
 import '../../../services/caja_service.dart';
 import 'pdf/cierre_pdf.dart';
 
@@ -177,7 +179,8 @@ class _DetalleCierreSheetState extends State<DetalleCierreSheet> {
                 const SizedBox(height: 16),
                 _MovimientosTable(sesion: sesion),
                 const SizedBox(height: 24),
-                _ExportButton(onTap: () => exportarCierrePDF(sesion)),
+                _ExportButton(onTap: () => exportarCierrePDF(sesion,
+                    tipoPapel: context.read<ConfigProvider>().tipoPapel)),
               ],
             ),
           ),
@@ -247,7 +250,8 @@ class _SheetHeader extends StatelessWidget {
               style: GoogleFonts.inter(fontSize: 12, color: _cOutline)),
           const Spacer(),
           IconButton(
-            onPressed: () => exportarCierrePDF(sesion),
+            onPressed: () => exportarCierrePDF(sesion,
+                tipoPapel: context.read<ConfigProvider>().tipoPapel),
             icon: const Icon(Icons.picture_as_pdf_rounded, size: 20),
             color: _cNavy,
             tooltip: 'Exportar PDF',
