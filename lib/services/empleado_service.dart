@@ -92,8 +92,7 @@ class EmpleadoService {
     Map<String, dynamic> data,
   ) async {
     try {
-      final payload = Map<String, dynamic>.from(data)
-        ..remove('empresa');
+      final payload = Map<String, dynamic>.from(data);
 
       final response = await ApiClient.instance.patch(
         '/auth/empleados/$id/',
