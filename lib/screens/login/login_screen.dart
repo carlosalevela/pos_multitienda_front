@@ -430,18 +430,19 @@ class _FormPanel extends StatelessWidget {
                   const SizedBox(height: 32),
 
                   // Usuario
-                  _Label(text: 'USUARIO'),
+                  _Label(text: 'CÉDULA O CORREO'),
                   const SizedBox(height: 8),
                   _Field(
                     controller:      userCtrl,
-                    hint:            'Tu usuario',
-                    icon:            Icons.person_outline_rounded,
+                    hint:            'Cédula o correo electrónico',
+                    icon:            Icons.badge_outlined,
+                    keyboardType:    TextInputType.text,
                     textInputAction: TextInputAction.next,
                     autofocus:       true,
                     onSubmit:        (_) =>
                         FocusScope.of(context).requestFocus(passFocus),
                     validator: (v) {
-                      if (v == null || v.isEmpty) return 'Ingresa tu usuario';
+                      if (v == null || v.isEmpty) return 'Ingresa tu cédula o correo';
                       return null;
                     },
                   ),
@@ -559,6 +560,7 @@ class _Field extends StatelessWidget {
   final String hint;
   final IconData icon;
   final TextInputAction? textInputAction;
+  final TextInputType? keyboardType;
   final bool autofocus, obscureText;
   final FocusNode? focusNode;
   final Widget? suffixIcon;
@@ -570,6 +572,7 @@ class _Field extends StatelessWidget {
     required this.hint,
     required this.icon,
     this.textInputAction,
+    this.keyboardType,
     this.autofocus   = false,
     this.obscureText = false,
     this.focusNode,
@@ -585,6 +588,7 @@ class _Field extends StatelessWidget {
       autofocus:        autofocus,
       obscureText:      obscureText,
       focusNode:        focusNode,
+      keyboardType:     keyboardType,
       textInputAction:  textInputAction,
       onFieldSubmitted: onSubmit,
       validator:        validator,
