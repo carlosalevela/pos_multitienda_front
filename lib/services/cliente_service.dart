@@ -247,6 +247,31 @@ class ClienteService {
     }
   }
 
+  Future<Map<String, dynamic>> cambiarProductoSeparado({
+    required int    separadoId,
+    required int    detalleId,
+    required int    nuevoProductoId,
+    required double nuevaCantidad,
+    required double nuevoPrecio,
+  }) async {
+    try {
+      final r = await ApiClient.instance.post(
+        '/clientes/separados/$separadoId/cambiar-producto/',
+        data: {
+          'detalle_id':           detalleId,
+          'nuevo_producto_id':    nuevoProductoId,
+          'nueva_cantidad':       nuevaCantidad.toStringAsFixed(2),
+          'nuevo_precio_unitario': nuevoPrecio.toStringAsFixed(2),
+        },
+      );
+      return {'success': true, 'data': r.data as Map<String, dynamic>};
+    } on DioException catch (e) {
+      return {'success': false, 'error': _extractError(e, 'Error al cambiar producto')};
+    } catch (_) {
+      return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
+
   Future<Map<String, dynamic>> getAlertasSeparados({int? tiendaId}) async {
     try {
       final r = await ApiClient.instance.get(

@@ -356,6 +356,43 @@ class ClienteProvider extends ChangeNotifier {
     }
   }
 
+  Future<Map<String, dynamic>> cambiarProductoSeparado({
+    required int    separadoId,
+    required int    detalleId,
+    required int    nuevoProductoId,
+    required double nuevaCantidad,
+    required double nuevoPrecio,
+  }) async {
+    _guardando = true;
+    error      = null;
+    notifyListeners();
+    try {
+      final result = await _service.cambiarProductoSeparado(
+        separadoId:      separadoId,
+        detalleId:       detalleId,
+        nuevoProductoId: nuevoProductoId,
+        nuevaCantidad:   nuevaCantidad,
+        nuevoPrecio:     nuevoPrecio,
+      );
+      if (result['success'] == true) {
+        await Future.wait([
+          _refrescarDetalleCliente(),
+          cargarAlertas(tiendaId: _tiendaIdAlertas),
+        ]);
+      } else {
+        error = result['error'] ?? 'Error al cambiar producto';
+      }
+      return result;
+    } catch (e) {
+      error = 'Error al cambiar producto';
+      debugPrint('❌ cambiarProductoSeparado: $e');
+      return {'success': false, 'error': error};
+    } finally {
+      _guardando = false;
+      notifyListeners();
+    }
+  }
+
   Future<bool> cancelarSeparado(int id) async {
     _guardando = true;
     error      = null;

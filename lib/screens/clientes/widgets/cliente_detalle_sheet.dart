@@ -13,6 +13,7 @@ import '../../../services/documento_service.dart';
 import '../../../services/tier_service.dart';
 import '../../../services/venta_service.dart';
 import 'abonar_sheet.dart';
+import 'separado_detalle_sheet.dart';
 
 // ─────────────────────────────────────────────────────────────
 // Paleta — misma que clientes_screen.dart
@@ -237,6 +238,25 @@ class _ClienteDetalleSheetContentState
     );
   }
 
+  // ── Ver detalle completo / Cambiar producto ───────────────
+  void _verDetalle(Separado sep) {
+    final fmt = NumberFormat.currency(locale: 'es_CO', symbol: '\$', decimalDigits: 0);
+    SeparadoDetalleSheet.mostrar(
+      context,
+      separado:        sep,
+      fmt:             fmt,
+      mostrarAcciones: widget.esAdminOSupervisor,
+      onAbonar:        () => _mostrarAbonar(sep),
+      onCancelar:      () => _confirmarCancelar(sep),
+      onProductoCambiado: (_) {
+        if (mounted) {
+          context.read<ClienteProvider>()
+              .cargarDetalleCliente(widget.cliente.id);
+        }
+      },
+    );
+  }
+
   // ── Cancelar ──────────────────────────────────────────────
   Future<void> _confirmarCancelar(Separado sep) async {
     final ok = await showDialog<bool>(
@@ -364,6 +384,7 @@ class _ClienteDetalleSheetContentState
                               onAbonar:      _mostrarAbonar,
                               onCancelar:    _confirmarCancelar,
                               onVerRecibos:  _verRecibosAbono,
+                              onVerDetalle:  _verDetalle,
                             ),
 
                       // Tab 3 — Historial
@@ -783,6 +804,7 @@ class _SeparadoCard extends StatelessWidget {
   final VoidCallback onAbonar;
   final VoidCallback onCancelar;
   final VoidCallback onVerRecibos;
+  final VoidCallback onVerDetalle;
 
   const _SeparadoCard({
     required this.separado,
@@ -790,6 +812,7 @@ class _SeparadoCard extends StatelessWidget {
     required this.onAbonar,
     required this.onCancelar,
     required this.onVerRecibos,
+    required this.onVerDetalle,
   });
 
   static final _fmt    = NumberFormat.currency(
@@ -961,6 +984,24 @@ class _SeparadoCard extends StatelessWidget {
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),
               ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Ver detalles / cambiar producto
+          Tooltip(
+            message: 'Ver detalles / cambiar producto',
+            child: OutlinedButton(
+              onPressed: onVerDetalle,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF2563EB),
+                side: BorderSide(
+                    color: const Color(0xFF2563EB).withOpacity(0.4)),
+                padding: const EdgeInsets.symmetric(
+                    vertical: 10, horizontal: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Icon(Icons.open_in_new_rounded, size: 16),
             ),
           ),
           const SizedBox(width: 8),
@@ -2162,6 +2203,7 @@ class _SeparadosTab extends StatelessWidget {
   final void Function(Separado)     onAbonar;
   final void Function(Separado)     onCancelar;
   final Future<void> Function(Separado) onVerRecibos;
+  final void Function(Separado)     onVerDetalle;
 
   const _SeparadosTab({
     required this.separados,
@@ -2169,6 +2211,7 @@ class _SeparadosTab extends StatelessWidget {
     required this.onAbonar,
     required this.onCancelar,
     required this.onVerRecibos,
+    required this.onVerDetalle,
   });
 
   @override
@@ -2254,6 +2297,7 @@ class _SeparadosTab extends StatelessWidget {
           onAbonar:    () => onAbonar(sep),
           onCancelar:  () => onCancelar(sep),
           onVerRecibos: () => onVerRecibos(sep),
+          onVerDetalle: () => onVerDetalle(sep),
         );
       },
     );
