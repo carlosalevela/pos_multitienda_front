@@ -450,17 +450,7 @@ class _FormPanel extends StatelessWidget {
                   const SizedBox(height: 18),
 
                   // Contraseña
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const _Label(text: 'CONTRASEÑA'),
-                      Text('¿Olvidaste tu clave?',
-                          style: GoogleFonts.inter(
-                              fontSize: 11,
-                              color: _C.greenDark,
-                              fontWeight: FontWeight.w600)),
-                    ],
-                  ),
+                  const _Label(text: 'CONTRASEÑA'),
                   const SizedBox(height: 8),
                   _Field(
                     controller:      passCtrl,
