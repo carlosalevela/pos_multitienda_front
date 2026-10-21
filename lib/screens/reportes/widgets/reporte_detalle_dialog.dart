@@ -23,65 +23,72 @@ class ReporteDetalleDialog extends StatefulWidget {
 }
 
 class _ReporteDetalleDialogState extends State<ReporteDetalleDialog> {
-  bool _imprimiendo = false;
-
   Map<String, dynamic> get detalle => widget.detalle;
 
   Future<void> _reimprimir() async {
-    setState(() => _imprimiendo = true);
+    final auth      = context.read<AuthProvider>();
+    final config    = context.read<ConfigProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    final nav       = Navigator.of(context);
+
+    final rawItems = (detalle['detalles'] as List? ?? []);
+    final items = rawItems.map((item) {
+      final precioBase = double.tryParse(
+              (item['precio_unitario'] ?? 0).toString()) ?? 0.0;
+      final descItem   = double.tryParse(
+              (item['descuento'] ?? 0).toString()) ?? 0.0;
+      final cantNum    = double.tryParse(
+              (item['cantidad'] ?? 1).toString()) ?? 1.0;
+      final prod = Producto(
+        id:        0,
+        nombre:    item['producto_nombre']?.toString() ?? '',
+        precio:    precioBase,
+        categoria: '',
+      );
+      return ItemCarrito(
+        producto:  prod,
+        cantidad:  cantNum.round(),
+        descuento: descItem,
+      );
+    }).toList();
+
+    final factura       = detalle['numero_factura']?.toString() ?? '';
+    final metodoPago    = detalle['metodo_pago']?.toString() ?? 'efectivo';
+    final descuento     = double.tryParse((detalle['descuento_total'] ?? 0).toString()) ?? 0.0;
+    final total         = double.tryParse((detalle['total'] ?? 0).toString()) ?? 0.0;
+    final montoRecibido = double.tryParse((detalle['monto_recibido'] ?? 0).toString()) ?? 0.0;
+    final vuelto        = double.tryParse((detalle['vuelto'] ?? 0).toString()) ?? 0.0;
+    final cliente       = detalle['cliente_nombre']?.toString() ?? '';
+    final empleado      = detalle['empleado_nombre']?.toString() ?? '';
+    final tienda        = detalle['tienda_nombre']?.toString() ?? auth.tiendaNombre;
+    final tipoPapel     = config.tipoPapel;
+    final paperSize     = tipoPapel == '58mm' ? PaperSize.mm58 : PaperSize.mm80;
+
+    // Obtener dispositivo ANTES de cerrar el diálogo para que el
+    // gesto de usuario (click del botón) siga activo cuando se muestre
+    // el selector WebUSB.
+    ThermalDevice? thermalDevice;
+    if (tipoPapel != 'pdf' && ThermalPrinterService.isWebUsbSupported) {
+      thermalDevice = await ThermalPrinterService.getOrRequestDevice();
+    }
+
+    // Cerrar el diálogo después de obtener el dispositivo
+    nav.pop();
+
     try {
-      final auth   = context.read<AuthProvider>();
-      final config = context.read<ConfigProvider>();
-
-      final rawItems = (detalle['detalles'] as List? ?? []);
-      final items = rawItems.map((item) {
-        final precioBase = double.tryParse(
-                (item['precio_unitario'] ?? 0).toString()) ?? 0.0;
-        final descItem   = double.tryParse(
-                (item['descuento'] ?? 0).toString()) ?? 0.0;
-        final cantNum    = double.tryParse(
-                (item['cantidad'] ?? 1).toString()) ?? 1.0;
-        final prod = Producto(
-          id:        0,
-          nombre:    item['producto_nombre']?.toString() ?? '',
-          precio:    precioBase,
-          categoria: '',
+      if (thermalDevice != null) {
+        final bytes = await ThermalPrinterService.buildRecibo(
+          items: items, numeroFactura: factura,
+          tiendaNombre: tienda, empresaNombre: auth.empresaNombre,
+          cajeroNombre: empleado, metodoPago: metodoPago,
+          descuento: descuento, total: total,
+          montoRecibido: montoRecibido, vuelto: vuelto,
+          clienteNombre: cliente, paperSize: paperSize,
         );
-        return ItemCarrito(
-          producto:  prod,
-          cantidad:  cantNum.round(),
-          descuento: descItem,
-        );
-      }).toList();
-
-      final factura       = detalle['numero_factura']?.toString() ?? '';
-      final metodoPago    = detalle['metodo_pago']?.toString() ?? 'efectivo';
-      final descuento     = double.tryParse((detalle['descuento_total'] ?? 0).toString()) ?? 0.0;
-      final total         = double.tryParse((detalle['total'] ?? 0).toString()) ?? 0.0;
-      final montoRecibido = double.tryParse((detalle['monto_recibido'] ?? 0).toString()) ?? 0.0;
-      final vuelto        = double.tryParse((detalle['vuelto'] ?? 0).toString()) ?? 0.0;
-      final cliente       = detalle['cliente_nombre']?.toString() ?? '';
-      final empleado      = detalle['empleado_nombre']?.toString() ?? '';
-      final tienda        = detalle['tienda_nombre']?.toString() ?? auth.tiendaNombre;
-
-      final tipoPapel = config.tipoPapel;
-      final paperSize = tipoPapel == '58mm' ? PaperSize.mm58 : PaperSize.mm80;
-
-      if (tipoPapel != 'pdf' && ThermalPrinterService.isWebUsbSupported) {
-        final device = await ThermalPrinterService.getOrRequestDevice();
-        if (device != null) {
-          final bytes = await ThermalPrinterService.buildRecibo(
-            items: items, numeroFactura: factura,
-            tiendaNombre: tienda, empresaNombre: auth.empresaNombre,
-            cajeroNombre: empleado, metodoPago: metodoPago,
-            descuento: descuento, total: total,
-            montoRecibido: montoRecibido, vuelto: vuelto,
-            clienteNombre: cliente, paperSize: paperSize,
-          );
-          await ThermalPrinterService.printBytes(device, bytes);
-          return;
-        }
-      } else if (tipoPapel != 'pdf' && !kIsWeb &&
+        await ThermalPrinterService.printBytes(thermalDevice, bytes);
+        return;
+      }
+      if (tipoPapel != 'pdf' && !kIsWeb &&
                  await WindowsPrinterService.hasSavedPrinter()) {
         final bytes = await ThermalPrinterService.buildRecibo(
           items: items, numeroFactura: factura,
@@ -92,6 +99,34 @@ class _ReporteDetalleDialogState extends State<ReporteDetalleDialog> {
           clienteNombre: cliente, paperSize: paperSize,
         );
         await WindowsPrinterService.printRaw(bytes);
+        return;
+      }
+      // Sin impresora térmica — avisar si no está configurada
+      if (tipoPapel != 'pdf' && ThermalPrinterService.isWebUsbSupported) {
+        final savedName = await ThermalPrinterService.getSavedName();
+        if (savedName == null) {
+          messenger.showSnackBar(SnackBar(
+            content: const Text(
+              'No hay impresora térmica configurada. '
+              'Ve a Configuración → Impresión y selecciona la impresora.',
+            ),
+            backgroundColor: Colors.orange.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 5),
+          ));
+          return;
+        }
+        // Configurada pero no encontrada: USB desconectado o permiso revocado
+        messenger.showSnackBar(SnackBar(
+          content: Text('Impresora "$savedName" no encontrada. Verifica que esté conectada.'),
+          backgroundColor: Colors.orange.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 5),
+        ));
         return;
       }
       // Fallback: PDF
@@ -109,16 +144,13 @@ class _ReporteDetalleDialogState extends State<ReporteDetalleDialog> {
         clienteNombre: cliente,
       );
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      messenger.showSnackBar(SnackBar(
         content: Text('Error al reimprimir: $e'),
         backgroundColor: Colors.red.shade600,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         margin: const EdgeInsets.all(16),
       ));
-    } finally {
-      if (mounted) setState(() => _imprimiendo = false);
     }
   }
 
@@ -219,13 +251,9 @@ class _ReporteDetalleDialogState extends State<ReporteDetalleDialog> {
         ),
         if (detalle['estado'] != 'anulada')
           ElevatedButton.icon(
-            onPressed: _imprimiendo ? null : _reimprimir,
-            icon: _imprimiendo
-                ? const SizedBox(
-                    width: 16, height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.print_rounded, size: 18),
-            label: Text(_imprimiendo ? 'Imprimiendo...' : 'Reimprimir',
+            onPressed: _reimprimir,
+            icon: const Icon(Icons.print_rounded, size: 18),
+            label: Text('Reimprimir',
                 style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
             style: ElevatedButton.styleFrom(
               backgroundColor: kAccent,

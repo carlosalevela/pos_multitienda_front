@@ -200,6 +200,31 @@ class CajaService {
 
   // ── Historial de sesiones ──────────────────────────────
 
+  Future<Map<String, dynamic>> enviarPdfWhatsApp(
+    int sesionId, Uint8List pdfBytes, String filename,
+  ) async {
+    try {
+      final formData = FormData.fromMap({
+        'pdf': MultipartFile.fromBytes(
+          pdfBytes,
+          filename: filename,
+          contentType: DioMediaType('application', 'pdf'),
+        ),
+      });
+      final r = await ApiClient.instance.post(
+        '/caja/historial/$sesionId/enviar-pdf-whatsapp/',
+        data: formData,
+      );
+      return {'success': true, 'data': r.data};
+    } on DioException catch (e) {
+      return {'success': false, 'error': _extractError(e, 'Error enviando PDF por WhatsApp')};
+    } catch (e) {
+      return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
+
+  // ── Historial de sesiones ──────────────────────────────
+
   Future<List<Map<String, dynamic>>> getHistorialSesiones({
     int?    tiendaId,
     String? estado,

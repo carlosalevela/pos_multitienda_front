@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../../models/sesion_caja.dart';
+import '../../../models/sesion_historial.dart';
 import '../../../providers/caja_provider.dart';
 import '../../../providers/contabilidad_provider.dart';
 import '../../../providers/reportes_provider.dart';
+import '../../../services/caja_service.dart';
 import '../../../services/cierre_turno_print_service.dart';
+import '../../caja/widgets/pdf/cierre_pdf.dart';
 import 'reporte_utils.dart';
 
 // ── Paleta verde (caja cerrada / lista para imprimir) ─────────
@@ -42,6 +45,47 @@ class _ReporteTurnoCardState extends State<ReporteTurnoCard> {
   String     get tiendaNombre  => widget.tiendaNombre;
   String     get empresaNombre => widget.empresaNombre;
   bool       get cajaAbierta   => widget.cajaAbierta;
+
+  bool _enviandoWa = false;
+
+  Future<void> _enviarWhatsApp() async {
+    setState(() => _enviandoWa = true);
+    try {
+      final r = await CajaService().getDetalleSesion(sesion.id);
+      if (!mounted) return;
+      if (r['success'] != true) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('No se pudo cargar el detalle del cierre.'),
+          backgroundColor: Color(0xFFBA1A1A),
+        ));
+        return;
+      }
+      final historial = SesionHistorial.fromJson(r['data'] as Map<String, dynamic>);
+      final bytes = await generarBytesCierrePDF(historial);
+      final fechaStr = historial.fechaCierre.isNotEmpty
+          ? historial.fechaCierre.substring(0, 10)
+          : historial.fechaApertura.substring(0, 10);
+      final filename = 'CIERRE_${sesion.id}_${fechaStr}_${tiendaNombre.replaceAll(' ', '_')}.pdf';
+      final res = await CajaService().enviarPdfWhatsApp(sesion.id, bytes, filename);
+      if (!mounted) return;
+      final ok  = res['success'] == true;
+      final msg = ok
+          ? 'PDF enviado a ${(res['data'] as Map)['enviados']} destinatario(s)'
+          : res['error'] ?? 'Error enviando PDF';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(msg),
+        backgroundColor: ok ? const Color(0xFF006C49) : const Color(0xFFBA1A1A),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Error: $e'),
+        backgroundColor: const Color(0xFFBA1A1A),
+      ));
+    } finally {
+      if (mounted) setState(() => _enviandoWa = false);
+    }
+  }
 
 
   @override
@@ -174,6 +218,33 @@ class _ReporteTurnoCardState extends State<ReporteTurnoCard> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.white,
                         foregroundColor: _kGreen,
+                        disabledBackgroundColor: Colors.white54,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Enviar PDF por WhatsApp
+                    ElevatedButton.icon(
+                      onPressed: _enviandoWa ? null : _enviarWhatsApp,
+                      icon: _enviandoWa
+                          ? const SizedBox(
+                              width: 14, height: 14,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.send_rounded, size: 15),
+                      label: Text(
+                        _enviandoWa ? 'Enviando...' : 'WhatsApp PDF',
+                        style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w600, fontSize: 12),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF25D366),
+                        foregroundColor: Colors.white,
                         disabledBackgroundColor: Colors.white54,
                         elevation: 0,
                         shape: RoundedRectangleBorder(

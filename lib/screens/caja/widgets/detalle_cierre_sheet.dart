@@ -1,5 +1,6 @@
 // lib/screens/caja/widgets/detalle_cierre_sheet.dart
 
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -106,6 +107,7 @@ class DetalleCierreSheet extends StatefulWidget {
 class _DetalleCierreSheetState extends State<DetalleCierreSheet> {
   SesionHistorial? _full;
   bool _loadingFull = true;
+  bool _enviandoWa  = false;
 
   SesionHistorial get sesion => _full ?? widget.sesion;
 
@@ -124,6 +126,32 @@ class _DetalleCierreSheetState extends State<DetalleCierreSheet> {
         _full = SesionHistorial.fromJson(result['data'] as Map<String, dynamic>);
       }
     });
+  }
+
+  Future<void> _enviarWhatsApp() async {
+    setState(() => _enviandoWa = true);
+    try {
+      final Uint8List bytes = await generarBytesCierrePDF(sesion);
+      final filename = 'CIERRE_${sesion.id}_${sesion.tiendaNombre.replaceAll(' ', '_')}.pdf';
+      final r = await CajaService().enviarPdfWhatsApp(sesion.id, bytes, filename);
+      if (!mounted) return;
+      final ok  = r['success'] == true;
+      final msg = ok
+          ? 'PDF enviado a ${(r['data'] as Map)['enviados']} destinatario(s)'
+          : r['error'] ?? 'Error enviando PDF';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(msg),
+        backgroundColor: ok ? _cGreen : _cRed,
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Error: $e'),
+        backgroundColor: _cRed,
+      ));
+    } finally {
+      if (mounted) setState(() => _enviandoWa = false);
+    }
   }
 
   @override
@@ -180,7 +208,13 @@ class _DetalleCierreSheetState extends State<DetalleCierreSheet> {
                 _MovimientosTable(sesion: sesion),
                 const SizedBox(height: 24),
                 _ExportButton(onTap: () => exportarCierrePDF(sesion,
-                    tipoPapel: context.read<ConfigProvider>().tipoPapel)),
+                    tipoPapel: context.read<ConfigProvider>().tipoPapel,
+                    context: context)),
+                const SizedBox(height: 10),
+                _WhatsAppButton(
+                  enviando: _enviandoWa,
+                  onTap: _enviandoWa ? null : _enviarWhatsApp,
+                ),
               ],
             ),
           ),
@@ -251,7 +285,8 @@ class _SheetHeader extends StatelessWidget {
           const Spacer(),
           IconButton(
             onPressed: () => exportarCierrePDF(sesion,
-                tipoPapel: context.read<ConfigProvider>().tipoPapel),
+                tipoPapel: context.read<ConfigProvider>().tipoPapel,
+                context: context),
             icon: const Icon(Icons.picture_as_pdf_rounded, size: 20),
             color: _cNavy,
             tooltip: 'Exportar PDF',
@@ -954,6 +989,36 @@ class _ExportButton extends StatelessWidget {
         elevation: 2,
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14)),
+      ),
+    ),
+  );
+}
+
+class _WhatsAppButton extends StatelessWidget {
+  final bool enviando;
+  final VoidCallback? onTap;
+  const _WhatsAppButton({required this.enviando, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: double.infinity, height: 52,
+    child: ElevatedButton.icon(
+      icon: enviando
+          ? const SizedBox(
+              width: 18, height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            )
+          : const Icon(Icons.send_rounded, size: 18),
+      label: Text(
+        enviando ? 'Enviando...' : 'Enviar PDF por WhatsApp',
+        style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 15),
+      ),
+      onPressed: onTap,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF25D366),
+        foregroundColor: Colors.white,
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     ),
   );

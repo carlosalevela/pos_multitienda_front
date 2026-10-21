@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
@@ -81,10 +82,11 @@ String _hora(String raw) {
 }
 
 // ════════════════════════════════════════════════════════
-// ENTRY POINT
+// ENTRY POINTS
 // ════════════════════════════════════════════════════════
 
-Future<void> exportarCierrePDF(SesionHistorial sesion, {String tipoPapel = '80mm'}) async {
+/// Genera el PDF de cierre y devuelve los bytes. No guarda ni imprime.
+Future<Uint8List> generarBytesCierrePDF(SesionHistorial sesion) async {
   final doc = pw.Document(
     author:  sesion.empleadoNombre,
     title:   'Cierre de Caja #${sesion.id}',
@@ -178,14 +180,25 @@ Future<void> exportarCierrePDF(SesionHistorial sesion, {String tipoPapel = '80mm
     ],
   ));
 
+  return await doc.save();
+}
+
+Future<void> exportarCierrePDF(
+  SesionHistorial sesion, {
+  String tipoPapel = '80mm',
+  BuildContext? context,
+}) async {
+  final fecha = sesion.fechaCierre.isNotEmpty
+      ? sesion.fechaCierre.substring(0, 10)   // "2026-10-20"
+      : sesion.fechaApertura.substring(0, 10);
   final filename =
-      'CIERRE_${sesion.id}_${sesion.tiendaNombre.replaceAll(' ', '_')}.pdf';
-  final bytes = await doc.save();
+      'CIERRE_${sesion.id}_${fecha}_${sesion.tiendaNombre.replaceAll(' ', '_')}.pdf';
+  final bytes = await generarBytesCierrePDF(sesion);
 
   // Siempre guardar PDF en carpeta local
   unawaited(DocumentoService.instance.guardarCierre(
     bytes: bytes,
-    referencia: 'cierre_${sesion.id}_${sesion.tiendaNombre.replaceAll(' ', '_')}',
+    referencia: 'cierre_${sesion.id}_${fecha}_${sesion.tiendaNombre.replaceAll(' ', '_')}',
   ));
 
   // Intentar imprimir en ESC/POS si hay impresora configurada
@@ -200,13 +213,31 @@ Future<void> exportarCierrePDF(SesionHistorial sesion, {String tipoPapel = '80mm
         return;
       }
       if (ThermalPrinterService.isWebUsbSupported) {
-        final dev = await ThermalPrinterService.getAutoDevice();
+        final dev = await ThermalPrinterService.getOrRequestDevice();
         if (dev != null) {
           final tb = await ThermalPrinterService.buildCierreHistorial(
             sesion: sesion, paperSize: ps,
           );
           await ThermalPrinterService.printBytes(dev, tb);
           return;
+        }
+        // Avisar si la impresora no está configurada
+        if (context != null && context.mounted) {
+          final savedName = await ThermalPrinterService.getSavedName();
+          if (context.mounted) {
+            final msg = savedName == null
+                ? 'No hay impresora térmica configurada. '
+                  'Ve a Configuración → Impresión y selecciona la impresora.'
+                : 'Impresora "$savedName" no encontrada. Verifica que esté conectada por USB.';
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(msg),
+              backgroundColor: Colors.orange.shade700,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              margin: const EdgeInsets.all(16),
+              duration: const Duration(seconds: 5),
+            ));
+          }
         }
       }
     } catch (_) {}

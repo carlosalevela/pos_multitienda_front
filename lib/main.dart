@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'services/barcode_service.dart';
+import 'services/update_service.dart';
 import 'screens/login/login_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'core/constants.dart';
@@ -104,6 +105,12 @@ class _AuthGateState extends State<AuthGate> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    if (auth.isLoggedIn) {
+      final ctx = context;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (ctx.mounted) UpdateService.chequear(ctx);
+      });
+    }
     return auth.isLoggedIn ? const HomeScreen() : const LoginScreen();
   }
 }
