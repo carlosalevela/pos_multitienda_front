@@ -81,6 +81,7 @@ class CajaProvider extends ChangeNotifier {
     required int    tiendaId,
     required double saldoInicial,
   }) async {
+    if (_procesando) return false;
     _procesando = true;
     _errorMsg   = '';
     notifyListeners();
@@ -117,6 +118,7 @@ class CajaProvider extends ChangeNotifier {
     required double montoFinalReal,
     String observaciones = '',
   }) async {
+    if (_procesando) return false;
     if (_sesionActiva == null) return false;
 
     _procesando = true;
@@ -219,6 +221,7 @@ class CajaProvider extends ChangeNotifier {
     required double monto,
     required String metodoPago,
   }) async {
+    if (_procesando) return false;
     _procesando = true;
     notifyListeners();
     bool exito = false;

@@ -215,6 +215,7 @@ class ContabilidadProvider extends ChangeNotifier {
     int?    tiendaId,
     String? fecha,
   }) async {
+    if (_guardando) return false;
     _guardando = true;
     _errorMsg  = '';
     notifyListeners();

@@ -293,6 +293,7 @@ class ThermalPrinterService {
     String                     telefono      = '',
     String                     clienteNombre = '',
     PaperSize                  paperSize     = PaperSize.mm80,
+    bool                       esCopia       = false,
   }) async {
     final profile    = await CapabilityProfile.load();
     final gen        = Generator(paperSize, profile);
@@ -416,6 +417,13 @@ class ThermalPrinterService {
         textPos: BarcodeText.below,
       ),
       ...gen.emptyLines(1),
+
+      // ── Copia ───────────────────────────────────────────────
+      if (esCopia) ...[
+        ...gen.hr(),
+        ...gen.text('**** COPIA DE RECIBO ****',
+          styles: PosStyles(align: PosAlign.center, bold: true)),
+      ],
 
       // ── Footer ──────────────────────────────────────────────
       ...gen.emptyLines(1),

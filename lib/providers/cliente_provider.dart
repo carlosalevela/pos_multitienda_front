@@ -93,6 +93,7 @@ class ClienteProvider extends ChangeNotifier {
   }
 
   Future<bool> crearCliente(Map<String, dynamic> data) async {
+    if (_guardando) return false;
     _guardando = true;
     error      = null;
     notifyListeners();
@@ -120,6 +121,7 @@ class ClienteProvider extends ChangeNotifier {
   }
 
   Future<bool> editarCliente(int id, Map<String, dynamic> data) async {
+    if (_guardando) return false;
     _guardando = true;
     error      = null;
     notifyListeners();
@@ -284,6 +286,7 @@ class ClienteProvider extends ChangeNotifier {
   }
 
   Future<Separado?> crearSeparado(Map<String, dynamic> data) async {
+    if (_guardando) return null;
     _guardando = true;
     error      = null;
     notifyListeners();
@@ -313,6 +316,7 @@ class ClienteProvider extends ChangeNotifier {
 
   Future<bool> abonarSeparado(int id, double monto, String metodoPago,
       {int? cuentaDestinoId}) async {
+    if (_guardando) return false;
     _guardando = true;
     error      = null;
     notifyListeners();
@@ -363,6 +367,7 @@ class ClienteProvider extends ChangeNotifier {
     required double nuevaCantidad,
     required double nuevoPrecio,
   }) async {
+    if (_guardando) return {'success': false, 'error': 'Procesando'};
     _guardando = true;
     error      = null;
     notifyListeners();
@@ -394,6 +399,7 @@ class ClienteProvider extends ChangeNotifier {
   }
 
   Future<bool> cancelarSeparado(int id) async {
+    if (_guardando) return false;
     _guardando = true;
     error      = null;
     notifyListeners();

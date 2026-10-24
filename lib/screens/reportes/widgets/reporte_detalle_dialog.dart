@@ -76,6 +76,7 @@ class _ReporteDetalleDialogState extends State<ReporteDetalleDialog> {
     nav.pop();
 
     try {
+      // ── WebUSB (solo web) ──────────────────────────────────────
       if (thermalDevice != null) {
         final bytes = await ThermalPrinterService.buildRecibo(
           items: items, numeroFactura: factura,
@@ -84,10 +85,13 @@ class _ReporteDetalleDialogState extends State<ReporteDetalleDialog> {
           descuento: descuento, total: total,
           montoRecibido: montoRecibido, vuelto: vuelto,
           clienteNombre: cliente, paperSize: paperSize,
+          esCopia: true,
         );
         await ThermalPrinterService.printBytes(thermalDevice, bytes);
         return;
       }
+
+      // ── Windows ESC/POS RAW ────────────────────────────────────
       if (tipoPapel != 'pdf' && !kIsWeb &&
                  await WindowsPrinterService.hasSavedPrinter()) {
         final bytes = await ThermalPrinterService.buildRecibo(
@@ -97,30 +101,23 @@ class _ReporteDetalleDialogState extends State<ReporteDetalleDialog> {
           descuento: descuento, total: total,
           montoRecibido: montoRecibido, vuelto: vuelto,
           clienteNombre: cliente, paperSize: paperSize,
+          esCopia: true,
         );
         await WindowsPrinterService.printRaw(bytes);
         return;
       }
-      // Sin impresora térmica — avisar si no está configurada
-      if (tipoPapel != 'pdf' && ThermalPrinterService.isWebUsbSupported) {
-        final savedName = await ThermalPrinterService.getSavedName();
-        if (savedName == null) {
-          messenger.showSnackBar(SnackBar(
-            content: const Text(
-              'No hay impresora térmica configurada. '
-              'Ve a Configuración → Impresión y selecciona la impresora.',
-            ),
-            backgroundColor: Colors.orange.shade700,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            margin: const EdgeInsets.all(16),
-            duration: const Duration(seconds: 5),
-          ));
-          return;
-        }
-        // Configurada pero no encontrada: USB desconectado o permiso revocado
+
+      // ── Sin impresora térmica: mostrar error en lugar de caer al PDF ──
+      // (Evita que el PDF se imprima de lado en drivers de impresoras térmicas)
+      if (tipoPapel != 'pdf') {
+        final savedName = ThermalPrinterService.isWebUsbSupported
+            ? await ThermalPrinterService.getSavedName()
+            : null;
+        final msg = savedName != null
+            ? 'Impresora "$savedName" no encontrada. Verifica que esté conectada.'
+            : 'No hay impresora configurada. Ve a Configuración → Impresión.';
         messenger.showSnackBar(SnackBar(
-          content: Text('Impresora "$savedName" no encontrada. Verifica que esté conectada.'),
+          content: Text(msg),
           backgroundColor: Colors.orange.shade700,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -129,7 +126,8 @@ class _ReporteDetalleDialogState extends State<ReporteDetalleDialog> {
         ));
         return;
       }
-      // Fallback: PDF
+
+      // ── Fallback PDF (solo cuando tipoPapel == 'pdf') ──────────
       await ReciboPdfService.imprimirRecibo(
         items:         items,
         numeroFactura: factura,
@@ -142,6 +140,7 @@ class _ReporteDetalleDialogState extends State<ReporteDetalleDialog> {
         montoRecibido: montoRecibido,
         vuelto:        vuelto,
         clienteNombre: cliente,
+        esCopia:       true,
       );
     } catch (e) {
       messenger.showSnackBar(SnackBar(

@@ -85,6 +85,7 @@ class ProveedoresProvider extends ChangeNotifier {
       _proveedorService.obtener(id);
 
   Future<bool> crearProveedor(Map<String, dynamic> data) async {
+    if (guardando) return false;
     guardando = true;
     errorMsg  = null;
     notifyListeners();
@@ -107,6 +108,7 @@ class ProveedoresProvider extends ChangeNotifier {
   }
 
   Future<bool> editarProveedor(int id, Map<String, dynamic> data) async {
+    if (guardando) return false;
     guardando = true;
     errorMsg  = null;
     notifyListeners();
@@ -172,6 +174,7 @@ class ProveedoresProvider extends ChangeNotifier {
 
   /// Retorna la compra creada (Map con todos los campos) o null si falló.
   Future<Map<String, dynamic>?> crearCompra(Map<String, dynamic> data) async {
+    if (guardando) return null;
     guardando = true;
     errorMsg  = null;
     notifyListeners();
@@ -202,6 +205,7 @@ class ProveedoresProvider extends ChangeNotifier {
     required Map<String, double> precios,
     Map<String, double>?         preciosMayoreo,
   }) async {
+    if (guardando) return null;
     guardando = true;
     errorMsg  = null;
     notifyListeners();
@@ -294,6 +298,7 @@ class ProveedoresProvider extends ChangeNotifier {
     required bool manejaM,
     required int  cantidadM,
   }) async {
+    if (guardando) return null;
     guardando = true;
     errorMsg  = null;
     notifyListeners();

@@ -152,6 +152,7 @@ class InventarioProvider extends ChangeNotifier {
     required String tipo,        // "entrada" | "salida" | "ajuste"
     String?         observacion,
   }) async {
+    if (_guardando) return false;
     _guardando = true;
     _errorMsg = null;
     _successMsg = null;
@@ -191,6 +192,7 @@ class InventarioProvider extends ChangeNotifier {
 
   // ── Crear ─────────────────────────────────────────────
   Future<bool> crearProducto(Map<String, dynamic> data) async {
+    if (_guardando) return false;
     _guardando = true;
     _errorMsg = null;
     _successMsg = null;
@@ -225,6 +227,7 @@ class InventarioProvider extends ChangeNotifier {
 
   // ── Editar ────────────────────────────────────────────
   Future<bool> editarProducto(int id, Map<String, dynamic> data) async {
+    if (_guardando) return false;
     _guardando = true;
     _errorMsg = null;
     _successMsg = null;
@@ -257,6 +260,7 @@ class InventarioProvider extends ChangeNotifier {
 
   // ── Eliminar (soft-delete → desactiva) ────────────────
   Future<bool> eliminarProducto(int id) async {
+    if (_guardando) return false;
     _guardando = true;
     _errorMsg = null;
     _successMsg = null;
@@ -289,6 +293,7 @@ class InventarioProvider extends ChangeNotifier {
 
   // ── Reactivar ─────────────────────────────────────────
   Future<bool> reactivarProducto(int id) async {
+    if (_guardando) return false;
     _guardando = true;
     _errorMsg = null;
     _successMsg = null;

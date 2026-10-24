@@ -446,6 +446,7 @@ class PosProvider extends ChangeNotifier {
   // ── Cobrar ────────────────────────────────────────────
 
   Future<bool> cobrar(int tiendaId, {int? clienteId}) async {
+    if (_procesando) return false;
     if (_carrito.isEmpty) {
       _errorMsg = 'El carrito está vacío';
       notifyListeners();

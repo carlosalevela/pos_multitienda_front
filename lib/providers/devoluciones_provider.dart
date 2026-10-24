@@ -6,12 +6,14 @@ class DevolucionesProvider extends ChangeNotifier {
   final _devolucionService = DevolucionesService();
 
   List<DevolucionModel> _devoluciones = [];
-  bool _cargando = false;
+  bool _cargando    = false;
+  bool _procesando  = false;
   String? _error;
 
   List<DevolucionModel> get devoluciones => _devoluciones;
-  bool get cargando => _cargando;
-  String? get error => _error;
+  bool get cargando   => _cargando;
+  bool get procesando => _procesando;
+  String? get error   => _error;
 
   Future<void> cargarDevoluciones({
     int? tiendaId,
@@ -47,7 +49,10 @@ class DevolucionesProvider extends ChangeNotifier {
     String? observaciones,
     int?    cuentaDestinoId,
   }) async {
+    if (_procesando) return {'success': false, 'error': 'Procesando'};
+    _procesando = true;
     _error = null;
+    notifyListeners();
     try {
       final resp = await _devolucionService.crearDevolucion(
         ventaId: ventaId,
@@ -68,6 +73,9 @@ class DevolucionesProvider extends ChangeNotifier {
       debugPrint('❌ crearDevolucion: $e');
       notifyListeners();
       return {'success': false, 'error': _error};
+    } finally {
+      _procesando = false;
+      notifyListeners();
     }
   }
 
@@ -82,7 +90,10 @@ class DevolucionesProvider extends ChangeNotifier {
     double? montoRecibido,
     int?    cuentaDestinoId,
   }) async {
+    if (_procesando) return {'success': false, 'error': 'Procesando'};
+    _procesando = true;
     _error = null;
+    notifyListeners();
     try {
       final resp = await _devolucionService.crearCambio(
         ventaId: ventaId,
@@ -116,6 +127,9 @@ class DevolucionesProvider extends ChangeNotifier {
       debugPrint('❌ crearCambio: $e');
       notifyListeners();
       return {'success': false, 'error': _error};
+    } finally {
+      _procesando = false;
+      notifyListeners();
     }
   }
 

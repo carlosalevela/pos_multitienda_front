@@ -322,6 +322,7 @@ class CambioPOSProvider extends ChangeNotifier {
     int?            clienteId,
     String          observaciones = '',
   }) async {
+    if (_procesando) return false;
     if (!saldoCubierto) {
       _errorMsg = 'Saldo pendiente: \$${saldoPendiente.toStringAsFixed(0)}. '
                   'Agrega un pago para cubrir la diferencia.';

@@ -87,6 +87,7 @@ class ReciboPdfService {
     String                     telefono      = '',
     String                     clienteNombre = '',
     bool                       soloGuardar   = false,
+    bool                       esCopia       = false,
   }) async {
     final fontReg  = await PdfGoogleFonts.interRegular();
     final fontBold = await PdfGoogleFonts.interBold();
@@ -165,7 +166,26 @@ class ReciboPdfService {
         pw.SizedBox(height: 6),
         _divider(),
 
-        // ── 8. Footer ─────────────────────────────────────────
+        // ── 8. Copia ───────────────────────────────────────────
+        if (esCopia) ...[
+          _divider(),
+          pw.Center(
+            child: pw.Container(
+              padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: _grey300, width: 0.8),
+              ),
+              child: pw.Text('★  COPIA DE RECIBO  ★',
+                textAlign: pw.TextAlign.center,
+                style: pw.TextStyle(
+                    font: fontBold, fontSize: 9, color: _grey700,
+                    letterSpacing: 1.2)),
+            ),
+          ),
+          pw.SizedBox(height: 4),
+        ],
+
+        // ── 9. Footer ─────────────────────────────────────────
         _footer(fontBold, fontReg, empresaNombre),
       ],
     ));
