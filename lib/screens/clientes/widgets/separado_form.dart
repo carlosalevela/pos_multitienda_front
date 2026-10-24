@@ -21,6 +21,7 @@ import '../../../models/producto.dart';
 import '../../../services/barcode_service.dart';
 import '../../../services/inventario_service.dart';
 import '../../../providers/config_provider.dart';
+import '../../../models/cuenta_bancaria.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart' show PaperSize;
 
 // ── Paleta del sistema de diseño ─────────────────────────────
@@ -135,6 +136,7 @@ class _SeparadoFormState extends State<SeparadoForm> {
   final _abonoCtrl = TextEditingController();
 
   String    _metodoPago  = 'efectivo';
+  int?      _cuentaId;
   DateTime? _fechaLimite;
   bool      _fechaError  = false;
   final List<_ItemSep> _items = [];
@@ -270,8 +272,9 @@ class _SeparadoFormState extends State<SeparadoForm> {
         'cantidad':        i.cantidad,
         'precio_unitario': i.precio,
       }).toList(),
-      'abono_inicial': _abono,
-      'metodo_pago':   _metodoPago,
+      'abono_inicial':   _abono,
+      'metodo_pago':     _metodoPago,
+      if (_cuentaId != null) 'cuenta_destino': _cuentaId,
     };
 
     final prov   = context.read<ClienteProvider>();
@@ -279,22 +282,27 @@ class _SeparadoFormState extends State<SeparadoForm> {
     if (!mounted) return;
 
     if (creado != null) {
-      // Preguntar si imprimir antes de cerrar el panel
-      final imprimir = await showDialog<bool>(
+      // 0 = no imprimir, 1 = solo cliente, 2 = cliente + comercio
+      final copias = await showDialog<int>(
         context: context,
         builder: (ctx) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Text('Separado creado'),
-          content: const Text('¿Deseas imprimir el recibo del separado?'),
+          content: const Text('¿Deseas imprimir el recibo?'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
+              onPressed: () => Navigator.pop(ctx, 0),
               child: const Text('No, cerrar'),
             ),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.print_rounded, size: 16),
+              label: const Text('Solo cliente'),
+              onPressed: () => Navigator.pop(ctx, 1),
+            ),
             FilledButton.icon(
-              icon: const Icon(Icons.print_rounded, size: 18),
-              label: const Text('Imprimir'),
-              onPressed: () => Navigator.pop(ctx, true),
+              icon: const Icon(Icons.print_rounded, size: 16),
+              label: const Text('Cliente + Comercio'),
+              onPressed: () => Navigator.pop(ctx, 2),
             ),
           ],
         ),
@@ -302,9 +310,13 @@ class _SeparadoFormState extends State<SeparadoForm> {
 
       if (!mounted) return;
 
-      if (imprimir == true) {
+      if (copias != null && copias > 0) {
         await _imprimirSeparado(creado);
         if (!mounted) return;
+        if (copias == 2) {
+          await _imprimirSeparado(creado);
+          if (!mounted) return;
+        }
       } else {
         final empNombre = context.read<AuthProvider>().empresaNombre;
         unawaited(ReciboPdfService.imprimirSeparado(
@@ -911,18 +923,25 @@ class _SeparadoFormState extends State<SeparadoForm> {
       const SizedBox(height: 8),
       Row(children: _metodos.map((m) {
         final activo = _metodoPago == m.$1;
+        final isLast = m.$1 == _metodos.last.$1;
         return Expanded(
           child: GestureDetector(
-            onTap: () => setState(() => _metodoPago = m.$1),
+            onTap: () => setState(() {
+              _metodoPago = m.$1;
+              _cuentaId   = null;
+            }),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 160),
-              margin: const EdgeInsets.only(right: 6),
+              margin: EdgeInsets.only(right: isLast ? 0 : 6),
               padding: const EdgeInsets.symmetric(vertical: 10),
               decoration: BoxDecoration(
                 color: activo ? _kGreenDark : _kCard,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                    color: activo ? _kGreenDark : _kBorder),
+                border: Border.all(color: activo ? _kGreenDark : _kBorder),
+                boxShadow: activo ? [
+                  BoxShadow(color: _kGreen.withValues(alpha: 0.3),
+                      blurRadius: 8, offset: const Offset(0, 3)),
+                ] : null,
               ),
               child: Column(children: [
                 Icon(m.$3, size: 18,
@@ -937,6 +956,75 @@ class _SeparadoFormState extends State<SeparadoForm> {
           ),
         );
       }).toList()),
+
+      // ── Selector de cuenta destino (Tarjeta / Transferencia) ──
+      Builder(builder: (ctx) {
+        if (_metodoPago == 'efectivo') return const SizedBox.shrink();
+        final cuentas = ctx.watch<ConfigProvider>().cuentas
+            .where((c) => _metodoPago == 'tarjeta'
+                ? c.tipo == 'tarjeta'
+                : c.tipo != 'tarjeta')
+            .toList();
+        if (cuentas.isEmpty) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 12),
+            Text('Cuenta destino',
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12, fontWeight: FontWeight.w600,
+                    color: _kTextSub)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: cuentas.map((CuentaBancaria c) {
+                final sel = _cuentaId == c.id;
+                return GestureDetector(
+                  onTap: () => setState(() =>
+                      _cuentaId = sel ? null : c.id),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 120),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: sel
+                          ? _kGreenDark.withValues(alpha: 0.08)
+                          : _kCard,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: sel ? _kGreenDark : _kBorder,
+                        width: sel ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.account_balance_wallet_outlined,
+                          size: 13,
+                          color: sel ? _kGreenDark : _kTextSub),
+                      const SizedBox(width: 6),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(c.nombre,
+                              style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: sel ? _kGreenDark : _kTextHead)),
+                          Text(c.tipoDisplay,
+                              style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 10,
+                                  color: sel ? _kGreenDark : _kTextSub)),
+                        ],
+                      ),
+                    ]),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        );
+      }),
 
       const SizedBox(height: 12),
       if (_abono > 0) Container(
