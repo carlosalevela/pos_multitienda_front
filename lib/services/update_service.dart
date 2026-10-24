@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import '../core/api_client.dart';
 
-const _currentVersion = '1.0.0';
+const _currentVersion = '1.3.0';
 
 /// Compara versiones semánticas. Devuelve true si [remote] > [local].
 bool _esNueva(String local, String remote) {
