@@ -285,26 +285,8 @@ class _SeparadoFormState extends State<SeparadoForm> {
       // 0 = no imprimir, 1 = solo cliente, 2 = cliente + comercio
       final copias = await showDialog<int>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Separado creado'),
-          content: const Text('¿Deseas imprimir el recibo?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, 0),
-              child: const Text('No, cerrar'),
-            ),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.print_rounded, size: 16),
-              label: const Text('Solo cliente'),
-              onPressed: () => Navigator.pop(ctx, 1),
-            ),
-            FilledButton.icon(
-              icon: const Icon(Icons.print_rounded, size: 16),
-              label: const Text('Cliente + Comercio'),
-              onPressed: () => Navigator.pop(ctx, 2),
-            ),
-          ],
+        builder: (ctx) => _DialogSeparadoCreado(
+          separado: creado, fmt: widget.fmt,
         ),
       );
 
@@ -1150,4 +1132,243 @@ class _SeparadoFormState extends State<SeparadoForm> {
             horizontal: 12, vertical: 10),
       ),
     );
+}
+
+// ════════════════════════════════════════════════════════════════
+// DIÁLOGO: Separado creado — impresión
+// ════════════════════════════════════════════════════════════════
+
+class _DialogSeparadoCreado extends StatelessWidget {
+  final Separado     separado;
+  final NumberFormat fmt;
+
+  const _DialogSeparadoCreado({
+    required this.separado,
+    required this.fmt,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pagado = separado.saldoPendiente <= 0;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 380),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.18),
+              blurRadius: 32,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+
+            // ── Header verde ─────────────────────────────────
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [_kGreenDark, _kGreen],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(children: [
+                // Icono con badge
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Container(
+                      width: 64, height: 64,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const Icon(Icons.bookmark_added_rounded,
+                        color: Colors.white, size: 32),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text('¡Separado creado!',
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 20, fontWeight: FontWeight.w800,
+                        color: Colors.white)),
+                const SizedBox(height: 4),
+                Text(separado.clienteNombre,
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13, color: Colors.white70)),
+                const SizedBox(height: 10),
+                // ID badge
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.4),
+                        width: 1),
+                  ),
+                  child: Text('SEP-${separado.id.toString().padLeft(4, '0')}',
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11, fontWeight: FontWeight.w700,
+                          color: Colors.white, letterSpacing: 1.2)),
+                ),
+              ]),
+            ),
+
+            // ── Resumen financiero ────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              child: Row(children: [
+                _statTile('Total', fmt.format(separado.total),
+                    Icons.shopping_bag_rounded, const Color(0xFF475569)),
+                const SizedBox(width: 8),
+                _statTile('Abono', fmt.format(separado.abonoAcumulado),
+                    Icons.payments_rounded, _kGreenDark),
+                const SizedBox(width: 8),
+                _statTile(
+                  pagado ? 'Saldado' : 'Pendiente',
+                  pagado ? '✓' : fmt.format(separado.saldoPendiente),
+                  pagado ? Icons.check_circle_rounded : Icons.pending_rounded,
+                  pagado ? _kGreenDark : const Color(0xFFF59E0B),
+                ),
+              ]),
+            ),
+
+            // ── Pregunta ──────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 4),
+              child: Row(children: [
+                Container(
+                  width: 34, height: 34,
+                  decoration: BoxDecoration(
+                    color: _kGreen.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.print_rounded,
+                      size: 16, color: _kGreenDark),
+                ),
+                const SizedBox(width: 12),
+                Text('¿Imprimir recibo del separado?',
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13, fontWeight: FontWeight.w600,
+                        color: _kTextHead)),
+              ]),
+            ),
+
+            // ── Botones ───────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+              child: Column(children: [
+                // Fila: Solo cliente + Cliente + Comercio
+                Row(children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.pop(context, 1),
+                      icon: const Icon(Icons.person_rounded, size: 16),
+                      label: Text('Solo cliente',
+                          style: GoogleFonts.plusJakartaSans(
+                              fontSize: 13, fontWeight: FontWeight.w700)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _kGreenDark,
+                        side: const BorderSide(color: _kGreenDark, width: 1.5),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                            colors: [_kGreenDark, _kGreen]),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _kGreen.withValues(alpha: 0.35),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: ElevatedButton.icon(
+                        onPressed: () => Navigator.pop(context, 2),
+                        icon: const Icon(Icons.store_rounded, size: 16),
+                        label: Text('+ Comercio',
+                            style: GoogleFonts.plusJakartaSans(
+                                fontSize: 13, fontWeight: FontWeight.w700)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          shadowColor: Colors.transparent,
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 10),
+                // No imprimir
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context, 0),
+                    style: TextButton.styleFrom(
+                      foregroundColor: _kTextSub,
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                    ),
+                    child: Text('No imprimir, cerrar',
+                        style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statTile(String label, String value, IconData icon, Color color) =>
+      Expanded(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.07),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withValues(alpha: 0.18)),
+          ),
+          child: Column(children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(height: 5),
+            Text(value,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12, fontWeight: FontWeight.w800, color: color),
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 2),
+            Text(label,
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 9, fontWeight: FontWeight.w500,
+                    color: color.withValues(alpha: 0.7))),
+          ]),
+        ),
+      );
 }
