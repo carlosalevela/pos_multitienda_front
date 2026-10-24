@@ -7,10 +7,14 @@ import 'package:provider/provider.dart';
 
 import 'dart:io';
 
+import 'dart:async';
+
 import '../../models/alerta_separado.dart';
 import '../../models/separado.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/cliente_provider.dart';
+import '../../services/barcode_service.dart';
+import '../../services/cliente_service.dart';
 import '../../services/documento_service.dart';
 import '../clientes/widgets/abonar_sheet.dart';
 import '../clientes/widgets/separado_detalle_sheet.dart';
@@ -46,19 +50,78 @@ class _SeparadosScreenState extends State<SeparadosScreen> {
   _SepTab _tab         = _SepTab.activos;
   String  _busqueda    = '';
   String  _filtroEstado = 'todos';
+  bool    _enviandoWa  = false;
 
   final _searchCtrl = TextEditingController();
+  StreamSubscription<String>? _barcodeSub;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _cargarTodo());
+    _barcodeSub = BarcodeService.instance.onBarcode.listen(_onBarcode);
   }
 
   @override
   void dispose() {
+    _barcodeSub?.cancel();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _onBarcode(String code) async {
+    final id = int.tryParse(code.trim());
+    if (id == null) return;
+
+    // Buscar primero en la lista ya cargada
+    final prov = context.read<ClienteProvider>();
+    Separado? sep = prov.separados.where((s) => s.id == id).firstOrNull;
+
+    // Si no está en memoria, buscarlo en el backend
+    sep ??= await ClienteService().getSeparado(id);
+
+    if (!mounted) return;
+    if (sep == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Separado no encontrado'),
+        backgroundColor: _kRed,
+        duration: Duration(seconds: 2),
+      ));
+      return;
+    }
+    _verDetalle(sep);
+  }
+
+  Future<void> _enviarRecordatorios(AuthProvider auth) async {
+    int dias = 3;
+    final confirm = await showDialog<int>(
+      context: context,
+      builder: (ctx) => _RecordatorioDialog(diasInicial: dias),
+    );
+    if (confirm == null) return;
+
+    setState(() => _enviandoWa = true);
+    final tid = auth.tiendaId > 0 ? auth.tiendaId : null;
+    final res = await ClienteService().enviarRecordatoriosSeparados(
+      dias: confirm,
+      tiendaId: tid,
+    );
+    if (!mounted) return;
+    setState(() => _enviandoWa = false);
+
+    final data = res['data'] as Map? ?? {};
+    final enviados     = data['enviados']       ?? 0;
+    final sinTelefono  = (data['sin_telefono']  as List?)?.length ?? 0;
+    final errores      = (data['errores']       as List?)?.length ?? 0;
+    final mensaje      = data['mensaje']        as String?;
+
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(res['success'] == true
+          ? (mensaje ?? '✅ $enviados enviados · $sinTelefono sin teléfono · $errores errores')
+          : '❌ ${res['error']}'),
+      backgroundColor: res['success'] == true ? _kGreenDark : _kRed,
+      duration: const Duration(seconds: 4),
+    ));
   }
 
   Future<void> _cargarTodo() async {
@@ -196,6 +259,26 @@ class _SeparadosScreenState extends State<SeparadosScreen> {
                     borderRadius: BorderRadius.circular(8)),
               ),
             ),
+          if (auth.rol == 'admin' || auth.rol == 'supervisor') ...[
+            const SizedBox(width: 8),
+            _enviandoWa
+                ? const SizedBox(
+                    width: 20, height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : Tooltip(
+                    message: 'Enviar recordatorios por WhatsApp',
+                    child: IconButton(
+                      icon: const Icon(Icons.chat_rounded, size: 20),
+                      onPressed: () => _enviarRecordatorios(auth),
+                      style: IconButton.styleFrom(
+                        foregroundColor: const Color(0xFF25D366),
+                        backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.1),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
+          ],
         ]),
       );
     });
@@ -1261,5 +1344,75 @@ class _SeparadosScreenState extends State<SeparadosScreen> {
     } catch (_) {
       return fechaStr;
     }
+  }
+}
+
+// ── Diálogo de confirmación de recordatorios ──────────────
+class _RecordatorioDialog extends StatefulWidget {
+  final int diasInicial;
+  const _RecordatorioDialog({required this.diasInicial});
+
+  @override
+  State<_RecordatorioDialog> createState() => _RecordatorioDialogState();
+}
+
+class _RecordatorioDialogState extends State<_RecordatorioDialog> {
+  late int _dias;
+
+  @override
+  void initState() {
+    super.initState();
+    _dias = widget.diasInicial;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(children: [
+        const Icon(Icons.chat_rounded, color: Color(0xFF25D366), size: 22),
+        const SizedBox(width: 8),
+        Text('Recordatorios WhatsApp',
+            style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700)),
+      ]),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Se enviará un mensaje a los clientes con separados activos que venzan en los próximos:',
+            style: GoogleFonts.inter(fontSize: 13, color: _kTextSub),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [1, 2, 3, 5, 7].map((d) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: ChoiceChip(
+                label: Text('$d d'),
+                selected: _dias == d,
+                onSelected: (_) => setState(() => _dias = d),
+                selectedColor: _kGreen,
+                labelStyle: GoogleFonts.inter(
+                  fontSize: 12, fontWeight: FontWeight.w600,
+                  color: _dias == d ? Colors.white : _kText,
+                ),
+              ),
+            )).toList(),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('Cancelar', style: GoogleFonts.inter(color: _kTextMuted)),
+        ),
+        FilledButton.icon(
+          icon: const Icon(Icons.send_rounded, size: 16),
+          label: Text('Enviar', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+          onPressed: () => Navigator.pop(context, _dias),
+          style: FilledButton.styleFrom(backgroundColor: const Color(0xFF25D366)),
+        ),
+      ],
+    );
   }
 }

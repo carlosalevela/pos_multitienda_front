@@ -325,13 +325,37 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                 ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     const _EmptyHint('Sin abonos recibidos en este turno'),
                   ])
-                : Column(children: [
-                    if (r.abonos.efectivo > 0)
-                      _ItemRow('Efectivo',      r.abonos.efectivo,      _cGreen,  Icons.payments_rounded),
-                    if (r.abonos.tarjeta > 0)
-                      _ItemRow('Tarjeta',       r.abonos.tarjeta,       _cBlue,   Icons.credit_card_rounded),
-                    if (r.abonos.transferencia > 0)
-                      _ItemRow('Transferencia', r.abonos.transferencia, _cPurple, Icons.swap_horiz_rounded),
+                : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    // Detalle individual con cuenta (si viene del backend)
+                    if (r.abonos.detalle.isNotEmpty) ...[
+                      ...r.abonos.detalle.map((a) {
+                        final monto  = (a['monto'] as num?)?.toDouble() ?? 0.0;
+                        final metodo = a['metodo_pago']?.toString() ?? '';
+                        final cuenta = a['cuenta_nombre']?.toString() ?? '';
+                        final hora   = a['hora']?.toString() ?? '';
+                        final label  = cuenta.isNotEmpty ? cuenta
+                            : metodo == 'efectivo'      ? 'Efectivo'
+                            : metodo == 'tarjeta'       ? 'Datáfono'
+                            : 'Transferencia';
+                        final icon   = metodo == 'efectivo'      ? Icons.payments_rounded
+                            : metodo == 'tarjeta'       ? Icons.credit_card_rounded
+                            : Icons.swap_horiz_rounded;
+                        final color  = metodo == 'efectivo' ? _cGreen
+                            : metodo == 'tarjeta'       ? _cBlue
+                            : _cPurple;
+                        return _ItemRow(
+                          hora.isNotEmpty ? '$label  $hora' : label,
+                          monto, color, icon,
+                        );
+                      }),
+                    ] else ...[
+                      if (r.abonos.efectivo > 0)
+                        _ItemRow('Efectivo',      r.abonos.efectivo,      _cGreen,  Icons.payments_rounded),
+                      if (r.abonos.tarjeta > 0)
+                        _ItemRow('Tarjeta',       r.abonos.tarjeta,       _cBlue,   Icons.credit_card_rounded),
+                      if (r.abonos.transferencia > 0)
+                        _ItemRow('Transferencia', r.abonos.transferencia, _cPurple, Icons.swap_horiz_rounded),
+                    ],
                     const _CardDiv(),
                     _TotalRow('TOTAL ABONOS', _f(r.abonos.total), _cSky),
                     const SizedBox(height: 6),
@@ -401,6 +425,52 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
           )),
         ])),
         const SizedBox(height: 12),
+
+        // Card anulaciones — solo si hubo anulaciones en el turno
+        if (r.anulaciones.cantidad > 0)
+          _DataCard(
+            titulo: 'Anulaciones del Turno',
+            icono: Icons.block_rounded,
+            accentColor: _cRed,
+            accentBg: _cRedLt,
+            child: Column(children: [
+              ...r.anulaciones.detalle.map((a) {
+                final numero  = a['numero_factura']?.toString() ?? '—';
+                final hora    = a['hora']?.toString()           ?? '—';
+                final total   = double.tryParse(a['total']?.toString() ?? '0') ?? 0.0;
+                final metodo  = a['metodo_pago']?.toString()    ?? '';
+                final emp     = a['empleado']?.toString()       ?? '';
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Row(children: [
+                    const Icon(Icons.cancel_outlined, size: 14, color: _cRed),
+                    const SizedBox(width: 8),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min, children: [
+                      Text(numero,
+                          style: GoogleFonts.inter(fontSize: 12,
+                              fontWeight: FontWeight.w600, color: _cText)),
+                      Text('$hora · $metodo${emp.isNotEmpty ? " · $emp" : ""}',
+                          style: GoogleFonts.inter(fontSize: 10, color: _cTextMuted)),
+                    ])),
+                    Text('-${_f(total)}',
+                        style: GoogleFonts.inter(fontSize: 13,
+                            fontWeight: FontWeight.w700, color: _cRed)),
+                  ]),
+                );
+              }),
+              const _CardDiv(),
+              _TotalRow('TOTAL ANULADO', '-${_f(r.anulaciones.totalAnulado)}', _cRed),
+              const SizedBox(height: 6),
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                _Chip(
+                  '${r.anulaciones.cantidad} anulacion${r.anulaciones.cantidad != 1 ? "es" : ""}',
+                  _cRed, _cRedLt,
+                ),
+              ]),
+            ]),
+          ),
+        if (r.anulaciones.cantidad > 0) const SizedBox(height: 12),
 
         // Card ingresos por cuenta — ancho completo
         if (_resumenCuentas.isNotEmpty)
@@ -961,6 +1031,7 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                     cancelacionesEfectivo:   r.abonos.cancelacionesEfectivo,
                     ingresosManual:          r.abonos.ingresosManual,
                     numAbonos:               r.abonos.cantidad,
+                    abonosDetalle:           r.abonos.detalle,
                     devolucionesEfectivo:    r.devoluciones.netoEfectivo,
                     devolucionesDirectasEf:  r.devoluciones.efectivo,
                     cambiosCobrarEf:         r.devoluciones.cambiosCobrar,

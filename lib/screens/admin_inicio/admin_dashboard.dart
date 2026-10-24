@@ -158,7 +158,8 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard> {
   final _scaffoldKey  = GlobalKey<ScaffoldState>();
-  String _activeScreen = 'dashboard';
+  String _activeScreen  = 'dashboard';
+  bool   _navCollapsed  = false;
 
   void _navigate(String screen) {
     setState(() => _activeScreen = screen);
@@ -218,13 +219,19 @@ class _AdminDashboardState extends State<AdminDashboard> {
       navItems:     navItems,
     );
 
+    final onMenuTap = isDesktop
+        ? () => setState(() => _navCollapsed = !_navCollapsed)
+        : () => _scaffoldKey.currentState?.openDrawer();
+
     final mainContent = Column(children: [
       _TopBar(
-        branch:      widget.branch,
-        userName:    widget.userName,
-        userRole:    widget.userRole,
-        showMenuBtn: !isDesktop,
-        onMenuTap:   () => _scaffoldKey.currentState?.openDrawer(),
+        branch:         widget.branch,
+        userName:       widget.userName,
+        userRole:       widget.userRole,
+        showMenuBtn:    true,
+        navCollapsed:   _navCollapsed,
+        isDesktop:      isDesktop,
+        onMenuTap:      onMenuTap,
       ),
       Expanded(child: _buildScreenByKey(_activeScreen, auth.rol, widget.userName)),
     ]);
@@ -234,7 +241,19 @@ class _AdminDashboardState extends State<AdminDashboard> {
         key:             _scaffoldKey,
         backgroundColor: _C.bg,
         body: Row(children: [
-          SizedBox(width: 210, child: sidebar),
+          ClipRect(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve:    Curves.easeInOut,
+              width:    _navCollapsed ? 0.0 : 210.0,
+              child: OverflowBox(
+                alignment: Alignment.topLeft,
+                minWidth:  210,
+                maxWidth:  210,
+                child:     sidebar,
+              ),
+            ),
+          ),
           Expanded(child: mainContent),
         ]),
       );
@@ -363,60 +382,90 @@ class _NavTile extends StatelessWidget {
 
 class _TopBar extends StatelessWidget {
   final String branch, userName, userRole;
-  final bool showMenuBtn;
+  final bool showMenuBtn, navCollapsed, isDesktop;
   final VoidCallback onMenuTap;
-  const _TopBar({required this.branch, required this.userName, required this.userRole, required this.showMenuBtn, required this.onMenuTap});
+  const _TopBar({required this.branch, required this.userName, required this.userRole, required this.showMenuBtn, required this.onMenuTap, this.navCollapsed = false, this.isDesktop = false});
   @override
   Widget build(BuildContext context) {
     final w        = MediaQuery.of(context).size.width;
     final isNarrow = w < 700;
     return Container(
-      height: 64,
-      padding: EdgeInsets.only(left: isNarrow ? 12 : 24, right: 0),
+      height: 56,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(color: _C.surface, border: Border(bottom: BorderSide(color: _C.border))),
       child: Row(children: [
-        if (showMenuBtn) ...[
-          IconButton(icon: const Icon(Icons.menu_rounded), onPressed: onMenuTap, color: _C.textSecond, padding: EdgeInsets.zero),
-          const SizedBox(width: 6),
-        ],
-        if (!isNarrow) ...[
-          Text('Consola Central', style: GoogleFonts.inter(color: _C.textFaint, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.0)),
-          Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text('•', style: TextStyle(color: _C.border, fontSize: 14))),
-          Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(color: _C.bg, borderRadius: BorderRadius.circular(20), border: Border.all(color: _C.border)),
-              child: Text(branch, style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 11, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+
+        // ── Hamburguesa ──────────────────────────────
+        IconButton(
+          icon: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            child: Icon(
+              isDesktop && !navCollapsed ? Icons.menu_open_rounded : Icons.menu_rounded,
+              key: ValueKey('$isDesktop-$navCollapsed'),
+              size: 20,
             ),
           ),
-        ] else
-          Flexible(
-            child: Text(branch, style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
-          ),
-        const Spacer(),
-        Container(
-          margin:  const EdgeInsets.only(right: 12),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color:        _C.bg,
-            borderRadius: BorderRadius.circular(12),
-            border:       Border.all(color: _C.border),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Container(
-              width: 30, height: 30,
-              decoration: BoxDecoration(color: _C.greenLight, borderRadius: BorderRadius.circular(8)),
-              child: Center(child: Text(userName[0], style: GoogleFonts.inter(color: _C.greenDark, fontWeight: FontWeight.w800, fontSize: 13))),
-            ),
-            if (!isNarrow) ...[
-              const SizedBox(width: 9),
-              Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                Text(userName.split(' ').first, style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 12, fontWeight: FontWeight.w600)),
-                Text(userRole, style: GoogleFonts.inter(color: _C.greenDark, fontSize: 10, fontWeight: FontWeight.w700)),
-              ]),
-            ],
-          ]),
+          onPressed: onMenuTap,
+          color: _C.textSecond,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
         ),
+
+        // Logo inline cuando nav está cerrado en desktop
+        if (isDesktop && navCollapsed) ...[
+          const SizedBox(width: 6),
+          Container(
+            width: 26, height: 26,
+            decoration: BoxDecoration(color: _C.green, borderRadius: BorderRadius.circular(6)),
+            child: const Icon(Icons.point_of_sale_rounded, size: 14, color: Colors.white),
+          ),
+          const SizedBox(width: 8),
+          Text('SIS POS', style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
+        ],
+
+        const Spacer(),
+
+        // ── Sucursal ──────────────────────────────────
+        if (!isNarrow)
+          Container(
+            constraints: const BoxConstraints(maxWidth: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: _C.bg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _C.border),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.store_rounded, size: 13, color: _C.textFaint),
+              const SizedBox(width: 6),
+              Flexible(child: Text(branch,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(color: _C.textSecond, fontSize: 12, fontWeight: FontWeight.w500))),
+            ]),
+          ),
+
+        const SizedBox(width: 12),
+
+        // ── Usuario ───────────────────────────────────
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 32, height: 32,
+            decoration: BoxDecoration(color: _C.greenLight, borderRadius: BorderRadius.circular(8)),
+            child: Center(child: Text(userName[0],
+                style: GoogleFonts.inter(color: _C.greenDark, fontWeight: FontWeight.w800, fontSize: 13))),
+          ),
+          if (!isNarrow) ...[
+            const SizedBox(width: 9),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              Text(userName.split(' ').first,
+                  style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 12, fontWeight: FontWeight.w600)),
+              Text(userRole,
+                  style: GoogleFonts.inter(color: _C.greenDark, fontSize: 10, fontWeight: FontWeight.w600)),
+            ]),
+          ],
+        ]),
+
+        const SizedBox(width: 8),
       ]),
     );
   }

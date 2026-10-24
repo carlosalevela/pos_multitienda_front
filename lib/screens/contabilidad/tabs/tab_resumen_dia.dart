@@ -146,16 +146,9 @@ class _TabResumenDiaState extends State<TabResumenDia> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
+              color: Colors.white,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: AppColors.outlineVariant),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
             ),
             child: Row(children: [
               const Icon(Icons.calendar_today_rounded, size: 16, color: AppColors.secondary),
@@ -193,16 +186,9 @@ class _TabResumenDiaState extends State<TabResumenDia> {
         child: Container(
           padding: const EdgeInsets.all(11),
           decoration: BoxDecoration(
-            color: AppColors.surfaceContainerLowest,
+            color: Colors.white,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: AppColors.outlineVariant),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
           ),
           child: cont.cargando
               ? const SizedBox(
@@ -223,115 +209,79 @@ class _TabResumenDiaState extends State<TabResumenDia> {
 
     return Row(children: [
       Expanded(child: _kpi(
-        label:       'Total Ventas',
-        value:       '\$${widget.fmt.format(r.totalVentas)}',
-        sub:         '${r.numVentas} transacciones',
-        icon:        Icons.trending_up_rounded,
-        iconBg:      AppColors.mintLight,
-        iconColor:   AppColors.secondary,
-        subColor:    AppColors.secondary,
-        subIcon:     Icons.arrow_upward_rounded,
+        label:    'Total Ventas',
+        value:    '\$${widget.fmt.format(r.totalVentas)}',
+        sub:      '${r.numVentas} transacciones',
+        subColor: AppColors.secondary,
+        accent:   true,
       )),
       const SizedBox(width: 12),
       Expanded(child: _kpi(
-        label:       'Gastos',
-        value:       '\$${widget.fmt.format(r.totalGastos)}',
-        sub:         'Del día',
-        icon:        Icons.receipt_long_rounded,
-        iconBg:      AppColors.errorContainer,
-        iconColor:   AppColors.error,
-        subColor:    AppColors.error,
-        subIcon:     Icons.arrow_downward_rounded,
+        label:    'Gastos',
+        value:    '\$${widget.fmt.format(r.totalGastos)}',
+        sub:      'Del día',
+        subColor: AppColors.error,
       )),
       const SizedBox(width: 12),
       Expanded(child: _kpi(
-        label:       'Utilidad Bruta',
-        value:       '\$${widget.fmt.format(util.abs())}',
-        sub:         'Margen ${utilPct.abs().toStringAsFixed(1)}%',
-        icon:        util >= 0
-            ? Icons.show_chart_rounded
-            : Icons.trending_down_rounded,
-        iconBg:      util >= 0 ? AppColors.mintLight : AppColors.errorContainer,
-        iconColor:   util >= 0 ? AppColors.secondary   : AppColors.error,
-        subColor:    util >= 0 ? AppColors.secondary   : AppColors.error,
-        subIcon:     util >= 0
-            ? Icons.arrow_upward_rounded
-            : Icons.arrow_downward_rounded,
+        label:    'Utilidad Bruta',
+        value:    '\$${widget.fmt.format(util.abs())}',
+        sub:      'Margen ${utilPct.abs().toStringAsFixed(1)}%',
+        subColor: util >= 0 ? AppColors.secondary : AppColors.error,
       )),
       const SizedBox(width: 12),
       Expanded(child: _kpi(
-        label:       'Devoluciones',
-        value:       '\$${widget.fmt.format(r.totalDevoluciones)}',
-        sub:         '${r.numDevoluciones} devol.',
-        icon:        Icons.assignment_return_rounded,
-        iconBg:      AppColors.warningContainer,
-        iconColor:   AppColors.warning,
-        subColor:    AppColors.onSurfaceVariant,
-        subIcon:     Icons.speed_rounded,
+        label:    'Devoluciones',
+        value:    '\$${widget.fmt.format(r.totalDevoluciones)}',
+        sub:      '${r.numDevoluciones} devol.',
+        subColor: AppColors.onSurfaceVariant,
       )),
     ]);
   }
 
   Widget _kpi({
-    required String   label,
-    required String   value,
-    required String   sub,
-    required IconData icon,
-    required Color    iconBg,
-    required Color    iconColor,
-    required Color    subColor,
-    required IconData subIcon,
+    required String label,
+    required String value,
+    required String sub,
+    required Color  subColor,
+    bool            accent = false,
   }) {
     return Container(
-      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(14),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.outlineVariant),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          if (accent)
+            Container(width: 3, color: AppColors.mint),
           Expanded(
-            child: Text(label,
-                style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.onSurfaceVariant)),
-          ),
-          Container(
-            padding: const EdgeInsets.all(7),
-            decoration: BoxDecoration(
-              color: iconBg,
-              borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(accent ? 13 : 16, 16, 16, 16),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(label,
+                    style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.onSurfaceVariant,
+                        letterSpacing: 0.3)),
+                const SizedBox(height: 8),
+                Text(value,
+                    style: GoogleFonts.inter(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.onSurface)),
+                const SizedBox(height: 4),
+                Text(sub,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(fontSize: 11, color: subColor)),
+              ]),
             ),
-            child: Icon(icon, size: 16, color: iconColor),
           ),
         ]),
-        const SizedBox(height: 10),
-        Text(value,
-            style: GoogleFonts.inter(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: AppColors.onSurface)),
-        const SizedBox(height: 6),
-        Row(children: [
-          Icon(subIcon, size: 12, color: subColor),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(sub,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.inter(
-                    fontSize: 11, color: subColor)),
-          ),
-        ]),
-      ]),
+      ),
     );
   }
 
@@ -980,16 +930,9 @@ class _TabResumenDiaState extends State<TabResumenDia> {
         padding: const EdgeInsets.all(20),
         margin: const EdgeInsets.only(bottom: 4),
         decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(14),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(color: AppColors.outlineVariant),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
         ),
         child: child,
       );

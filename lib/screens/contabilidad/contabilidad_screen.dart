@@ -10,14 +10,10 @@ import '../../services/empleado_service.dart';
 
 import 'tabs/tab_resumen.dart';
 import 'tabs/tab_top_productos.dart';
-import 'tabs/tab_operaciones.dart';
-import 'tabs/tab_pl.dart';
-import 'tabs/tab_top_clientes.dart';
 import 'tabs/tab_comparativo.dart';
-import 'tabs/tab_ventas.dart';
-import 'tabs/tab_vendedores.dart';
-import 'tabs/tab_rentabilidad.dart';
-import 'tabs/tab_cartera.dart';
+import 'tabs/tab_ventas_y_vendedores.dart';
+import 'tabs/tab_finanzas.dart';
+import 'tabs/tab_clientes_y_cartera.dart';
 
 class ContabilidadScreen extends StatefulWidget {
   const ContabilidadScreen({super.key});
@@ -44,7 +40,7 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
     final auth  = context.read<AuthProvider>();
     final esCaj = auth.rol == 'cajero';
 
-    _tabCtrl = TabController(length: esCaj ? 3 : 10, vsync: this);
+    _tabCtrl = TabController(length: esCaj ? 3 : 6, vsync: this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
@@ -168,14 +164,14 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
 
                   // Selector de tienda (superadmin / admin / supervisor)
                   if (auth.esSuperadmin || auth.esAdmin || auth.esSupervisor)
-                    _cargandoTiendas
-                        ? _storeSelectorSkeleton()
-                        : _tiendas.isNotEmpty
-                            ? ConstrainedBox(
-                                constraints: const BoxConstraints(maxWidth: 165),
-                                child: _storeSelector(),
-                              )
-                            : const SizedBox.shrink(),
+                    SizedBox(
+                      width: 160,
+                      child: _cargandoTiendas
+                          ? _storeSelectorSkeleton()
+                          : _tiendas.isNotEmpty
+                              ? _storeSelector()
+                              : const SizedBox.shrink(),
+                    ),
 
                 ]),
               ),
@@ -266,59 +262,49 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
 
   Widget _storeSelector() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.outlineVariant),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.store_rounded, size: 15, color: AppColors.onSurfaceVariant),
-        const SizedBox(width: 6),
-        DropdownButtonHideUnderline(
-          child: DropdownButton<int?>(
-            value: _tiendaAdmin,
-            isDense: true,
-            dropdownColor: Colors.white,
-            icon: const Icon(Icons.keyboard_arrow_down_rounded,
-                size: 18, color: AppColors.onSurfaceVariant),
-            style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurface),
-            items: [
-              DropdownMenuItem<int?>(
-                value: null,
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.public_rounded, size: 14, color: AppColors.secondary),
-                  const SizedBox(width: 6),
-                  Text('Todas las tiendas',
+      child: Row(children: [
+        const Icon(Icons.store_rounded, size: 14, color: AppColors.onSurfaceVariant),
+        const SizedBox(width: 5),
+        Expanded(
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<int?>(
+              value: _tiendaAdmin,
+              isDense: true,
+              isExpanded: true,
+              dropdownColor: Colors.white,
+              icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                  size: 16, color: AppColors.onSurfaceVariant),
+              style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurface),
+              items: [
+                DropdownMenuItem<int?>(
+                  value: null,
+                  child: Text('Todas las tiendas',
+                      overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.inter(
-                          fontSize: 13,
+                          fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: AppColors.secondary)),
-                ]),
-              ),
-              ..._tiendas.map((t) => DropdownMenuItem<int?>(
-                    value: t['id'] as int?,
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(Icons.storefront_rounded,
-                          size: 14, color: AppColors.onSurfaceVariant),
-                      const SizedBox(width: 6),
-                      Text(t['nombre'] ?? '',
+                ),
+                ..._tiendas.map((t) => DropdownMenuItem<int?>(
+                      value: t['id'] as int?,
+                      child: Text(t['nombre'] ?? '',
+                          overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
-                              fontSize: 13, color: AppColors.onSurface)),
-                    ]),
-                  )),
-            ],
-            onChanged: (val) {
-              setState(() => _tiendaAdmin = val);
-              _recargarTodo();
-            },
+                              fontSize: 12, color: AppColors.onSurface)),
+                    )),
+              ],
+              onChanged: (val) {
+                setState(() => _tiendaAdmin = val);
+                _recargarTodo();
+              },
+            ),
           ),
         ),
       ]),
@@ -326,56 +312,43 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
   }
 
   // ── TABS — etiquetas ───────────────────────────────
-  // cajero : [0]Resumen  [1]Productos  [2]Operaciones
-  // admin  : [0]Resumen  [1]Análisis   [2]Operaciones  [3]Productos  [4]Clientes  [5]Tiendas
+  // cajero : [0]Dashboard  [1]Ventas  [2]Productos
+  // admin  : [0]Dashboard  [1]Ventas  [2]Finanzas  [3]Clientes  [4]Productos  [5]Tiendas
 
   List<Tab> _buildTabs(bool esCaj) {
-    const resumen     = Tab(text: 'Resumen');
-    const analisis    = Tab(text: 'Análisis P&L');
-    const operacion   = Tab(text: 'Operaciones');
-    const productos   = Tab(text: 'Top Productos');
-    const clientes    = Tab(text: 'Clientes');
-    const comparativo   = Tab(text: 'Tiendas');
-    const ventas        = Tab(text: 'Ventas');
-    const vendedores    = Tab(text: 'Vendedores');
-    const rentabilidad  = Tab(text: 'Rentabilidad');
-    const cartera = Tab(text: 'Cartera');
+    const dashboard = Tab(text: 'Dashboard');
+    const ventas    = Tab(text: 'Ventas');
+    const finanzas  = Tab(text: 'Finanzas');
+    const clientes  = Tab(text: 'Clientes');
+    const productos = Tab(text: 'Productos');
+    const tiendas   = Tab(text: 'Tiendas');
     return esCaj
-        ? [resumen, productos, operacion]
-        : [resumen, analisis, operacion, productos, clientes, comparativo,
-           ventas, vendedores, rentabilidad, cartera];
+        ? [dashboard, ventas, productos]
+        : [dashboard, ventas, finanzas, clientes, productos, tiendas];
   }
 
   // ── TABS — contenido ───────────────────────────────
+  // cajero : Dashboard | Ventas | Productos
+  // admin  : Dashboard | Ventas | Finanzas | Clientes | Productos | Tiendas
 
   List<Widget> _buildViews(
       bool esCaj, ContabilidadProvider cont, AuthProvider auth) {
 
-    final tabResumen = TabResumen(
+    final tabDashboard = TabResumen(
       cont: cont, fmt: _fmt, tiendaId: _tiendaId, esCajero: esCaj,
     );
+    final tabVentas = TabVentasYVendedores(tiendaId: _tiendaId, auth: auth);
     final tabProductos = TabTopProductos(cont: cont, fmt: _fmt);
-    final tabOperaciones = TabOperaciones(
-      cont:     cont,
-      fmt:      _fmt,
-      tiendaId: _tiendaId,
-      esCajero: esCaj,
-      auth:     auth,
-    );
 
-    if (esCaj) return [tabResumen, tabProductos, tabOperaciones];
+    if (esCaj) return [tabDashboard, tabVentas, tabProductos];
 
     return [
-      tabResumen,
-      TabPL(cont: cont, fmt: _fmt, tiendaId: _tiendaId),
-      tabOperaciones,
+      tabDashboard,
+      tabVentas,
+      TabFinanzas(cont: cont, fmt: _fmt, tiendaId: _tiendaId),
+      TabClientesYCartera(fmt: _fmt, tiendaId: _tiendaId),
       tabProductos,
-      TabTopClientes(fmt: _fmt, tiendaId: _tiendaId),
       TabComparativo(fmt: _fmt),
-      TabVentas(tiendaId: _tiendaId, auth: auth),
-      TabVendedores(tiendaId: _tiendaId),
-      TabRentabilidad(tiendaId: _tiendaId),
-      TabCartera(tiendaId: _tiendaId),
     ];
   }
 

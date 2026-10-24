@@ -307,4 +307,27 @@ class ClienteService {
       return {'abonos': [], 'total': 0.0};
     }
   }
+
+  Future<Map<String, dynamic>> enviarRecordatoriosSeparados({
+    int dias = 3,
+    int? tiendaId,
+  }) async {
+    try {
+      final r = await ApiClient.instance.post(
+        '/clientes/separados/recordatorios/',
+        queryParameters: {
+          'dias': dias,
+          if (tiendaId != null) 'tienda_id': tiendaId,
+        },
+      );
+      return {'success': true, 'data': r.data};
+    } on DioException catch (e) {
+      final msg = (e.response?.data is Map)
+          ? (e.response!.data['error'] ?? 'Error enviando recordatorios')
+          : 'Error enviando recordatorios';
+      return {'success': false, 'error': msg};
+    } catch (_) {
+      return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
 }

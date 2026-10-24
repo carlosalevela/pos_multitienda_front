@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/update_service.dart';
 
 Future<void> _abrirWhatsAppAdmin() async {
   // Número con código de país Colombia (+57)
@@ -75,6 +76,14 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passCtrl  = TextEditingController();
   final _passFocus = FocusNode();
   bool  _obscure   = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) UpdateService.chequear(context);
+    });
+  }
 
   @override
   void dispose() {

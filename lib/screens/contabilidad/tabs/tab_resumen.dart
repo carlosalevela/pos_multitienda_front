@@ -101,18 +101,18 @@ class _TabResumenState extends State<TabResumen> {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: sel ? AppColors.secondary : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(20),
+          color: sel ? AppColors.secondary : AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(6),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(icon, size: 14,
-              color: sel ? Colors.white : Colors.grey.shade600),
+              color: sel ? Colors.white : AppColors.onSurfaceVariant),
           const SizedBox(width: 6),
           Text(label,
               style: GoogleFonts.inter(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: sel ? Colors.white : Colors.grey.shade700)),
+                  color: sel ? Colors.white : AppColors.onSurfaceVariant)),
         ]),
       ),
     );

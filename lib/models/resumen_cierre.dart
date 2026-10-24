@@ -25,12 +25,14 @@ class AbonosCierre {
   final double total, efectivo, transferencia, tarjeta, creditoEfectivo;
   final double cancelacionesEfectivo, ingresosManual;
   final int    cantidad;
+  final List<Map<String, dynamic>> detalle;
 
   AbonosCierre({
     required this.total, required this.efectivo,
     required this.transferencia, required this.tarjeta,
     required this.creditoEfectivo, required this.cantidad,
     this.cancelacionesEfectivo = 0, this.ingresosManual = 0,
+    this.detalle = const [],
   });
 
   factory AbonosCierre.fromJson(Map<String, dynamic> j) => AbonosCierre(
@@ -42,6 +44,9 @@ class AbonosCierre {
     cancelacionesEfectivo:  double.tryParse(j['cancelaciones_efectivo']?.toString() ?? '0') ?? 0.0,
     ingresosManual:         double.tryParse(j['ingresos_manual']?.toString()        ?? '0') ?? 0.0,
     cantidad:               j['cantidad'] ?? 0,
+    detalle:                (j['detalle'] as List<dynamic>?)
+        ?.map((e) => Map<String, dynamic>.from(e as Map))
+        .toList() ?? const [],
   );
 
   factory AbonosCierre.vacio() => AbonosCierre(
@@ -121,14 +126,39 @@ class DevolucionesCierre {
 }
 
 
+class AnulacionesCierre {
+  final int    cantidad;
+  final double totalAnulado;
+  final List<Map<String, dynamic>> detalle;
+
+  AnulacionesCierre({
+    required this.cantidad,
+    required this.totalAnulado,
+    this.detalle = const [],
+  });
+
+  factory AnulacionesCierre.fromJson(Map<String, dynamic> j) => AnulacionesCierre(
+    cantidad:     (j['cantidad'] as num?)?.toInt() ?? 0,
+    totalAnulado: double.tryParse(j['total_anulado']?.toString() ?? '0') ?? 0.0,
+    detalle:      (j['detalle'] as List<dynamic>?)
+        ?.map((e) => Map<String, dynamic>.from(e as Map))
+        .toList() ?? const [],
+  );
+
+  factory AnulacionesCierre.vacio() =>
+      AnulacionesCierre(cantidad: 0, totalAnulado: 0);
+}
+
+
 class ResumenCierre {
   final int    sesionId;
   final String tiendaNombre, empleadoNombre, fechaApertura;
   final double montoInicial, montoEsperadoCaja;
-  final VentasCierre      ventas;
-  final GastosCierre      gastos;
-  final AbonosCierre      abonos;
+  final VentasCierre       ventas;
+  final GastosCierre       gastos;
+  final AbonosCierre       abonos;
   final DevolucionesCierre devoluciones;
+  final AnulacionesCierre  anulaciones;
   final List<Map<String, dynamic>> ventasDetalle;
 
   ResumenCierre({
@@ -136,10 +166,10 @@ class ResumenCierre {
     required this.empleadoNombre, required this.fechaApertura,
     required this.montoInicial,   required this.montoEsperadoCaja,
     required this.ventas,         required this.gastos,
-    required this.abonos,
-    required this.devoluciones,
+    required this.abonos,         required this.devoluciones,
+    AnulacionesCierre? anulaciones,
     this.ventasDetalle = const [],
-  });
+  }) : anulaciones = anulaciones ?? AnulacionesCierre.vacio();
 
   factory ResumenCierre.fromJson(Map<String, dynamic> j) => ResumenCierre(
     sesionId:          j['sesion_id']       ?? 0,
@@ -156,6 +186,9 @@ class ResumenCierre {
     devoluciones: j['devoluciones'] != null
         ? DevolucionesCierre.fromJson(j['devoluciones'])
         : DevolucionesCierre.vacio(),
+    anulaciones: j['anulaciones'] != null
+        ? AnulacionesCierre.fromJson(j['anulaciones'])
+        : AnulacionesCierre.vacio(),
     ventasDetalle: (j['ventas_detalle'] as List<dynamic>?)
         ?.map((e) => Map<String, dynamic>.from(e as Map))
         .toList() ?? const [],

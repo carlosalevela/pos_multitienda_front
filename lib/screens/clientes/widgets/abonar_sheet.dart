@@ -95,7 +95,7 @@ class _AbonarSheetState extends State<AbonarSheet> {
 
     if (ok) {
       if (_metodoPago == 'efectivo') unawaited(_kickCajon());
-      final imprimir = await showDialog<bool>(
+      final copias = await showDialog<int>(
         context:            context,
         barrierDismissible: true,
         builder: (ctx) => Dialog(
@@ -167,32 +167,53 @@ class _AbonarSheetState extends State<AbonarSheet> {
                   Text('¿Imprimir recibo de abono?',
                       style: GoogleFonts.inter(fontSize: 13, color: _kMuted)),
                   const SizedBox(height: 14),
-                  Row(children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: _kMuted,
-                          side: const BorderSide(color: _kBorder),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
+                  Column(children: [
+                    Row(children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(ctx, 0),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: _kMuted,
+                            side: const BorderSide(color: _kBorder),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: Text('No gracias',
+                              style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w600)),
                         ),
-                        child: Text('No gracias',
-                            style: GoogleFonts.inter(
-                                fontWeight: FontWeight.w600)),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => Navigator.pop(ctx, 1),
+                          icon: const Icon(Icons.print_rounded, size: 16),
+                          label: Text('Solo cliente',
+                              style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w700)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _kTeal,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: () => Navigator.pop(ctx, true),
+                        onPressed: () => Navigator.pop(ctx, 2),
                         icon: const Icon(Icons.print_rounded, size: 16),
-                        label: Text('Imprimir',
+                        label: Text('Cliente + Comercio',
                             style: GoogleFonts.inter(
                                 fontWeight: FontWeight.w700)),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: _kTeal,
+                          backgroundColor: _kTeal.withValues(alpha: 0.85),
                           foregroundColor: Colors.white,
                           elevation: 0,
                           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -211,9 +232,13 @@ class _AbonarSheetState extends State<AbonarSheet> {
       );
 
       if (!mounted) return;
-      if (imprimir == true) {
+      if (copias != null && copias > 0) {
         await _imprimirReciboAbono(monto, _metodoPago);
         if (!mounted) return;
+        if (copias == 2) {
+          await _imprimirReciboAbono(monto, _metodoPago);
+          if (!mounted) return;
+        }
       }
 
       final messenger = ScaffoldMessenger.of(context);

@@ -105,12 +105,6 @@ class _AuthGateState extends State<AuthGate> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-    if (auth.isLoggedIn) {
-      final ctx = context;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (ctx.mounted) UpdateService.chequear(ctx);
-      });
-    }
     return auth.isLoggedIn ? const HomeScreen() : const LoginScreen();
   }
 }
