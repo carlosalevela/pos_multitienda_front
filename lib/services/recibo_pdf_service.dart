@@ -75,7 +75,7 @@ class ReciboPdfService {
     required List<ItemCarrito> items,
     required String            numeroFactura,
     required String            tiendaNombre,
-    required String            empresaNombre,
+    String                     empresaNombre = '',
     required String            cajeroNombre,
     required String            metodoPago,
     required double            descuento,
@@ -86,6 +86,12 @@ class ReciboPdfService {
     String                     direccion     = '',
     String                     telefono      = '',
     String                     clienteNombre = '',
+    String                     sesionId      = '',
+    double                     montoEfectivo = 0,
+    double                     montoTarjeta  = 0,
+    double                     montoBono     = 0,
+    double                     faltanteBono  = 0,
+    String                     mensajePie    = '',
     bool                       soloGuardar   = false,
     bool                       esCopia       = false,
   }) async {
@@ -102,8 +108,8 @@ class ReciboPdfService {
     doc.addPage(pw.MultiPage(
       pageFormat: _pageFormat,
       build: (ctx) => [
-        // ── 1. Encabezado empresa ──────────────────────────────
-        _encabezado(fontBold, fontReg, empresaNombre, tiendaNombre,
+        // ── 1. Encabezado tienda ───────────────────────────────
+        _encabezado(fontBold, fontReg, tiendaNombre,
             nit, direccion, telefono),
         _divider(),
 
@@ -118,7 +124,7 @@ class ReciboPdfService {
 
         // ── 3. Info de la transacción ──────────────────────────
         _infoTransaccion(fontBold, fontReg, numeroFactura, cajeroNombre, now,
-            clienteNombre: clienteNombre),
+            clienteNombre: clienteNombre, sesionId: sesionId),
         _divider(),
 
         // ── 4. Tabla de productos ──────────────────────────────
@@ -143,7 +149,9 @@ class ReciboPdfService {
         _divider(),
 
         // ── 6. Pago ────────────────────────────────────────────
-        _pagoSection(fontBold, fontReg, metodoPago, montoRecibido, vuelto),
+        _pagoSection(fontBold, fontReg, metodoPago, montoRecibido, vuelto,
+            montoEfectivo: montoEfectivo, montoTarjeta: montoTarjeta,
+            montoBono: montoBono, faltanteBono: faltanteBono),
         _divider(),
 
         // ── 7. Código de barras ────────────────────────────────
@@ -186,7 +194,7 @@ class ReciboPdfService {
         ],
 
         // ── 9. Footer ─────────────────────────────────────────
-        _footer(fontBold, fontReg, empresaNombre),
+        _footer(fontBold, fontReg, mensajePie),
       ],
     ));
 
@@ -203,48 +211,47 @@ class ReciboPdfService {
 
   static pw.Widget _encabezado(
     pw.Font fontBold, pw.Font fontReg,
-    String empresa, String tienda,
+    String tienda,
     String nit, String dir, String tel,
   ) =>
     pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
-        // Bloque verde con nombre empresa
+        // Bloque verde con nombre de la tienda
+        // FittedBox + scaleDown: usa 14pt si cabe, escala al ancho
+        // disponible si no — funciona en 58mm, 80mm o cualquier papel.
         pw.Container(
           width:   double.infinity,
-          padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 6),
           decoration: const pw.BoxDecoration(color: _green),
-          child: pw.Column(children: [
-            pw.Text(empresa.toUpperCase(),
+          child: pw.FittedBox(
+            fit: pw.BoxFit.scaleDown,
+            child: pw.Text(tienda.toUpperCase(),
               textAlign: pw.TextAlign.center,
               style: pw.TextStyle(
-                  font: fontBold, fontSize: 14, color: PdfColors.white,
-                  letterSpacing: 1)),
-            pw.SizedBox(height: 2),
-            pw.Text(tienda,
-              textAlign: pw.TextAlign.center,
-              style: pw.TextStyle(
-                  font: fontReg, fontSize: 9, color: PdfColors.white)),
-          ]),
+                  font: fontBold, fontSize: 14,
+                  color: PdfColors.white, letterSpacing: 0.8)),
+          ),
         ),
         // Info adicional (NIT / dirección / teléfono)
-        if (nit.isNotEmpty || dir.isNotEmpty || tel.isNotEmpty) ...[
-          pw.SizedBox(height: 4),
-          if (nit.isNotEmpty)
-            pw.Text('NIT: $nit',
-              textAlign: pw.TextAlign.center,
-              style: pw.TextStyle(font: fontBold, fontSize: 8, color: _grey700)),
-          if (dir.isNotEmpty)
-            pw.Text(dir,
-              textAlign: pw.TextAlign.center,
-              style: pw.TextStyle(font: fontReg, fontSize: 7, color: _grey500)),
-          if (tel.isNotEmpty)
-            pw.Text('Tel: $tel',
-              textAlign: pw.TextAlign.center,
-              style: pw.TextStyle(font: fontReg, fontSize: 7, color: _grey500)),
-          pw.SizedBox(height: 4),
-        ] else
-          pw.SizedBox(height: 6),
+        pw.SizedBox(height: 4),
+        if (nit.isNotEmpty)
+          pw.Text('NIT: $nit',
+            textAlign: pw.TextAlign.center,
+            style: pw.TextStyle(font: fontBold, fontSize: 8, color: _grey700)),
+        if (dir.isNotEmpty)
+          pw.Text(dir,
+            textAlign: pw.TextAlign.center,
+            style: pw.TextStyle(font: fontReg, fontSize: 7, color: _grey500)),
+        if (tel.isNotEmpty)
+          pw.Text('Tel: $tel',
+            textAlign: pw.TextAlign.center,
+            style: pw.TextStyle(font: fontReg, fontSize: 7, color: _grey500)),
+        pw.SizedBox(height: 3),
+        pw.Text('Somos NO responsables de IVA',
+          textAlign: pw.TextAlign.center,
+          style: pw.TextStyle(font: fontReg, fontSize: 6.5, color: _grey500)),
+        pw.SizedBox(height: 4),
       ],
     );
 
@@ -253,12 +260,15 @@ class ReciboPdfService {
     pw.Font fontBold, pw.Font fontReg,
     String factura, String cajero, DateTime now, {
     String clienteNombre = '',
+    String sesionId      = '',
   }) {
     final fecha  = DateFormat('dd/MM/yyyy').format(now);
     final hora   = DateFormat('HH:mm:ss').format(now);
 
     return pw.Column(children: [
       _filaInfo(fontBold, fontReg, 'N° Factura:', factura, boldValue: true),
+      if (sesionId.isNotEmpty)
+        _filaInfo(fontBold, fontReg, 'Turno:',    sesionId),
       _filaInfo(fontBold, fontReg, 'Fecha:',      fecha),
       _filaInfo(fontBold, fontReg, 'Hora:',       hora),
       _filaInfo(fontBold, fontReg, 'Cajero:',     cajero),
@@ -337,36 +347,95 @@ class ReciboPdfService {
 
   static pw.Widget _pagoSection(
     pw.Font fontBold, pw.Font fontReg,
-    String metodo, double recibido, double vuelto,
-  ) =>
+    String metodo, double recibido, double vuelto, {
+    double montoEfectivo = 0,
+    double montoTarjeta  = 0,
+    double montoBono     = 0,
+    double faltanteBono  = 0,
+  }) =>
     pw.Column(children: [
       _filaInfo(fontBold, fontReg, 'Forma de pago:', _metodoLabel(metodo)),
       if (metodo == 'efectivo') ...[
         _filaInfo(fontBold, fontReg, 'Efectivo recibido:', '\$${_fmt.format(recibido)}'),
-        pw.Container(
-          width:   double.infinity,
-          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          margin:  const pw.EdgeInsets.only(top: 4),
-          decoration: pw.BoxDecoration(
-            color: PdfColors.grey100,
-            borderRadius: pw.BorderRadius.circular(4),
+        if (vuelto > 0)
+          pw.Container(
+            width:   double.infinity,
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            margin:  const pw.EdgeInsets.only(top: 4),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.grey100,
+              borderRadius: pw.BorderRadius.circular(4),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('Su vuelto:',
+                  style: pw.TextStyle(font: fontBold, fontSize: 10, color: _dark)),
+                pw.Text('\$${_fmt.format(vuelto)}',
+                  style: pw.TextStyle(font: fontBold, fontSize: 12, color: _dark)),
+              ],
+            ),
           ),
-          child: pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Text('Su vuelto:',
-                style: pw.TextStyle(font: fontBold, fontSize: 10, color: _dark)),
-              pw.Text('\$${_fmt.format(vuelto)}',
-                style: pw.TextStyle(font: fontBold, fontSize: 12, color: _dark)),
-            ],
+      ] else if (metodo == 'mixto') ...[
+        if (montoEfectivo > 0)
+          _filaInfo(fontBold, fontReg, 'Efectivo:', '\$${_fmt.format(montoEfectivo)}'),
+        if (montoTarjeta > 0)
+          _filaInfo(fontBold, fontReg, 'Tarjeta:', '\$${_fmt.format(montoTarjeta)}'),
+        if (vuelto > 0) ...[
+          pw.Container(
+            width:   double.infinity,
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            margin:  const pw.EdgeInsets.only(top: 4),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.grey100,
+              borderRadius: pw.BorderRadius.circular(4),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('Su vuelto:',
+                  style: pw.TextStyle(font: fontBold, fontSize: 10, color: _dark)),
+                pw.Text('\$${_fmt.format(vuelto)}',
+                  style: pw.TextStyle(font: fontBold, fontSize: 12, color: _dark)),
+              ],
+            ),
           ),
-        ),
+        ],
+      ] else if (metodo == 'bono' || metodo.startsWith('bono_')) ...[
+        _filaInfo(fontBold, fontReg, 'Bono:', '\$${_fmt.format(montoBono > 0 ? montoBono : recibido)}'),
+        if (metodo == 'bono_efectivo' && faltanteBono > 0) ...[
+          _filaInfo(fontBold, fontReg, 'Efectivo:', '\$${_fmt.format(faltanteBono)}'),
+          if (recibido > faltanteBono)
+            _filaInfo(fontBold, fontReg, 'Efectivo recibido:', '\$${_fmt.format(recibido)}'),
+          if (vuelto > 0)
+            pw.Container(
+              width:   double.infinity,
+              padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              margin:  const pw.EdgeInsets.only(top: 4),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey100,
+                borderRadius: pw.BorderRadius.circular(4),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Su vuelto:',
+                    style: pw.TextStyle(font: fontBold, fontSize: 10, color: _dark)),
+                  pw.Text('\$${_fmt.format(vuelto)}',
+                    style: pw.TextStyle(font: fontBold, fontSize: 12, color: _dark)),
+                ],
+              ),
+            ),
+        ] else if (metodo == 'bono_tarjeta' && faltanteBono > 0)
+          _filaInfo(fontBold, fontReg, 'Tarjeta:', '\$${_fmt.format(faltanteBono)}')
+        else if (metodo == 'bono_transferencia' && faltanteBono > 0)
+          _filaInfo(fontBold, fontReg, 'Transferencia:', '\$${_fmt.format(faltanteBono)}'),
       ],
     ]);
 
 
   static pw.Widget _footer(
-    pw.Font fontBold, pw.Font fontReg, String empresa,
+    pw.Font fontBold, pw.Font fontReg, String eslogan,
   ) =>
     pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.center,
@@ -376,15 +445,25 @@ class ReciboPdfService {
           textAlign: pw.TextAlign.center,
           style: pw.TextStyle(font: fontBold, fontSize: 11, color: _green)),
         pw.SizedBox(height: 4),
-        pw.Text(
-          'Para cambios o devoluciones presente\n'
-          'este recibo dentro de los próximos 30 días.',
+        pw.Text('Presente su factura para cambios. Tiene 8 dias.',
           textAlign: pw.TextAlign.center,
           style: pw.TextStyle(font: fontReg, fontSize: 7, color: _grey500)),
-        pw.SizedBox(height: 6),
-        pw.Text(empresa,
+        pw.SizedBox(height: 2),
+        pw.Text('Somos NO responsables de IVA.',
           textAlign: pw.TextAlign.center,
-          style: pw.TextStyle(font: fontBold, fontSize: 8, color: _grey700)),
+          style: pw.TextStyle(font: fontReg, fontSize: 7, color: _grey500)),
+        if (eslogan.isNotEmpty) ...[
+          pw.SizedBox(height: 6),
+          pw.Text(eslogan,
+            textAlign: pw.TextAlign.center,
+            style: pw.TextStyle(font: fontBold, fontSize: 9, color: _dark)),
+        ],
+        pw.SizedBox(height: 6),
+        pw.Divider(color: _grey300, thickness: 0.3),
+        pw.SizedBox(height: 3),
+        pw.Text('Facturado con SIS · POS Multitienda',
+          textAlign: pw.TextAlign.center,
+          style: pw.TextStyle(font: fontReg, fontSize: 6.5, color: _grey500)),
         pw.SizedBox(height: 4),
       ],
     );
@@ -444,10 +523,15 @@ class ReciboPdfService {
 
   static String _metodoLabel(String m) {
     switch (m) {
-      case 'transferencia': return 'Transferencia bancaria';
-      case 'tarjeta':       return 'Tarjeta débito / crédito';
-      case 'nota_credito':  return 'Nota de crédito';
-      default:              return 'Efectivo';
+      case 'transferencia':      return 'Transferencia bancaria';
+      case 'tarjeta':            return 'Tarjeta débito / crédito';
+      case 'mixto':              return 'Pago mixto';
+      case 'nota_credito':       return 'Nota de crédito';
+      case 'bono':               return 'Bono de regalo';
+      case 'bono_efectivo':      return 'Bono + Efectivo';
+      case 'bono_tarjeta':       return 'Bono + Tarjeta';
+      case 'bono_transferencia': return 'Bono + Transferencia';
+      default:                   return 'Efectivo';
     }
   }
 
@@ -482,7 +566,7 @@ class ReciboPdfService {
       pageFormat: _pageFormat,
       build: (ctx) => [
         // ── 1. Encabezado ─────────────────────────────────────
-        _encabezado(fontBold, fontReg, empresaNombre, dev.tiendaNombre,
+        _encabezado(fontBold, fontReg, dev.tiendaNombre,
             nit, direccion, telefono),
         _divider(),
 
@@ -518,15 +602,20 @@ class ReciboPdfService {
         pw.SizedBox(height: 4),
         _divider(),
 
-        // ── 5. Producto entregado (cambio) ─────────────────────
-        if (esCambio && dev.productoReemplazoNombre != null) ...[
+        // ── 5. Producto(s) entregado(s) (cambio) ───────────────
+        if (esCambio && (dev.reemplazos.isNotEmpty || dev.productoReemplazoNombre != null)) ...[
           pw.Padding(
             padding: const pw.EdgeInsets.only(bottom: 4),
-            child: pw.Text('PRODUCTO ENTREGADO',
+            child: pw.Text('PRODUCTOS ENTREGADOS',
               style: pw.TextStyle(font: fontBold, fontSize: 7,
                   color: _green, letterSpacing: 0.8)),
           ),
-          _reemplazoRow(dev, fontBold, fontReg),
+          // nuevo modelo: lista de reemplazos
+          if (dev.reemplazos.isNotEmpty)
+            ...dev.reemplazos.map((r) => _reemplazoItemRow(r, fontBold, fontReg))
+          // fallback legacy
+          else
+            _reemplazoRow(dev, fontBold, fontReg),
           pw.SizedBox(height: 4),
           _divider(),
         ],
@@ -588,7 +677,7 @@ class ReciboPdfService {
         _divider(),
 
         // ── 9. Footer ──────────────────────────────────────────
-        _footerDevolucion(fontBold, fontReg, empresaNombre, esCambio),
+        _footerDevolucion(fontBold, fontReg, esCambio),
       ],
     ));
 
@@ -628,6 +717,32 @@ class ReciboPdfService {
     );
   }
 
+  static pw.Widget _reemplazoItemRow(
+    DetalleReemplazoModel r,
+    pw.Font fontBold,
+    pw.Font fontReg,
+  ) {
+    final cantStr = r.cantidad % 1 == 0
+        ? r.cantidad.toStringAsFixed(0)
+        : r.cantidad.toStringAsFixed(2);
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 5),
+      child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+        pw.Expanded(
+          child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.Text(r.productoNombre,
+              style: pw.TextStyle(font: fontBold, fontSize: 9)),
+            pw.Text('$cantStr × \$${_fmt.format(r.precioUnitario)} c/u',
+              style: pw.TextStyle(font: fontReg, fontSize: 7, color: _grey500)),
+          ]),
+        ),
+        pw.SizedBox(width: 6),
+        pw.Text('\$${_fmt.format(r.subtotal)}',
+          style: pw.TextStyle(font: fontBold, fontSize: 10)),
+      ]),
+    );
+  }
+
   static pw.Widget _reemplazoRow(
     DevolucionModel dev,
     pw.Font fontBold,
@@ -657,7 +772,7 @@ class ReciboPdfService {
 
   static pw.Widget _footerDevolucion(
     pw.Font fontBold, pw.Font fontReg,
-    String empresa, bool esCambio,
+    bool esCambio,
   ) =>
     pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.center,
@@ -676,10 +791,16 @@ class ReciboPdfService {
           textAlign: pw.TextAlign.center,
           style: pw.TextStyle(font: fontReg, fontSize: 7, color: _grey500),
         ),
-        pw.SizedBox(height: 6),
-        pw.Text(empresa,
+        pw.SizedBox(height: 4),
+        pw.Text('Presente su factura para cambios. Tiene 8 dias.',
           textAlign: pw.TextAlign.center,
-          style: pw.TextStyle(font: fontBold, fontSize: 8, color: _grey700)),
+          style: pw.TextStyle(font: fontReg, fontSize: 7, color: _grey500)),
+        pw.SizedBox(height: 6),
+        pw.Divider(color: _grey300, thickness: 0.3),
+        pw.SizedBox(height: 3),
+        pw.Text('Facturado con SIS · POS Multitienda',
+          textAlign: pw.TextAlign.center,
+          style: pw.TextStyle(font: fontReg, fontSize: 6.5, color: _grey500)),
         pw.SizedBox(height: 4),
       ],
     );
@@ -692,6 +813,9 @@ class ReciboPdfService {
   static Future<void> imprimirSeparado({
     required Separado separado,
     required String   empresaNombre,
+    String            nit       = '',
+    String            direccion = '',
+    String            telefono  = '',
     bool              soloGuardar = false,
   }) async {
     final fontReg  = await PdfGoogleFonts.interRegular();
@@ -705,8 +829,8 @@ class ReciboPdfService {
       pageFormat: _pageFormat,
       build: (ctx) => [
         // ── 1. Encabezado ─────────────────────────────────────
-        _encabezado(fontBold, fontReg, empresaNombre,
-            separado.tiendaNombre, '', '', ''),
+        _encabezado(fontBold, fontReg,
+            separado.tiendaNombre, nit, direccion, telefono),
         _divider(),
 
         // ── 2. Título ──────────────────────────────────────────
@@ -851,9 +975,11 @@ class ReciboPdfService {
               textAlign: pw.TextAlign.center,
               style: pw.TextStyle(font: fontReg, fontSize: 7, color: _grey500)),
             pw.SizedBox(height: 6),
-            pw.Text(empresaNombre,
+            pw.Divider(color: _grey300, thickness: 0.3),
+            pw.SizedBox(height: 3),
+            pw.Text('Facturado con SIS · POS Multitienda',
               textAlign: pw.TextAlign.center,
-              style: pw.TextStyle(font: fontBold, fontSize: 8, color: _grey700)),
+              style: pw.TextStyle(font: fontReg, fontSize: 6.5, color: _grey500)),
             pw.SizedBox(height: 4),
           ],
         ),
@@ -878,6 +1004,9 @@ class ReciboPdfService {
     required double   monto,
     required String   metodoPago,
     required String   empresaNombre,
+    String            nit       = '',
+    String            direccion = '',
+    String            telefono  = '',
   }) async {
     final fontReg  = await PdfGoogleFonts.interRegular();
     final fontBold = await PdfGoogleFonts.interBold();
@@ -892,8 +1021,8 @@ class ReciboPdfService {
       pageFormat: _pageFormat,
       build: (ctx) => [
         // ── 1. Encabezado ─────────────────────────────────────
-        _encabezado(fontBold, fontReg, empresaNombre,
-            separado.tiendaNombre, '', '', ''),
+        _encabezado(fontBold, fontReg,
+            separado.tiendaNombre, nit, direccion, telefono),
         _divider(),
 
         // ── 2. Título ──────────────────────────────────────────
@@ -997,9 +1126,11 @@ class ReciboPdfService {
               textAlign: pw.TextAlign.center,
               style: pw.TextStyle(font: fontBold, fontSize: 10, color: _teal)),
             pw.SizedBox(height: 6),
-            pw.Text(empresaNombre,
+            pw.Divider(color: _grey300, thickness: 0.3),
+            pw.SizedBox(height: 3),
+            pw.Text('Facturado con SIS · POS Multitienda',
               textAlign: pw.TextAlign.center,
-              style: pw.TextStyle(font: fontBold, fontSize: 8, color: _grey700)),
+              style: pw.TextStyle(font: fontReg, fontSize: 6.5, color: _grey500)),
             pw.SizedBox(height: 4),
           ],
         ),

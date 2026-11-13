@@ -308,11 +308,12 @@ class ReportePdfService {
   }) {
     final metodos = rep.totalPorMetodo;
     if (metodos.isEmpty) return pw.SizedBox();
+    final totalMetodos = metodos.values.fold(0.0, (s, v) => s + v);
 
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        _sectionTitle('Ventas por método de pago',
+        _sectionTitle('Ingresos por método de pago',
             PdfColors.blueGrey700, fontBold, font),
         pw.SizedBox(height: 8),
         pw.Row(
@@ -335,8 +336,8 @@ class ReportePdfService {
                     style: pw.TextStyle(font: fontBold, fontSize: 14,
                         color: PdfColors.blue700)),
                   pw.Text(
-                    '${(rep.totalDia == 0 ? 0
-                        : (e.value / rep.totalDia * 100))
+                    '${(totalMetodos == 0 ? 0
+                        : (e.value / totalMetodos * 100))
                         .toStringAsFixed(1)}%',
                     style: pw.TextStyle(font: font, fontSize: 9,
                         color: PdfColors.grey500)),
@@ -515,10 +516,28 @@ class ReportePdfService {
               final factura  = d['venta_numero'] ?? 'DEV-${d['id']}';
               final metodo   = d['metodo_devolucion']?.toString() ?? '';
               final empleado = d['empleado_nombre'] ?? '';
-              final productos = (d['productos_devueltos'] as List? ?? [])
-                  .map((p) => '${p['producto']} x${(double.tryParse(
-                      p['cantidad'].toString()) ?? 0).toStringAsFixed(0)}')
+              final tipo = d['tipo']?.toString() ?? '';
+              final productos = (d['detalles'] as List? ?? d['productos_devueltos'] as List? ?? [])
+                  .map((p) {
+                    final nombre = p['producto_nombre']?.toString()
+                        ?? p['producto']?.toString() ?? '';
+                    final cant = (double.tryParse(p['cantidad'].toString()) ?? 0)
+                        .toStringAsFixed(0);
+                    return '$nombre x$cant';
+                  })
                   .join(', ');
+              // Productos entregados en cambio
+              final reemplazosRaw = d['reemplazos'] as List? ?? [];
+              final entregados = reemplazosRaw.isNotEmpty
+                  ? reemplazosRaw.map((r) {
+                      final nombre = r['producto_nombre']?.toString()
+                          ?? r['nombre']?.toString() ?? '';
+                      final cant = (double.tryParse(
+                              r['cantidad']?.toString() ?? '0') ?? 0)
+                          .toStringAsFixed(0);
+                      return '$nombre x$cant';
+                    }).join(', ')
+                  : '';
 
               return pw.TableRow(
                 decoration: pw.BoxDecoration(
@@ -526,7 +545,21 @@ class ReportePdfService {
                 children: [
                   _td(factura, fontBold, color: PdfColors.red700),
                   _td(hora, font),
-                  _td(productos, font, size: 8),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(4),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(productos,
+                            style: pw.TextStyle(font: font, fontSize: 8)),
+                        if (tipo == 'cambio' && entregados.isNotEmpty)
+                          pw.Text('→ $entregados',
+                              style: pw.TextStyle(
+                                  font: fontMedium, fontSize: 7,
+                                  color: PdfColors.green800)),
+                      ],
+                    ),
+                  ),
                   _td(empleado, font),
                   _td(metodo, fontMedium),
                   _td('-\$${_fmt(devTotal)}', fontBold,
@@ -894,9 +927,11 @@ class ReportePdfService {
     required Map<String, double> metodosPago,
     required List<Map<String, dynamic>> gastosSesion,
     required double totalGastos,
-    List<TopProducto> topProductos        = const [],
+    List<TopProducto> topProductos           = const [],
     List<Map<String, dynamic>> separadosDia  = const [],
     List<Map<String, dynamic>> resumenCuentas = const [],
+    List<Map<String, dynamic>> ventasDia     = const [],
+    List<Map<String, dynamic>> abonosDia     = const [],
     bool soloGuardar = false,
   }) async {
     final pdf        = pw.Document();
@@ -921,18 +956,31 @@ class ReportePdfService {
               bottom: pw.BorderSide(color: PdfColors.grey300))),
           child: pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text('Comprobante de Cierre de Turno',
-                    style: pw.TextStyle(font: fontBold, fontSize: 16,
-                        color: const PdfColor.fromInt(0xFF0B7A53))),
-                  pw.Text('$tiendaNombre  •  Cajero: ${sesion.empleadoNombre}',
-                    style: pw.TextStyle(font: font, fontSize: 10,
-                        color: PdfColors.grey600)),
-                ],
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('Comprobante de Cierre de Turno',
+                      style: pw.TextStyle(font: fontBold, fontSize: 16,
+                          color: const PdfColor.fromInt(0xFF0B7A53))),
+                    pw.SizedBox(height: 2),
+                    pw.FittedBox(
+                      fit: pw.BoxFit.scaleDown,
+                      alignment: pw.Alignment.centerLeft,
+                      child: pw.Text(tiendaNombre,
+                        style: pw.TextStyle(font: fontBold, fontSize: 13,
+                            color: const PdfColor.fromInt(0xFF1A1A2E))),
+                    ),
+                    pw.SizedBox(height: 1),
+                    pw.Text('Cajero: ${sesion.empleadoNombre}  •  Turno #${sesion.id}',
+                      style: pw.TextStyle(font: font, fontSize: 10,
+                          color: PdfColors.grey600)),
+                  ],
+                ),
               ),
+              pw.SizedBox(width: 16),
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
@@ -954,7 +1002,7 @@ class ReportePdfService {
           child: pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Text('Sistema POS — $empresaNombre',
+              pw.Text('Sistema POS — $tiendaNombre',
                 style: pw.TextStyle(font: font, fontSize: 9,
                     color: PdfColors.grey500)),
               pw.Text('Página ${ctx.pageNumber} de ${ctx.pagesCount}',
@@ -963,7 +1011,109 @@ class ReportePdfService {
             ],
           ),
         ),
-        build: (ctx) => [
+        build: (ctx) {
+          // Construir lista unificada FAC / SEP / ABO
+          final ventas   = ventasDia.where((v) =>
+              (v['estado']?.toString() ?? '') != 'anulada').toList();
+          final sepDia   = separadosDia;
+          final abonoLst = abonosDia;
+
+          double totalFac = ventas.fold(0.0, (s, v) =>
+              s + (double.tryParse(v['total']?.toString() ?? '0') ?? 0));
+          double totalSep = sepDia.fold(0.0, (s, v) =>
+              s + (double.tryParse(v['total']?.toString() ?? '0') ?? 0));
+          double totalAbo = abonoLst.fold(0.0, (s, v) =>
+              s + (double.tryParse(v['monto']?.toString() ?? '0') ?? 0));
+
+          String _metLabel(String? m) => switch (m?.toLowerCase() ?? '') {
+            'tarjeta'       => 'Tarjeta',
+            'transferencia' => 'Transf.',
+            'mixto'         => 'Mixto',
+            'credito'       => 'Crédito',
+            _               => 'Efectivo',
+          };
+
+          pw.Widget _buildTransactionRow(
+              String num, String tipo, String desc,
+              String metodo, String monto,
+              PdfColor colorTipo, pw.Font fnt, pw.Font fntBold) =>
+            pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(vertical: 3),
+              child: pw.Row(children: [
+                pw.SizedBox(width: 28,
+                  child: pw.Text(num,
+                    style: pw.TextStyle(font: fnt, fontSize: 9,
+                        color: PdfColors.grey500))),
+                pw.Container(
+                  width: 34, height: 16,
+                  alignment: pw.Alignment.center,
+                  decoration: pw.BoxDecoration(
+                    color: colorTipo.shade(0.15),
+                    borderRadius: pw.BorderRadius.circular(4)),
+                  child: pw.Text(tipo,
+                    style: pw.TextStyle(font: fntBold, fontSize: 8,
+                        color: colorTipo))),
+                pw.SizedBox(width: 6),
+                pw.Expanded(
+                  child: pw.Text(desc,
+                    overflow: pw.TextOverflow.clip,
+                    style: pw.TextStyle(font: fnt, fontSize: 9,
+                        color: const PdfColor.fromInt(0xFF1A1A2E)))),
+                pw.SizedBox(width: 6),
+                pw.SizedBox(width: 60,
+                  child: pw.Text(metodo,
+                    style: pw.TextStyle(font: fnt, fontSize: 9,
+                        color: PdfColors.grey600))),
+                pw.SizedBox(width: 70,
+                  child: pw.Text(monto,
+                    textAlign: pw.TextAlign.right,
+                    style: pw.TextStyle(font: fntBold, fontSize: 9,
+                        color: const PdfColor.fromInt(0xFF1A1A2E)))),
+              ]),
+            );
+
+          pw.Widget _subtotalRow(String label, int count,
+              double total, PdfColor color, pw.Font fntBold, pw.Font fnt) =>
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 4, bottom: 4, left: 34),
+              child: pw.Row(children: [
+                pw.Container(
+                  width: 34, height: 15,
+                  alignment: pw.Alignment.center,
+                  decoration: pw.BoxDecoration(
+                    color: color.shade(0.15),
+                    borderRadius: pw.BorderRadius.circular(4)),
+                  child: pw.Text(label,
+                    style: pw.TextStyle(font: fntBold, fontSize: 8,
+                        color: color))),
+                pw.SizedBox(width: 8),
+                pw.Text('$count operación${count != 1 ? "es" : ""}',
+                  style: pw.TextStyle(font: fnt, fontSize: 9,
+                      color: PdfColors.grey600)),
+                pw.Expanded(child: pw.SizedBox()),
+                pw.SizedBox(width: 70,
+                  child: pw.Text('\$${_fmt(total)}',
+                    textAlign: pw.TextAlign.right,
+                    style: pw.TextStyle(font: fntBold, fontSize: 9,
+                        color: color))),
+              ]),
+            );
+
+          return [
+          // ── Disclaimer IVA ─────────────────────
+          pw.Container(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: pw.BoxDecoration(
+              color: const PdfColor.fromInt(0xFFFFF8E1),
+              borderRadius: pw.BorderRadius.circular(6),
+              border: pw.Border.all(color: const PdfColor.fromInt(0xFFFFCC02))),
+            child: pw.Text(
+              'Este comprobante no es válido como factura fiscal. Somos NO responsables de IVA.',
+              style: pw.TextStyle(font: fontMedium, fontSize: 8,
+                  color: const PdfColor.fromInt(0xFF856404))),
+          ),
+          pw.SizedBox(height: 14),
+
           // ── Balance de caja ────────────────────
           pw.Container(
             padding: const pw.EdgeInsets.all(14),
@@ -990,6 +1140,12 @@ class ReportePdfService {
                 _turnoItem('Efectivo esperado',
                     '\$${_fmt(sesion.montoEsperado as double)}',
                     const PdfColor.fromInt(0xFF0B7A53), fontBold, fontBold,
+                    grande: true),
+                _separadorV(),
+                _turnoItem(
+                    'Valor a\nentregar',
+                    '\$${_fmt((sesion.montoEsperado as double) - (sesion.saldo_inicial as double))}',
+                    const PdfColor.fromInt(0xFF7C3AED), fontBold, fontBold,
                     grande: true),
               ],
             ),
@@ -1022,8 +1178,8 @@ class ReportePdfService {
                         style: pw.TextStyle(font: fontBold, fontSize: 14,
                             color: PdfColors.blue700)),
                       pw.Text(
-                        '${(sesion.ventasTotal == 0 ? 0
-                            : (e.value / (sesion.ventasTotal as double) * 100))
+                        '${(metodosPago.values.fold(0.0, (s, v) => s + v) == 0 ? 0
+                            : (e.value / metodosPago.values.fold(0.0, (s, v) => s + v) * 100))
                             .toStringAsFixed(1)}%',
                         style: pw.TextStyle(font: font, fontSize: 9,
                             color: PdfColors.grey500)),
@@ -1292,34 +1448,210 @@ class ReportePdfService {
             pw.SizedBox(height: 16),
           ],
 
-          // ── Recuadro de cierre ─────────────────
+          // ── Detalle FAC / SEP / ABO ────────────
+          if (ventas.isNotEmpty || sepDia.isNotEmpty || abonoLst.isNotEmpty) ...[
+            _sectionTitle(
+              'Detalle de transacciones del turno',
+              const PdfColor.fromInt(0xFF1A1A2E), fontBold, font,
+              badge: '${ventas.length + sepDia.length + abonoLst.length} total',
+            ),
+            pw.SizedBox(height: 4),
+            // Header de tabla
+            pw.Container(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              decoration: const pw.BoxDecoration(
+                  color: PdfColor.fromInt(0xFF1A1A2E)),
+              child: pw.Row(children: [
+                pw.SizedBox(width: 28,
+                  child: pw.Text('#', style: pw.TextStyle(font: fontBold,
+                      fontSize: 8, color: PdfColors.white))),
+                pw.SizedBox(width: 34,
+                  child: pw.Text('Tipo', style: pw.TextStyle(font: fontBold,
+                      fontSize: 8, color: PdfColors.white))),
+                pw.SizedBox(width: 6),
+                pw.Expanded(child: pw.Text('Descripción',
+                  style: pw.TextStyle(font: fontBold, fontSize: 8,
+                      color: PdfColors.white))),
+                pw.SizedBox(width: 66,
+                  child: pw.Text('Método', style: pw.TextStyle(font: fontBold,
+                      fontSize: 8, color: PdfColors.white))),
+                pw.SizedBox(width: 70,
+                  child: pw.Text('Monto', textAlign: pw.TextAlign.right,
+                    style: pw.TextStyle(font: fontBold, fontSize: 8,
+                        color: PdfColors.white))),
+              ]),
+            ),
+            // Ventas (FAC) — con desglose de productos
+            ...ventas.asMap().entries.expand((e) {
+              final v        = e.value;
+              final total    = double.tryParse(v['total']?.toString() ?? '0') ?? 0;
+              final id       = v['id']?.toString() ?? '${e.key + 1}';
+              final met      = _metLabel(v['metodo_pago']?.toString());
+              final desc     = 'FAC #$id  •  $met';
+              final detalles = v['detalles'] is List
+                  ? (v['detalles'] as List).cast<Map>() : <Map>[];
+              return [
+                _buildTransactionRow(
+                  '${e.key + 1}', 'FAC', desc,
+                  _metLabel(v['metodo_pago']?.toString()),
+                  '\$${_fmt(total)}',
+                  const PdfColor.fromInt(0xFF0B7A53), font, fontBold,
+                ),
+                ...detalles.map((d) {
+                  final nombre  = d['producto_nombre']?.toString() ?? '';
+                  final cant    = double.tryParse(d['cantidad']?.toString() ?? '1') ?? 1;
+                  final sub     = double.tryParse(d['subtotal']?.toString()  ?? '0') ?? 0;
+                  final cantStr = cant == cant.roundToDouble()
+                      ? cant.toInt().toString() : cant.toStringAsFixed(1);
+                  return pw.Padding(
+                    padding: const pw.EdgeInsets.only(left: 68, top: 1, bottom: 1),
+                    child: pw.Row(children: [
+                      pw.Expanded(child: pw.Text(
+                        '• $cantStr × $nombre',
+                        style: pw.TextStyle(font: font, fontSize: 8,
+                            color: PdfColors.grey600))),
+                      pw.SizedBox(width: 70,
+                        child: pw.Text('\$${_fmt(sub)}',
+                          textAlign: pw.TextAlign.right,
+                          style: pw.TextStyle(font: font, fontSize: 8,
+                              color: PdfColors.grey600))),
+                    ]),
+                  );
+                }),
+              ];
+            }),
+            if (ventas.isNotEmpty)
+              _subtotalRow('FAC', ventas.length, totalFac,
+                  const PdfColor.fromInt(0xFF0B7A53), fontBold, font),
+            // Separados (SEP)
+            ...sepDia.asMap().entries.map((e) {
+              final s   = e.value;
+              final tot = double.tryParse(s['total']?.toString() ?? '0') ?? 0;
+              final cli = s['cliente_nombre']?.toString()
+                       ?? s['cliente']?.toString() ?? '—';
+              return _buildTransactionRow(
+                '${ventas.length + e.key + 1}', 'SEP', cli,
+                _metLabel(s['metodo_pago']?.toString()),
+                '\$${_fmt(tot)}',
+                const PdfColor.fromInt(0xFF0D7C8A), font, fontBold,
+              );
+            }),
+            if (sepDia.isNotEmpty)
+              _subtotalRow('SEP', sepDia.length, totalSep,
+                  const PdfColor.fromInt(0xFF0D7C8A), fontBold, font),
+            // Abonos (ABO)
+            ...abonoLst.asMap().entries.map((e) {
+              final a   = e.value;
+              final mon = double.tryParse(a['monto']?.toString() ?? '0') ?? 0;
+              final cli = a['cliente_nombre']?.toString() ?? '—';
+              return _buildTransactionRow(
+                '${ventas.length + sepDia.length + e.key + 1}', 'ABO', cli,
+                _metLabel(a['metodo_pago']?.toString()),
+                '\$${_fmt(mon)}',
+                const PdfColor.fromInt(0xFF7C3AED), font, fontBold,
+              );
+            }),
+            if (abonoLst.isNotEmpty)
+              _subtotalRow('ABO', abonoLst.length, totalAbo,
+                  const PdfColor.fromInt(0xFF7C3AED), fontBold, font),
+            pw.SizedBox(height: 16),
+          ],
+
+          // ── Cuadre de caja detallado ────────────
+          _sectionTitle('Cuadre de caja', const PdfColor.fromInt(0xFF0B7A53),
+              fontBold, font),
+          pw.SizedBox(height: 8),
           pw.Container(
             padding: const pw.EdgeInsets.all(14),
             decoration: pw.BoxDecoration(
               color: const PdfColor.fromInt(0xFFE8FFF4),
               borderRadius: pw.BorderRadius.circular(8),
-              border: pw.Border.all(
-                  color: const PdfColor.fromInt(0xFF0B7A53)),
+              border: pw.Border.all(color: const PdfColor.fromInt(0xFF61DDAA)),
             ),
-            child: pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text(
-                  'Sesión #${sesion.id}  •  N° transacciones: ${sesion.numTransacciones}',
-                  style: pw.TextStyle(font: font, fontSize: 10,
-                      color: PdfColors.grey700)),
+                // Fila de KPIs principales
                 pw.Row(children: [
-                  pw.Text('Efectivo esperado en caja: ',
-                    style: pw.TextStyle(font: fontBold, fontSize: 12,
-                        color: PdfColors.grey800)),
-                  pw.Text('\$${_fmt(sesion.montoEsperado as double)}',
-                    style: pw.TextStyle(font: fontBold, fontSize: 15,
-                        color: const PdfColor.fromInt(0xFF0B7A53))),
+                  _turnoItem('Saldo apertura',
+                      '\$${_fmt(sesion.saldo_inicial as double)}',
+                      PdfColors.grey700, font, fontBold),
+                  _separadorV(),
+                  _turnoItem('Ventas del turno',
+                      '+\$${_fmt(sesion.ventasTotal as double)}',
+                      const PdfColor.fromInt(0xFF0B7A53), font, fontBold),
+                  _separadorV(),
+                  _turnoItem('Gastos del turno',
+                      '-\$${_fmt(sesion.gastosTotal as double)}',
+                      PdfColors.orange700, font, fontBold),
+                  _separadorV(),
+                  _turnoItem('Efectivo esperado',
+                      '\$${_fmt(sesion.montoEsperado as double)}',
+                      const PdfColor.fromInt(0xFF0B7A53), fontBold, fontBold,
+                      grande: true),
                 ]),
+                pw.SizedBox(height: 12),
+                pw.Divider(color: PdfColors.grey300),
+                pw.SizedBox(height: 8),
+                // Desglose efectivo
+                pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('Desglose efectivo en caja:',
+                          style: pw.TextStyle(font: fontBold, fontSize: 10,
+                              color: PdfColors.grey700)),
+                        pw.SizedBox(height: 4),
+                        pw.Text('Fondo base:  \$${_fmt(sesion.saldo_inicial as double)}',
+                          style: pw.TextStyle(font: font, fontSize: 9,
+                              color: PdfColors.grey600)),
+                        pw.Text(
+                          '+ Ingresos ef:  \$${_fmt(sesion.montoEsperado - sesion.saldo_inicial + gastosSesion.where((g) => (g['metodo_pago']?.toString() ?? '').toLowerCase() == 'efectivo').fold<double>(0, (s, g) => s + (double.tryParse(g['monto']?.toString() ?? '0') ?? 0)))}',
+                          style: pw.TextStyle(font: font, fontSize: 9,
+                              color: const PdfColor.fromInt(0xFF0B7A53))),
+                        if (gastosSesion.any((g) =>
+                            (g['metodo_pago']?.toString() ?? '').toLowerCase() == 'efectivo'))
+                          pw.Text(
+                            '− Gastos ef:  \$${_fmt(gastosSesion.where((g) =>
+                              (g['metodo_pago']?.toString() ?? '').toLowerCase() == 'efectivo')
+                              .fold<double>(0, (s, g) =>
+                                s + (double.tryParse(g['monto']?.toString() ?? '0') ?? 0)))}',
+                            style: pw.TextStyle(font: font, fontSize: 9,
+                                color: PdfColors.orange700)),
+                      ],
+                    ),
+                    // Efectivo a entregar (destacado)
+                    pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 12),
+                      decoration: pw.BoxDecoration(
+                        color: const PdfColor.fromInt(0xFF7C3AED),
+                        borderRadius: pw.BorderRadius.circular(8),
+                      ),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.center,
+                        children: [
+                          pw.Text('EFECTIVO A ENTREGAR',
+                            style: pw.TextStyle(font: fontBold, fontSize: 10,
+                                color: PdfColors.white)),
+                          pw.SizedBox(height: 4),
+                          pw.Text(
+                            '\$${_fmt((sesion.montoEsperado as double) - (sesion.saldo_inicial as double))}',
+                            style: pw.TextStyle(font: fontBold, fontSize: 20,
+                                color: PdfColors.white)),
+                          pw.Text('(sin contar la base)',
+                            style: pw.TextStyle(font: font, fontSize: 8,
+                                color: const PdfColor.fromInt(0xFFDDD6FE))),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
-        ],
+        ];
+        },
       ),
     );
 

@@ -104,22 +104,51 @@ class DevolucionCard extends StatelessWidget {
                   style: GoogleFonts.inter(fontSize: 11, color: _kTextMuted),
                   overflow: TextOverflow.ellipsis,
                 ),
-                // Línea 3: producto de reemplazo si es cambio
-                if (esCambio && (dev.productoReemplazoNombre?.isNotEmpty ?? false)) ...[
-                  const SizedBox(height: 4),
-                  Row(children: [
-                    const Icon(Icons.swap_horiz_rounded, size: 12, color: _kGreen),
-                    const SizedBox(width: 3),
-                    Expanded(
-                      child: Text(
-                        '${dev.productoReemplazoNombre}'
-                        '${dev.cantidadReemplazo != null ? ' ×${_fmtCant(dev.cantidadReemplazo!)}' : ''}',
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(
-                            fontSize: 11, fontWeight: FontWeight.w600, color: _kGreen),
-                      ),
-                    ),
-                  ]),
+                // Línea 3: productos de reemplazo si es cambio
+                if (esCambio) ...[
+                  () {
+                    // Nuevo modelo: lista de reemplazos
+                    if (dev.reemplazos.isNotEmpty) {
+                      final label = dev.reemplazos.map((r) {
+                        final c = r.cantidad % 1 == 0
+                            ? r.cantidad.toStringAsFixed(0)
+                            : r.cantidad.toStringAsFixed(2);
+                        return '${r.productoNombre} ×$c';
+                      }).join(', ');
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(children: [
+                          const Icon(Icons.swap_horiz_rounded, size: 12, color: _kGreen),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(label,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                    fontSize: 11, fontWeight: FontWeight.w600, color: _kGreen)),
+                          ),
+                        ]),
+                      );
+                    }
+                    // Fallback legacy
+                    if (dev.productoReemplazoNombre?.isNotEmpty ?? false) {
+                      final label = '${dev.productoReemplazoNombre}'
+                          '${dev.cantidadReemplazo != null ? ' ×${_fmtCant(dev.cantidadReemplazo!)}' : ''}';
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(children: [
+                          const Icon(Icons.swap_horiz_rounded, size: 12, color: _kGreen),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(label,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                    fontSize: 11, fontWeight: FontWeight.w600, color: _kGreen)),
+                          ),
+                        ]),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  }(),
                 ],
               ],
             ),

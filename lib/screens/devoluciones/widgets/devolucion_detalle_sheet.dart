@@ -341,9 +341,9 @@ class DevolucionDetalleSheet extends StatelessWidget {
     final tipoDif    = (dev.tipoDiferencia ?? 'exacto').toLowerCase();
     final dif        = dev.diferencia ?? 0.0;
     // totalReemplazo = suma de todos los reemplazos (nuevo modelo o campo calculado legacy)
-    final subtotalNuevo = dev.totalReemplazo
+    final double subtotalNuevo = dev.totalReemplazo
         ?? dev.subtotalReemplazo
-        ?? dev.reemplazos.fold(0.0, (s, r) => s + r.subtotal);
+        ?? dev.reemplazos.fold<double>(0.0, (s, r) => s + r.subtotal);
 
     // ── Cambio: resumen en tabla ─────────────────────────
     if (esCambio) {

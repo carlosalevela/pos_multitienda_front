@@ -770,16 +770,19 @@ class _DetallePanel extends StatelessWidget {
               const SizedBox(height: 10),
               ...dev.detalles.map((d) => _ProductoTile(detalle: d, fmt: fmt)),
 
-              // Reemplazo (cambio)
-              if (esCambio && dev.productoReemplazoNombre != null) ...[
+              // Reemplazos (cambio)
+              if (esCambio && (dev.reemplazos.isNotEmpty || dev.productoReemplazoNombre != null)) ...[
                 const SizedBox(height: 16),
                 _PanelSeccion(
-                  label: 'Producto entregado',
+                  label: 'Productos entregados',
                   icon: Icons.shopping_bag_outlined,
                   color: _kGreen,
                 ),
                 const SizedBox(height: 10),
-                _ReemplazoTile(dev: dev, fmt: fmt),
+                if (dev.reemplazos.isNotEmpty)
+                  ...dev.reemplazos.map((r) => _ReemplazoItemTile(reemplazo: r, fmt: fmt))
+                else
+                  _ReemplazoTile(dev: dev, fmt: fmt),
               ],
 
               // Total
@@ -973,6 +976,49 @@ class _ProductoTile extends StatelessWidget {
           Text(fmt.format(detalle.subtotal),
               style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13, color: _kOrange)),
         ]),
+      ]),
+    );
+  }
+}
+
+class _ReemplazoItemTile extends StatelessWidget {
+  final DetalleReemplazoModel reemplazo;
+  final NumberFormat          fmt;
+  const _ReemplazoItemTile({required this.reemplazo, required this.fmt});
+
+  @override
+  Widget build(BuildContext context) {
+    final cantStr = reemplazo.cantidad % 1 == 0
+        ? reemplazo.cantidad.toStringAsFixed(0)
+        : reemplazo.cantidad.toStringAsFixed(2);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _kGreen.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _kGreen.withValues(alpha: 0.2)),
+      ),
+      child: Row(children: [
+        Container(
+          width: 34, height: 34,
+          decoration: BoxDecoration(
+            color: _kGreen.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(Icons.check_circle_rounded, size: 18, color: _kGreen),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(reemplazo.productoNombre,
+                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: _kText)),
+            Text('Cantidad: $cantStr',
+                style: GoogleFonts.inter(fontSize: 11, color: _kGreen)),
+          ]),
+        ),
+        Text(fmt.format(reemplazo.subtotal),
+            style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: _kGreen)),
       ]),
     );
   }

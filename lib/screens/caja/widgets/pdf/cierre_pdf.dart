@@ -10,7 +10,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:provider/provider.dart';
 import '../../../../models/sesion_historial.dart';
+import '../../../../providers/config_provider.dart';
 import '../../../../services/caja_service.dart';
 import '../../../../services/documento_service.dart';
 import '../../../../services/thermal_printer_service.dart';
@@ -176,7 +178,23 @@ Future<void> exportarCierrePDF(
   SesionHistorial sesion, {
   String tipoPapel = '80mm',
   BuildContext? context,
+  String nit = '',
+  String dir = '',
+  String tel = '',
+  ScaffoldMessengerState? messenger,
+  bool skipThermal = false,
 }) async {
+  String _nit = nit, _dir = dir, _tel = tel;
+  if (_nit.isEmpty && context != null && context.mounted) {
+    try {
+      final cfg = context.read<ConfigProvider>();
+      _nit = cfg.nit; _dir = cfg.direccion; _tel = cfg.telefono;
+    } catch (_) {}
+  }
+  // Capturar messenger del context si no viene pre-capturado
+  final _messenger = messenger ??
+      (context != null && context.mounted ? ScaffoldMessenger.of(context) : null);
+
   final fecha = sesion.fechaCierre.isNotEmpty
       ? sesion.fechaCierre.substring(0, 10)
       : sesion.fechaApertura.substring(0, 10);
@@ -184,19 +202,46 @@ Future<void> exportarCierrePDF(
       'CIERRE_${sesion.id}_${fecha}_${sesion.tiendaNombre.replaceAll(' ', '_')}.pdf';
   final bytes = await generarBytesCierrePDF(sesion);
 
-  unawaited(CajaService().enviarPdfWhatsApp(sesion.id, bytes, filename));
+  // Enviar por WhatsApp — callback para capturar errores y mostrar feedback
+  CajaService().enviarPdfWhatsApp(sesion.id, bytes, filename).then((res) {
+    if (_messenger == null) return;
+    final ok   = res['success'] == true;
+    final data = res['data'] as Map<String, dynamic>?;
+    final enviados = data?['enviados'] as int? ?? 0;
+    final errores  = (data?['errores'] as List?)?.cast<String>() ?? <String>[];
+    String msg;
+    if (ok && enviados > 0) {
+      msg = 'PDF enviado por WhatsApp a $enviados destinatario${enviados != 1 ? 's' : ''}';
+    } else if (ok && enviados == 0) {
+      msg = 'WhatsApp: sin destinatarios${errores.isNotEmpty ? ' — ${errores.first}' : ''}';
+    } else {
+      msg = 'WhatsApp: ${res['error'] ?? errores.join(', ')}';
+    }
+    _messenger.showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: ok && enviados > 0 ? const Color(0xFF006C49) : const Color(0xFFBA1A1A),
+      duration: const Duration(seconds: 6),
+    ));
+  }).catchError((e) {
+    _messenger?.showSnackBar(SnackBar(
+      content: Text('WhatsApp error: $e'),
+      backgroundColor: const Color(0xFFBA1A1A),
+      duration: const Duration(seconds: 6),
+    ));
+  });
 
   unawaited(DocumentoService.instance.guardarCierre(
     bytes: bytes,
     referencia: 'cierre_${sesion.id}_${fecha}_${sesion.tiendaNombre.replaceAll(' ', '_')}',
   ));
 
-  if (tipoPapel != 'pdf') {
+  if (!skipThermal && tipoPapel != 'pdf') {
     final ps = tipoPapel == '58mm' ? PaperSize.mm58 : PaperSize.mm80;
     try {
       if (!kIsWeb && await WindowsPrinterService.hasSavedPrinter()) {
         final tb = await ThermalPrinterService.buildCierreHistorial(
           sesion: sesion, paperSize: ps,
+          nit: _nit, direccion: _dir, telefono: _tel,
         );
         await WindowsPrinterService.printRaw(tb);
         return;
@@ -206,6 +251,7 @@ Future<void> exportarCierrePDF(
         if (dev != null) {
           final tb = await ThermalPrinterService.buildCierreHistorial(
             sesion: sesion, paperSize: ps,
+            nit: _nit, direccion: _dir, telefono: _tel,
           );
           await ThermalPrinterService.printBytes(dev, tb);
           return;
@@ -231,7 +277,7 @@ Future<void> exportarCierrePDF(
     } catch (_) {}
   }
 
-  await _abrirPdf(bytes, filename);
+  if (!skipThermal) await _abrirPdf(bytes, filename);
 }
 
 // ════════════════════════════════════════════════════════
@@ -366,7 +412,7 @@ pw.Widget _topMetrics4(
   PdfColor difColor, PdfColor difBg,
   String difLabel, String difStr,
 ) {
-  final totalIngresos = s.ventasTotal + s.abonosTotal;
+  final totalIngresos = s.ventasTotal + s.abonosTotal + s.cambiosCobrarEf;
   return pw.Row(children: [
     // Base inicial
     _metricCard('BASE INICIAL', _m(s.saldoInicial),
@@ -378,9 +424,9 @@ pw.Widget _topMetrics4(
         sub: '${s.numTransacciones} transacciones',
         dark: false, color: _pGreen),
     pw.SizedBox(width: 8),
-    // Total ingresos (ventas + abonos)
+    // Total ingresos (ventas + abonos + cambios cobrados)
     _metricCard('TOTAL INGRESOS', _m(totalIngresos),
-        sub: '+ ${s.numAbonos} abonos separados',
+        sub: '+ ${s.numAbonos} abonos sep.',
         dark: true, color: _pWhite),
     pw.SizedBox(width: 8),
     // Cuadre (coloreado según resultado)
@@ -473,10 +519,11 @@ pw.Widget _ingresosUnificadosTable(SesionHistorial sesion) {
   // ── 2. Construir filas ──
   final filas = <_IngFila>[];
 
-  // Efectivo (incluye mixto ef., abonos ef., crédito ef., ingresos manuales)
+  // Efectivo (incluye mixto ef., abonos ef., crédito ef., cambios cobrados ef., ingresos manuales)
   final efVentas  = sesion.ventasEfectivo + sesion.ventasMixtoEfectivo;
   final efAbonos  = sesion.abonosEfectivo
                   + sesion.abonosCreditoEfectivo
+                  + sesion.cambiosCobrarEf
                   + sesion.ingresosManual
                   - sesion.cancelacionesEfectivo;
   if (efVentas > 0 || efAbonos > 0) {
@@ -485,20 +532,41 @@ pw.Widget _ingresosUnificadosTable(SesionHistorial sesion) {
 
   // Cuentas bancarias (ventas agrupadas por cuenta en cuentasResumen)
   final cuentasVistas = <String>{};
-  for (final c in sesion.cuentasResumen) {
-    final nombre = c['nombre']?.toString() ?? '—';
-    final tipo   = c['tipo_display']?.toString() ?? '';
-    final turno  = double.tryParse(c['sesion_total']?.toString() ?? '0') ?? 0.0;
-    final abonoCuenta = abonosPorCuenta[nombre] ?? 0.0;
-    filas.add(_IngFila(nombre, tipo, turno, abonoCuenta));
-    cuentasVistas.add(nombre);
+  if (sesion.cuentasResumen.isNotEmpty) {
+    for (final c in sesion.cuentasResumen) {
+      final nombre = c['nombre']?.toString() ?? '—';
+      final tipo   = c['tipo_display']?.toString() ?? '';
+      final turno  = double.tryParse(c['sesion_total']?.toString() ?? '0') ?? 0.0;
+      final abonoCuenta = abonosPorCuenta[nombre] ?? 0.0;
+      filas.add(_IngFila(nombre, tipo, turno, abonoCuenta));
+      cuentasVistas.add(nombre);
+    }
+    // Abonos en cuentas que no están en cuentasResumen
+    for (final e in abonosPorCuenta.entries) {
+      if (!cuentasVistas.contains(e.key) && e.value > 0) {
+        filas.add(_IngFila(e.key, 'Transferencia', 0.0, e.value));
+      }
+    }
+  } else {
+    // Sin cuentasResumen: mostrar ventas y abonos agrupados por método de pago
+    if (sesion.ventasTarjeta > 0 || sesion.abonosTarjeta > 0) {
+      filas.add(_IngFila('Datáfono / Tarjeta', 'Tarjeta',
+          sesion.ventasTarjeta, sesion.abonosTarjeta));
+    }
+    if (sesion.ventasTransferencia > 0 || sesion.abonosTransferencia > 0) {
+      filas.add(_IngFila('Transferencia', 'Transferencia',
+          sesion.ventasTransferencia, sesion.abonosTransferencia));
+    }
+    // Parte no-efectivo de ventas mixto (si existe)
+    final mixtoNoEf = sesion.ventasMixto - sesion.ventasMixtoEfectivo;
+    if (mixtoNoEf > 0.01) {
+      filas.add(_IngFila('Mixto (no efectivo)', 'Mixto', mixtoNoEf, 0.0));
+    }
   }
 
-  // Abonos en cuentas que no están en cuentasResumen
-  for (final e in abonosPorCuenta.entries) {
-    if (!cuentasVistas.contains(e.key) && e.value > 0) {
-      filas.add(_IngFila(e.key, 'Transferencia', 0.0, e.value));
-    }
+  // Bonos de regalo (no van por cuenta bancaria)
+  if (sesion.ventasBono > 0) {
+    filas.add(_IngFila('Bono de regalo', 'Bono', sesion.ventasBono, 0.0));
   }
 
   // ── 3. Totales ──
@@ -966,7 +1034,19 @@ pw.Widget _devolucionesDetail(SesionHistorial sesion) {
           final cuenta  = d['cuenta_nombre']?.toString() ?? '';
           final reempl  = d['producto_reemplazo']?.toString() ?? '';
           final factura = d['venta_numero']?.toString() ?? 'DEV-${d['id']}';
-          final cuentaLabel = cuenta.isNotEmpty ? cuenta : (reempl.isNotEmpty ? reempl : '—');
+          // Preferir lista de reemplazos; caer al campo legacy
+          final reemplazosRaw = d['reemplazos'] as List? ?? [];
+          final reemplazosLabel = reemplazosRaw.isNotEmpty
+              ? reemplazosRaw.map((r) {
+                  final m = r is Map ? r : {};
+                  final c = (m['cantidad'] as num?)?.toStringAsFixed(0) ?? '1';
+                  final n = m['nombre']?.toString() ?? '';
+                  return '$c× $n';
+                }).join(', ')
+              : reempl;
+          final cuentaLabel = cuenta.isNotEmpty
+              ? cuenta
+              : (reemplazosLabel.isNotEmpty ? reemplazosLabel : '—');
 
           return pw.TableRow(
             decoration: pw.BoxDecoration(color: odd ? _pSurfLow : _pWhite),
@@ -1005,6 +1085,48 @@ pw.Widget _devolucionesDetail(SesionHistorial sesion) {
           ),
         ],
       ),
+      if (sesion.netoCambiosTarjeta != 0)
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: _pSurfLow),
+          children: [
+            _tdLabel('NETO CAMBIOS TARJETA', bold: true),
+            _tdLabel('', bold: false),
+            _tdLabel('', bold: false),
+            _tdLabel('', bold: false),
+            pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+              child: pw.Text(
+                sesion.netoCambiosTarjeta > 0
+                    ? '+${_m(sesion.netoCambiosTarjeta)}'
+                    : '-${_m(sesion.netoCambiosTarjeta.abs())}',
+                textAlign: pw.TextAlign.right,
+                style: pw.TextStyle(
+                    fontSize: 9, fontWeight: pw.FontWeight.bold,
+                    color: sesion.netoCambiosTarjeta > 0 ? _pGreen : _pRed)),
+            ),
+          ],
+        ),
+      if (sesion.netoCambiosTransferencia != 0)
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: _pSurfLow),
+          children: [
+            _tdLabel('NETO CAMBIOS TRANSFERENCIA', bold: true),
+            _tdLabel('', bold: false),
+            _tdLabel('', bold: false),
+            _tdLabel('', bold: false),
+            pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+              child: pw.Text(
+                sesion.netoCambiosTransferencia > 0
+                    ? '+${_m(sesion.netoCambiosTransferencia)}'
+                    : '-${_m(sesion.netoCambiosTransferencia.abs())}',
+                textAlign: pw.TextAlign.right,
+                style: pw.TextStyle(
+                    fontSize: 9, fontWeight: pw.FontWeight.bold,
+                    color: sesion.netoCambiosTransferencia > 0 ? _pGreen : _pRed)),
+            ),
+          ],
+        ),
     ],
   );
 }
@@ -1057,10 +1179,18 @@ pw.Widget _cuadreCard(
             fila('(+) Abonos separados (ef.)',       s.abonosEfectivo),
           if (s.abonosCreditoEfectivo > 0)
             fila('(+) Abonos crédito clientes',      s.abonosCreditoEfectivo),
+          if (s.cambiosCobrarEf > 0)
+            fila('(+) Cambios cobrados (ef.)',        s.cambiosCobrarEf),
           if (s.ingresosManual > 0)
             fila('(+) Ingresos manuales',            s.ingresosManual),
-          if (s.devolucionesEfectivo > 0)
-            fila('(-) Devoluciones (ef.)',           s.devolucionesEfectivo, suma: false),
+          if (s.devolucionesEfectivo != 0)
+            fila(
+              s.devolucionesEfectivo > 0
+                  ? '(-) Devoluciones (ef.)'
+                  : '(+) Devoluciones neto (ef.)',
+              s.devolucionesEfectivo.abs(),
+              suma: s.devolucionesEfectivo < 0,
+            ),
           if (s.cancelacionesEfectivo > 0)
             fila('(-) Cancelaciones separados',      s.cancelacionesEfectivo, suma: false),
           if (s.gastosTotal > 0)
@@ -1079,6 +1209,35 @@ pw.Widget _cuadreCard(
                 style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold,
                     color: _pGreen)),
           ]),
+          pw.SizedBox(height: 4),
+          // ── A entregar al jefe (sin base) ────────────────────
+          pw.Container(
+            width: double.infinity,
+            padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: pw.BoxDecoration(
+              color: const PdfColor.fromInt(0xFFF5F3FF),
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
+              border: pw.Border.all(
+                  color: const PdfColor.fromInt(0xFF7C3AED), width: 0.6),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                  pw.Text('VALOR A ENTREGAR',
+                      style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold,
+                          color: const PdfColor.fromInt(0xFF7C3AED), letterSpacing: 0.3)),
+                  pw.SizedBox(height: 2),
+                  pw.Text('Efectivo esperado menos base (\$${_numFmt.format(s.saldoInicial)})',
+                      style: pw.TextStyle(fontSize: 7,
+                          color: const PdfColor.fromInt(0xFF9D77E8))),
+                ]),
+                pw.Text(_m(s.montoFinalSistema - s.saldoInicial),
+                    style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold,
+                        color: const PdfColor.fromInt(0xFF7C3AED))),
+              ],
+            ),
+          ),
           pw.SizedBox(height: 6),
           pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
             pw.Text('(=) EFECTIVO CONTADO',
