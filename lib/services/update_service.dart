@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import '../core/api_client.dart';
 
-const _currentVersion = '1.3.0';
+const _currentVersion = '1.5.3';
+
+/// Versión actual expuesta para mostrar en UI.
+const currentVersion = _currentVersion;
 
 /// Compara versiones semánticas. Devuelve true si [remote] > [local].
 bool _esNueva(String local, String remote) {
@@ -20,30 +23,61 @@ bool _esNueva(String local, String remote) {
 }
 
 class UpdateService {
+  /// Notifica cuando hay una actualización disponible.
+  /// null = sin actualización, non-null = {version, url, obligatoria}
+  static final updateDisponible = ValueNotifier<Map<String, dynamic>?>(null);
+
+  /// Mensaje de error si la verificación falla. null = sin error.
+  static final updateError = ValueNotifier<String?>(null);
+
   static Future<void> chequear(BuildContext context) async {
+    updateError.value = null;
     try {
-      final r = await ApiClient.instance.get('/configuracion/version/');
-      final data         = r.data as Map<String, dynamic>;
-      final remoteVer    = data['version']      as String? ?? '';
-      final downloadUrl  = data['download_url'] as String? ?? '';
-      final obligatoria  = data['obligatoria']  as bool?   ?? false;
-
-      if (!_esNueva(_currentVersion, remoteVer)) return;
-      if (downloadUrl.isEmpty) return;
-      if (!context.mounted) return;
-
-      await showDialog(
-        context:             context,
-        barrierDismissible:  !obligatoria,
-        builder: (_) => _UpdateDialog(
-          version:      remoteVer,
-          downloadUrl:  downloadUrl,
-          obligatoria:  obligatoria,
-        ),
+      final r = await ApiClient.instance.get(
+        '/config/version/',
+        queryParameters: {'v': _currentVersion},
       );
-    } catch (_) {
-      // Falla silenciosa — no interrumpir el inicio si no hay conexión
+      final data        = r.data as Map<String, dynamic>;
+      final remoteVer   = data['version']      as String? ?? '';
+      final downloadUrl = data['download_url'] as String? ?? '';
+      final obligatoria = data['obligatoria']  as bool?   ?? false;
+
+      if (!_esNueva(_currentVersion, remoteVer)) {
+        updateDisponible.value = null;
+        return;
+      }
+      if (downloadUrl.isEmpty) return;
+
+      updateDisponible.value = {
+        'version': remoteVer,
+        'url': downloadUrl,
+        'obligatoria': obligatoria,
+      };
+
+      if (!context.mounted) return;
+      await mostrarDialogo(context);
+    } catch (e, st) {
+      final msg = e.toString();
+      debugPrint('[UpdateService] Error al verificar versión: $msg');
+      debugPrint('[UpdateService] StackTrace: $st');
+      updateError.value = msg.length > 120 ? '${msg.substring(0, 120)}…' : msg;
     }
+  }
+
+  /// Muestra el diálogo de actualización con la info ya almacenada (o la provista).
+  static Future<void> mostrarDialogo(BuildContext context, {Map<String, dynamic>? info}) async {
+    final datos = info ?? updateDisponible.value;
+    if (datos == null) return;
+    if (!context.mounted) return;
+    await showDialog(
+      context:            context,
+      barrierDismissible: !(datos['obligatoria'] as bool? ?? false),
+      builder: (_) => _UpdateDialog(
+        version:     datos['version'] as String,
+        downloadUrl: datos['url'] as String,
+        obligatoria: datos['obligatoria'] as bool? ?? false,
+      ),
+    );
   }
 }
 
@@ -78,9 +112,16 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           if (total > 0) setState(() => _progreso = rec / total);
         },
       );
-      setState(() => _estado = 'Instalando...');
-      await Process.run(path, [], runInShell: true);
-      // Cerrar la app para que el instalador tome el control
+      setState(() => _estado = 'Lanzando instalador...');
+      // Lanzar desconectado para que el instalador pueda pedir UAC
+      // y no dependa del proceso de Flutter
+      await Process.start(
+        path, [],
+        runInShell: false,
+        mode: ProcessStartMode.detached,
+      );
+      // Dar 1 segundo y cerrar la app
+      await Future.delayed(const Duration(seconds: 1));
       exit(0);
     } catch (e) {
       setState(() { _descargando = false; _estado = 'Error: $e'; });
