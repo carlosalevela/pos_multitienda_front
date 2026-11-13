@@ -212,19 +212,17 @@ class DevolucionDetalleSheet extends StatelessWidget {
   // ─────────────────────────────────────────────────────
 
   Widget _seccionCambio() {
-    final cantRep     = dev.cantidadReemplazo ?? 0;
-    final cantRepStr  = cantRep % 1 == 0 ? cantRep.toStringAsFixed(0) : cantRep.toStringAsFixed(2);
-    final tipoDif     = (dev.tipoDiferencia ?? 'exacto').toLowerCase();
-    final dif         = dev.diferencia ?? 0.0;
+    final tipoDif = (dev.tipoDiferencia ?? 'exacto').toLowerCase();
+    final dif     = dev.diferencia ?? 0.0;
 
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _SeccionTitle(
-        label: 'Producto entregado',
-        icon: Icons.shopping_bag_outlined,
-        color: _kGreen,
-      ),
-      const SizedBox(height: 10),
-      Container(
+    Widget _buildReemplazoRow({
+      required String nombre,
+      required String cantStr,
+      required double precio,
+      required double subtotal,
+    }) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: _kGreen.withValues(alpha: 0.05),
@@ -243,21 +241,54 @@ class DevolucionDetalleSheet extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(dev.productoReemplazoNombre ?? 'Sin producto',
+              Text(nombre,
                   style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
-              Text('Cantidad: $cantRepStr',
+              Text('Cantidad: $cantStr',
                   style: GoogleFonts.inter(fontSize: 11, color: _kGreen)),
-              if (dev.precioReemplazo != null)
-                Text('Precio unitario: ${fmt.format(dev.precioReemplazo!)}',
-                    style: GoogleFonts.inter(fontSize: 11, color: _kTextMuted)),
+              Text('Precio unitario: ${fmt.format(precio)}',
+                  style: GoogleFonts.inter(fontSize: 11, color: _kTextMuted)),
             ]),
           ),
-          if (dev.subtotalReemplazo != null)
-            Text(fmt.format(dev.subtotalReemplazo!),
-                style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold,
-                    color: _kGreen)),
+          Text(fmt.format(subtotal),
+              style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold,
+                  color: _kGreen)),
         ]),
+      );
+    }
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _SeccionTitle(
+        label: 'Productos entregados',
+        icon: Icons.shopping_bag_outlined,
+        color: _kGreen,
       ),
+      const SizedBox(height: 10),
+
+      // Lista de reemplazos (nuevo modelo multi-producto)
+      if (dev.reemplazos.isNotEmpty)
+        ...dev.reemplazos.map((r) {
+          final cantStr = r.cantidad % 1 == 0
+              ? r.cantidad.toStringAsFixed(0)
+              : r.cantidad.toStringAsFixed(2);
+          return _buildReemplazoRow(
+            nombre: r.productoNombre,
+            cantStr: cantStr,
+            precio: r.precioUnitario,
+            subtotal: r.subtotal,
+          );
+        })
+      // Fallback: cambios anteriores con campo legacy de un solo producto
+      else if (dev.productoReemplazoNombre != null) ...[
+        _buildReemplazoRow(
+          nombre: dev.productoReemplazoNombre!,
+          cantStr: () {
+            final c = dev.cantidadReemplazo ?? 0;
+            return c % 1 == 0 ? c.toStringAsFixed(0) : c.toStringAsFixed(2);
+          }(),
+          precio: dev.precioReemplazo ?? 0,
+          subtotal: dev.subtotalReemplazo ?? 0,
+        ),
+      ],
 
       // Diferencia
       if (tipoDif != 'exacto' && dif > 0) ...[
@@ -309,7 +340,10 @@ class DevolucionDetalleSheet extends StatelessWidget {
     final esCambio   = dev.tipo == 'cambio';
     final tipoDif    = (dev.tipoDiferencia ?? 'exacto').toLowerCase();
     final dif        = dev.diferencia ?? 0.0;
-    final subtotalNuevo = dev.subtotalReemplazo ?? 0.0;
+    // totalReemplazo = suma de todos los reemplazos (nuevo modelo o campo calculado legacy)
+    final subtotalNuevo = dev.totalReemplazo
+        ?? dev.subtotalReemplazo
+        ?? dev.reemplazos.fold(0.0, (s, r) => s + r.subtotal);
 
     // ── Cambio: resumen en tabla ─────────────────────────
     if (esCambio) {

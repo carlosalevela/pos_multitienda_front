@@ -27,6 +27,7 @@ class DevolucionModel {
   final double? cambioEntregado;
 
   final List<DetalleDevolucionModel> detalles;
+  final List<DetalleReemplazoModel> reemplazos;
 
   const DevolucionModel({
     required this.id,
@@ -54,6 +55,7 @@ class DevolucionModel {
     this.montoRecibido,
     this.cambioEntregado,
     required this.detalles,
+    this.reemplazos = const [],
   });
 
   factory DevolucionModel.fromJson(Map<String, dynamic> j) {
@@ -70,7 +72,7 @@ class DevolucionModel {
       tipo: j['tipo'] as String? ?? 'devolucion',
       estado: j['estado'] as String? ?? 'procesada',
       observaciones: j['observaciones'] as String? ?? '',
-      createdAt: DateTime.tryParse(j['created_at']?.toString() ?? '') ?? DateTime.now(),
+      createdAt: (DateTime.tryParse(j['created_at']?.toString() ?? '') ?? DateTime.now()).toLocal(),
 
       productoReemplazoId: j['producto_reemplazo'] as int?,
       productoReemplazoNombre: j['producto_reemplazo_nombre'] as String?,
@@ -104,6 +106,11 @@ class DevolucionModel {
                 Map<String, dynamic>.from(d as Map),
               ))
           .toList(),
+      reemplazos: (j['reemplazos'] as List? ?? [])
+          .map((r) => DetalleReemplazoModel.fromJson(
+                Map<String, dynamic>.from(r as Map),
+              ))
+          .toList(),
     );
   }
 
@@ -133,6 +140,7 @@ class DevolucionModel {
     double? montoRecibido,
     double? cambioEntregado,
     List<DetalleDevolucionModel>? detalles,
+    List<DetalleReemplazoModel>? reemplazos,
   }) {
     return DevolucionModel(
       id: id ?? this.id,
@@ -162,6 +170,37 @@ class DevolucionModel {
       montoRecibido: montoRecibido ?? this.montoRecibido,
       cambioEntregado: cambioEntregado ?? this.cambioEntregado,
       detalles: detalles ?? this.detalles,
+      reemplazos: reemplazos ?? this.reemplazos,
+    );
+  }
+}
+
+class DetalleReemplazoModel {
+  final int id;
+  final int productoId;
+  final String productoNombre;
+  final double cantidad;
+  final double precioUnitario;
+  final double subtotal;
+
+  const DetalleReemplazoModel({
+    required this.id,
+    required this.productoId,
+    required this.productoNombre,
+    required this.cantidad,
+    required this.precioUnitario,
+    required this.subtotal,
+  });
+
+  factory DetalleReemplazoModel.fromJson(Map<String, dynamic> j) {
+    return DetalleReemplazoModel(
+      id: j['id'] as int? ?? 0,
+      productoId: j['producto'] as int? ?? 0,
+      productoNombre: j['producto_nombre'] as String? ?? '',
+      cantidad: double.tryParse(j['cantidad']?.toString() ?? '') ?? 0,
+      precioUnitario:
+          double.tryParse(j['precio_unitario']?.toString() ?? '') ?? 0,
+      subtotal: double.tryParse(j['subtotal']?.toString() ?? '') ?? 0,
     );
   }
 }

@@ -83,8 +83,7 @@ class DevolucionesProvider extends ChangeNotifier {
     required int ventaId,
     required String metodoPago,
     required List<Map<String, dynamic>> detalles,
-    required int productoReemplazoId,
-    required double cantidadReemplazo,
+    required List<Map<String, dynamic>> productosReemplazo,
     String? observaciones,
     String? metodoPagoDiferencia,
     double? montoRecibido,
@@ -99,8 +98,7 @@ class DevolucionesProvider extends ChangeNotifier {
         ventaId: ventaId,
         metodoPago: metodoPago,
         detalles: detalles,
-        productoReemplazoId: productoReemplazoId,
-        cantidadReemplazo: cantidadReemplazo,
+        productosReemplazo: productosReemplazo,
         observaciones: observaciones,
         metodoPagoDiferencia: metodoPagoDiferencia,
         montoRecibido: montoRecibido,
@@ -134,23 +132,27 @@ class DevolucionesProvider extends ChangeNotifier {
   }
 
   String _generarMensajeCambio(Map<String, dynamic> data) {
-    final diferencia = double.tryParse(data['diferencia']?.toString() ?? '') ?? 0;
+    final diferencia     = double.tryParse(data['diferencia']?.toString() ?? '') ?? 0;
     final tipoDiferencia = data['tipo_diferencia']?.toString() ?? 'exacto';
 
-    final productoRaw = data['producto_reemplazo'];
-    final producto = productoRaw is Map<String, dynamic>
-        ? productoRaw
-        : (productoRaw is Map ? Map<String, dynamic>.from(productoRaw) : null);
+    final reemplazosRaw = data['productos_reemplazo'] as List? ?? [];
+    final nombresReemplazo = reemplazosRaw
+        .map((r) {
+          final m = r is Map<String, dynamic> ? r : Map<String, dynamic>.from(r as Map);
+          final cant   = m['cantidad']?.toString() ?? '1';
+          final nombre = m['nombre']?.toString() ?? 'producto';
+          return '$cant x $nombre';
+        })
+        .join(', ');
 
-    final prodNombre = producto?['nombre']?.toString() ?? 'producto';
-    final prodCantidad = producto?['cantidad']?.toString() ?? '';
+    final resumen = nombresReemplazo.isNotEmpty ? nombresReemplazo : 'producto(s)';
 
     if (tipoDiferencia == 'exacto') {
-      return 'Cambio realizado ✅ $prodCantidad x $prodNombre, sin diferencia de dinero';
+      return 'Cambio realizado ✅ $resumen, sin diferencia de dinero';
     } else if (tipoDiferencia == 'cobrar') {
-      return 'Cambio realizado ✅ $prodCantidad x $prodNombre. Faltan $diferencia por pagar';
+      return 'Cambio realizado ✅ $resumen. Faltan \$$diferencia por pagar';
     } else {
-      return 'Cambio realizado ✅ $prodCantidad x $prodNombre. Devolver $diferencia al cliente';
+      return 'Cambio realizado ✅ $resumen. Devolver \$$diferencia al cliente';
     }
   }
 
