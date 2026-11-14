@@ -58,7 +58,7 @@ class Cliente {
     direccion: j['direccion'] as String? ?? '',
     activo:    j['activo']    as bool?   ?? true,
     createdAt: j['created_at'] != null
-        ? DateTime.parse(j['created_at'] as String)
+        ? DateTime.parse(j['created_at'] as String).toLocal()
         : DateTime.now(),
     tierInfo:  j['tier_info'] != null
         ? TierInfo.fromJson(j['tier_info'] as Map<String, dynamic>)

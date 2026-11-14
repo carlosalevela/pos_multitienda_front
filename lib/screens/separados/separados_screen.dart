@@ -595,7 +595,7 @@ class _SeparadosScreenState extends State<SeparadosScreen> {
     final cliente  = a['cliente_nombre'] as String? ?? '—';
     final metodo   = a['metodo_pago']    as String? ?? 'efectivo';
     final hora     = a['created_at'] != null
-        ? DateFormat('HH:mm').format(DateTime.parse(a['created_at'] as String))
+        ? DateFormat('HH:mm').format(DateTime.parse(a['created_at'] as String).toLocal())
         : '';
     final sepId    = a['separado_id'] as int?;
     final empNombre = a['empleado_nombre'] as String? ?? '';

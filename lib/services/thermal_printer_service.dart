@@ -130,6 +130,7 @@ class ThermalPrinterService {
     String                   direccion = '',
     String                   telefono  = '',
     PaperSize                paperSize = PaperSize.mm80,
+    bool                     esCopia   = false,
   }) async {
     final profile  = await CapabilityProfile.load();
     final gen      = Generator(paperSize, profile);
@@ -161,6 +162,8 @@ class ThermalPrinterService {
         ...gen.text(direccion, styles: PosStyles(align: PosAlign.center)),
       if (telefono.isNotEmpty)
         ...gen.text('Tel: $telefono', styles: PosStyles(align: PosAlign.center)),
+      ...gen.text('Somos NO responsables de IVA',
+        styles: PosStyles(align: PosAlign.center)),
       ...gen.hr(),
       ...gen.text(titulo,
         styles: PosStyles(align: PosAlign.center, bold: true)),
@@ -168,30 +171,32 @@ class ThermalPrinterService {
 
       // ── Info comprobante ────────────────────────────────────
       ...gen.row([
-        PosColumn(text: 'Comprobante:', width: 5, styles: const PosStyles()),
-        PosColumn(text: devId, width: 7, styles: PosStyles(bold: true, align: PosAlign.right)),
+        PosColumn(text: 'Comprobante:', width: 7, styles: PosStyles(bold: true)),
+        PosColumn(text: devId,          width: 5, styles: PosStyles(bold: true, align: PosAlign.right)),
       ]),
       ...gen.row([
-        PosColumn(text: 'Fact. orig.:', width: 5, styles: const PosStyles()),
-        PosColumn(text: dev.ventaNumero, width: 7, styles: PosStyles(align: PosAlign.right)),
+        PosColumn(text: 'Fact. orig.:',  width: 7, styles: const PosStyles()),
+        PosColumn(text: dev.ventaNumero, width: 5, styles: PosStyles(align: PosAlign.right)),
       ]),
       ...gen.row([
-        PosColumn(text: 'Empleado:', width: 4, styles: const PosStyles()),
-        PosColumn(text: dev.empleadoNombre, width: 8, styles: PosStyles(align: PosAlign.right)),
+        PosColumn(text: 'Empleado:',      width: 5, styles: const PosStyles()),
+        PosColumn(text: dev.empleadoNombre, width: 7, styles: PosStyles(align: PosAlign.right)),
       ]),
       ...gen.row([
         PosColumn(text: 'Fecha:', width: 4, styles: const PosStyles()),
-        PosColumn(text: fecha, width: 8, styles: PosStyles(align: PosAlign.right)),
+        PosColumn(text: fecha,   width: 8, styles: PosStyles(align: PosAlign.right)),
       ]),
       ...gen.row([
         PosColumn(text: 'Hora:', width: 4, styles: const PosStyles()),
-        PosColumn(text: hora, width: 8, styles: PosStyles(align: PosAlign.right)),
+        PosColumn(text: hora,   width: 8, styles: PosStyles(align: PosAlign.right)),
       ]),
       ...gen.hr(),
 
       // ── Productos devueltos ─────────────────────────────────
       ...gen.text(esCambio ? 'PRODUCTOS RECIBIDOS' : 'PRODUCTOS DEVUELTOS',
         styles: PosStyles(bold: true)),
+      if (esCambio && dev.motivoCambioLabel.isNotEmpty)
+        ...gen.text('Motivo: ${dev.motivoCambioLabel}', styles: const PosStyles()),
       ...gen.emptyLines(1),
       ...dev.detalles.expand((d) {
         final cantStr = d.cantidad % 1 == 0
@@ -282,6 +287,13 @@ class ThermalPrinterService {
         textPos: BarcodeText.below,
       ),
       ...gen.emptyLines(1),
+
+      // ── Copia ───────────────────────────────────────────────
+      if (esCopia) ...[
+        ...gen.hr(),
+        ...gen.text('**** COPIA DE COMPROBANTE ****',
+          styles: PosStyles(align: PosAlign.center, bold: true)),
+      ],
 
       // ── Footer ──────────────────────────────────────────────
       ...gen.emptyLines(1),

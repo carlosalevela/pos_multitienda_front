@@ -43,6 +43,7 @@ class InventarioProvider extends ChangeNotifier {
     int?    categoriaId,
     double? precioMin,
     double? precioMax,
+    String? alerta,
   }) async {
     _tiendaIdActual = tiendaId;
     _activoFiltro = activo;
@@ -58,6 +59,7 @@ class InventarioProvider extends ChangeNotifier {
         categoriaId: categoriaId,
         precioMin:   precioMin,
         precioMax:   precioMax,
+        alerta:      alerta,
       );
 
       if (result['success'] == true) {
@@ -122,12 +124,12 @@ class InventarioProvider extends ChangeNotifier {
   }
 
   // ── Cargar categorías ─────────────────────────────────
-  Future<void> cargarCategorias() async {
+  Future<void> cargarCategorias({int? tiendaId}) async {
     _cargandoCategorias = true;
     notifyListeners();
 
     try {
-      final result = await _service.getCategorias();
+      final result = await _service.getCategorias(tiendaId: tiendaId);
 
       if (result['success'] == true) {
         _categorias = result['data'] as List<Map<String, dynamic>>;

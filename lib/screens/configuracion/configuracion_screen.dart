@@ -94,11 +94,9 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
     final config = context.read<ConfigProvider>();
 
     if (auth.esSuperadmin) {
-      // Cargar lista de tiendas para el selector
+      // Siempre recarga para reflejar tiendas de todas las empresas
       final tiendas = context.read<TiendaProvider>();
-      if (tiendas.tiendas.isEmpty) {
-        await tiendas.cargarTiendas(soloActivas: true);
-      }
+      await tiendas.cargarTiendas(soloActivas: true);
       // Si ya hay una tienda seleccionada (o se pasó una), cargar su config
       final seleccionada = tiendaOverride ?? _tiendaSeleccionada;
       if (seleccionada != null) {
@@ -380,7 +378,10 @@ class _TiendaPicker extends StatelessWidget {
                       style: const TextStyle(fontSize: 13, color: Color(0xFF111827)),
                       items: tiendas.map((t) => DropdownMenuItem(
                         value: t,
-                        child: Text(t.nombre),
+                        child: t.empresaNombre.isNotEmpty
+                            ? Text('${t.nombre}  (${t.empresaNombre})',
+                                overflow: TextOverflow.ellipsis)
+                            : Text(t.nombre),
                       )).toList(),
                       onChanged: (t) { if (t != null) onSeleccionar(t); },
                     ),

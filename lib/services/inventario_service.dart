@@ -32,6 +32,7 @@ class InventarioService {
     String  activo = 'true',
     double? precioMin,
     double? precioMax,
+    String? alerta,
   }) async {
     try {
       final response = await ApiClient.instance.get(
@@ -42,6 +43,7 @@ class InventarioService {
           if (categoriaId != null) 'categoria':  categoriaId.toString(),
           if (precioMin   != null) 'precio_min': precioMin.toStringAsFixed(0),
           if (precioMax   != null) 'precio_max': precioMax.toStringAsFixed(0),
+          if (alerta      != null) 'alerta':     alerta,
           'activo': activo,
         },
       );

@@ -6,6 +6,7 @@ import '../models/contabilidad_models.dart';
 import '../models/sesion_caja.dart';
 import '../providers/auth_provider.dart';
 import '../providers/config_provider.dart';
+import 'caja_service.dart';
 import 'cuenta_bancaria_service.dart';
 import 'reporte_pdf_service.dart';
 import 'thermal_printer_service.dart';
@@ -23,6 +24,8 @@ class CierreTurnoPrintService {
     required double                     totalGastos,
     List<TopProducto>                   topProductos  = const [],
     List<Map<String, dynamic>>          separadosDia  = const [],
+    List<Map<String, dynamic>>          ventasDia     = const [],
+    List<Map<String, dynamic>>          abonosDia     = const [],
   }) async {
     final config   = context.read<ConfigProvider>();
     final tiendaId = context.read<AuthProvider>().tiendaId;
@@ -33,6 +36,17 @@ class CierreTurnoPrintService {
           ? await CuentaBancariaService().resumen(tiendaId, sesionId: sesion.id)
           : <Map<String, dynamic>>[];
 
+      // Fetch detalle devoluciones del turno
+      List<Map<String, dynamic>> devolucionesDia = const [];
+      try {
+        final detRes = await CajaService().getDetalleSesion(sesion.id);
+        if (detRes['success'] == true && detRes['data'] != null) {
+          final data = detRes['data'] as Map<String, dynamic>;
+          devolucionesDia = (data['devoluciones_detalle'] as List?)
+                  ?.cast<Map<String, dynamic>>() ?? [];
+        }
+      } catch (_) {}
+
       final paperSize = config.tipoPapel == '58mm' ? PaperSize.mm58 : PaperSize.mm80;
 
       if (config.tipoPapel != 'pdf' && ThermalPrinterService.isWebUsbSupported) {
@@ -42,9 +56,12 @@ class CierreTurnoPrintService {
           final bytes = await ThermalPrinterService.buildCierreTurno(
             sesion: sesion, empresaNombre: empresaNombre,
             metodosPago: metodosPago, totalGastos: totalGastos,
+            nit: config.nit, direccion: config.direccion, telefono: config.telefono,
             paperSize: paperSize, resumenCuentas: resumenCuentas,
             gastosSesion: gastosSesion, topProductos: topProductos,
             separadosDia: separadosDia,
+            ventasDia: ventasDia, abonosDia: abonosDia,
+            devolucionesDia: devolucionesDia,
           );
           await ThermalPrinterService.printBytes(device, bytes);
           return;
@@ -54,9 +71,12 @@ class CierreTurnoPrintService {
         final bytes = await ThermalPrinterService.buildCierreTurno(
           sesion: sesion, empresaNombre: empresaNombre,
           metodosPago: metodosPago, totalGastos: totalGastos,
+          nit: config.nit, direccion: config.direccion, telefono: config.telefono,
           paperSize: paperSize, resumenCuentas: resumenCuentas,
           gastosSesion: gastosSesion, topProductos: topProductos,
           separadosDia: separadosDia,
+          ventasDia: ventasDia, abonosDia: abonosDia,
+          devolucionesDia: devolucionesDia,
         );
         await WindowsPrinterService.printRaw(bytes);
         return;
@@ -69,6 +89,7 @@ class CierreTurnoPrintService {
         gastosSesion: gastosSesion, totalGastos: totalGastos,
         topProductos: topProductos, separadosDia: separadosDia,
         resumenCuentas: resumenCuentas,
+        ventasDia: ventasDia, abonosDia: abonosDia,
       );
     } catch (e, st) {
       debugPrint('CierreTurnoPrintService: $e\n$st');

@@ -1048,12 +1048,13 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
     color: _surfLow,
     child: Row(children: [
-      _th('#',         flex: 1),
-      _th('Nombre',    flex: 3),
-      _th('Categoría', flex: 2),
-      _th('P. Venta',  flex: 2),
-      _th('Stock',     flex: 1),
-      _th('Código',    flex: 2),
+      _th('#',          flex: 1),
+      _th('Nombre',     flex: 3),
+      _th('Categoría',  flex: 2),
+      _th('P. Venta',   flex: 2),
+      _th('P. Mayoreo', flex: 2),
+      _th('Stock',      flex: 1),
+      _th('Código',     flex: 2),
     ]),
   );
 
@@ -1094,6 +1095,11 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
         Expanded(flex: 2, child: Text(
             '\$${(f['precio_venta'] as num).toStringAsFixed(0)}',
             style: _inter(size: 12, weight: FontWeight.w700, color: _text))),
+        Expanded(flex: 2, child: f['precio_mayoreo'] != null
+            ? Text(
+                '\$${(f['precio_mayoreo'] as num).toStringAsFixed(0)}',
+                style: _inter(size: 12, weight: FontWeight.w700, color: _green))
+            : Text('—', style: _inter(size: 12, color: _muted2))),
         Expanded(flex: 1, child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
             decoration: BoxDecoration(

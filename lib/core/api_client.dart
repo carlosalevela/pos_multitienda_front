@@ -12,8 +12,8 @@ class ApiClient {
     final dio = Dio(
       BaseOptions(
         baseUrl:        Constants.baseUrl,
-        connectTimeout: const Duration(seconds: 30),
-        receiveTimeout: const Duration(seconds: 30),
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 45),
         headers:        {'Content-Type': 'application/json'},
       ),
     );
@@ -30,12 +30,37 @@ class ApiClient {
           return handler.next(options);
         },
 
-        // ── Refresh automático al 401 ───────────────────
+        // ── Retry automático para errores de red ────────
         onError: (error, handler) async {
+          final isNetworkError =
+              error.type == DioExceptionType.connectionTimeout ||
+              error.type == DioExceptionType.receiveTimeout  ||
+              error.type == DioExceptionType.sendTimeout     ||
+              error.type == DioExceptionType.connectionError;
+
+          final retries = error.requestOptions.extra['_retries'] as int? ?? 0;
+
+          if (isNetworkError && retries < 3) {
+            // Espera exponencial: 1s, 2s, 4s
+            await Future.delayed(Duration(seconds: 1 << retries));
+            final opts = error.requestOptions;
+            opts.extra['_retries'] = retries + 1;
+            // Re-inyectar token antes de reintentar
+            final prefs = await SharedPreferences.getInstance();
+            final token = prefs.getString('access_token');
+            if (token != null) opts.headers['Authorization'] = 'Bearer $token';
+            try {
+              final response = await dio.fetch(opts);
+              return handler.resolve(response);
+            } on DioException catch (e) {
+              return handler.next(e);
+            }
+          }
+
+          // ── Refresh automático al 401 ───────────────
           if (error.response?.statusCode == 401) {
             final refreshed = await _tryRefreshToken();
             if (refreshed) {
-              // ✅ reintenta el request original con el nuevo token
               final prefs = await SharedPreferences.getInstance();
               final newToken = prefs.getString('access_token');
               final opts = error.requestOptions;
@@ -44,12 +69,10 @@ class ApiClient {
                 final response = await dio.fetch(opts);
                 return handler.resolve(response);
               } catch (_) {
-                // si falla el reintento, forzar logout
                 await _clearSession();
                 return handler.next(error);
               }
             } else {
-              // refresh falló — limpiar sesión
               await _clearSession();
             }
           }

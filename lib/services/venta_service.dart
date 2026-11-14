@@ -37,6 +37,7 @@ class VentaService {
     required List<Map<String, dynamic>> detalles,
     List<Map<String, dynamic>>          pagos = const [],
     int?            cuentaDestinoId,
+    String?         codigoBono,
   }) async {
     try {
       final response = await ApiClient.instance.post(
@@ -51,6 +52,7 @@ class VentaService {
           'detalles': detalles,
           if (pagos.isNotEmpty) 'pagos': pagos,
           if (cuentaDestinoId != null) 'cuenta_destino': cuentaDestinoId,
+          if (codigoBono != null && codigoBono.isNotEmpty) 'codigo_bono': codigoBono,
         },
       );
       return {'success': true, 'data': response.data};

@@ -1,4 +1,5 @@
 import 'dart:async' show unawaited;
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
@@ -10,8 +11,12 @@ import '../../../providers/caja_provider.dart';
 import '../../../providers/config_provider.dart';
 import '../../../services/thermal_printer_service.dart';
 import '../../../services/windows_printer_service.dart';
+import '../../../models/contabilidad_models.dart';
 import '../../../models/resumen_cierre.dart';
+import '../../../models/sesion_caja.dart';
 import '../../../models/sesion_historial.dart';
+import '../../../services/caja_service.dart';
+import '../../../services/contabilidad_service.dart';
 import '../../../services/cuenta_bancaria_service.dart';
 import 'pdf/cierre_pdf.dart';
 
@@ -91,8 +96,14 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
   String _f(double v) => '\$${_fmt.format(v)}';
 
   String _formatFecha(String fecha) {
-    if (fecha.length >= 16) return fecha.substring(0, 16).replaceAll('T', ' ');
-    return fecha.replaceAll('T', ' ');
+    try {
+      final dt = DateTime.parse(fecha.replaceAll(' ', 'T')).toLocal();
+      return '${dt.year}-${dt.month.toString().padLeft(2,'0')}-${dt.day.toString().padLeft(2,'0')} '
+             '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
+    } catch (_) {
+      if (fecha.length >= 16) return fecha.substring(0, 16).replaceAll('T', ' ');
+      return fecha.replaceAll('T', ' ');
+    }
   }
 
   double get _diferencia =>
@@ -990,11 +1001,19 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
               setState(() => _montoIngresado = monto);
               _irAPaso(3);
             } else {
-              // Capturar resumen ANTES de cerrar (el provider lo limpia tras el cierre)
+              // Capturar sesionId y datos de respaldo ANTES de cerrar
               final r          = cont.resumenCierre;
+              final sesionId   = r?.sesionId;
               final obs        = _obsCtrl.text.trim();
               final montoFinal = _montoIngresado;
-              final tipoPapel  = context.read<ConfigProvider>().tipoPapel;
+              final cfg        = context.read<ConfigProvider>();
+              final tipoPapel  = cfg.tipoPapel;
+              // Capturar antes del pop para evitar usar context desmontado
+              final nit        = cfg.nit;
+              final dir        = cfg.direccion;
+              final tel        = cfg.telefono;
+              final tiendaId   = context.read<AuthProvider>().tiendaId;
+              final messenger  = ScaffoldMessenger.of(context);
 
               final ok = await cont.cerrarCaja(
                 montoFinalReal: montoFinal,
@@ -1003,49 +1022,19 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
               if (ok && mounted) {
                 Navigator.pop(context);
                 unawaited(_kickCajonCierre());
-                if (r != null) {
-                  unawaited(exportarCierrePDF(SesionHistorial(
-                    id:                   r.sesionId,
-                    empleadoNombre:       r.empleadoNombre,
-                    tiendaNombre:         r.tiendaNombre,
-                    fechaApertura:        r.fechaApertura,
-                    fechaCierre:          DateTime.now().toIso8601String(),
-                    estado:               'cerrada',
-                    observaciones:        obs,
-                    saldoInicial:         r.montoInicial,
-                    ventasEfectivo:          r.ventas.efectivo,
-                    ventasTarjeta:           r.ventas.tarjeta,
-                    ventasTransferencia:     r.ventas.transferencia,
-                    ventasMixto:             r.ventas.mixto,
-                    ventasMixtoEfectivo:     r.ventas.mixtoEfectivo,
-                    ventasTotal:             r.ventas.total,
-                    gastosTotal:             r.gastos.total,
-                    gastosDetalle:           r.gastos.detalle
-                        .map((g) => {'categoria': g.categoria, 'descripcion': '', 'monto': g.monto, 'metodo_pago': g.metodoPago})
-                        .toList(),
-                    abonosEfectivo:          r.abonos.efectivo,
-                    abonosTarjeta:           r.abonos.tarjeta,
-                    abonosTransferencia:     r.abonos.transferencia,
-                    abonosTotal:             r.abonos.total,
-                    abonosCreditoEfectivo:   r.abonos.creditoEfectivo,
-                    cancelacionesEfectivo:   r.abonos.cancelacionesEfectivo,
-                    ingresosManual:          r.abonos.ingresosManual,
-                    numAbonos:               r.abonos.cantidad,
-                    abonosDetalle:           r.abonos.detalle,
-                    devolucionesEfectivo:    r.devoluciones.netoEfectivo,
-                    devolucionesDirectasEf:  r.devoluciones.efectivo,
-                    cambiosCobrarEf:         r.devoluciones.cambiosCobrar,
-                    cambiosDevEf:            r.devoluciones.cambiosDevolver,
-                    numDevoluciones:         r.devoluciones.cantidad,
-                    numCambiosProducto:      r.devoluciones.cambiosProducto,
-                    devolucionesDetalle:     r.devoluciones.detalle,
-                    ventasDetalle:           r.ventasDetalle,
-                    cuentasResumen:          _resumenCuentas,
-                    montoFinalSistema:    r.montoEsperadoCaja,
-                    montoFinalReal:       montoFinal,
-                    diferencia:           montoFinal - r.montoEsperadoCaja,
-                    numTransacciones:     r.ventas.numTransacciones,
-                  ), tipoPapel: tipoPapel));
+                if (sesionId != null) {
+                  unawaited(_imprimirCierreFinalizado(
+                    sesionId:   sesionId,
+                    montoFinal: montoFinal,
+                    obs:        obs,
+                    tipoPapel:  tipoPapel,
+                    fallback:   r,
+                    nit:        nit,
+                    dir:        dir,
+                    tel:        tel,
+                    tiendaId:   tiendaId,
+                    messenger:  messenger,
+                  ));
                 }
                 await Future.delayed(const Duration(milliseconds: 600));
               }
@@ -1087,6 +1076,245 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
     padding: const EdgeInsets.symmetric(vertical: 4),
     child: Text('─────────────────────', style: _mono(_cBorder)),
   );
+
+  // Obtiene los datos finalizados del servidor (post-cierre) antes de imprimir.
+  // Si falla la red, construye el historial desde el resumen pre-cierre capturado.
+  // Imprime el ticket completo con buildCierreTurno (igual que la reimpresión manual).
+  Future<void> _imprimirCierreFinalizado({
+    required int                    sesionId,
+    required double                 montoFinal,
+    required String                 obs,
+    required dynamic                tipoPapel,
+    required ResumenCierre?         fallback,
+    String                          nit       = '',
+    String                          dir       = '',
+    String                          tel       = '',
+    int                             tiendaId  = 0,
+    ScaffoldMessengerState?         messenger,
+  }) async {
+    SesionHistorial? sesion;
+
+    // Intento 1: datos post-cierre del servidor
+    try {
+      final detalle = await CajaService().getDetalleSesion(sesionId);
+      if (detalle['success'] == true && detalle['data'] != null) {
+        sesion = SesionHistorial.fromJson(
+          detalle['data'] as Map<String, dynamic>,
+        );
+      }
+    } catch (e) {
+      debugPrint('[Cierre] Error obteniendo detalle post-cierre: $e');
+    }
+
+    // Intento 2: fallback con datos pre-cierre
+    if (sesion == null && fallback != null) {
+      final r = fallback;
+      sesion = SesionHistorial(
+        id:                   r.sesionId,
+        empleadoNombre:       r.empleadoNombre,
+        tiendaNombre:         r.tiendaNombre,
+        fechaApertura:        r.fechaApertura,
+        fechaCierre:          DateTime.now().toIso8601String(),
+        estado:               'cerrada',
+        observaciones:        obs,
+        saldoInicial:         r.montoInicial,
+        ventasEfectivo:       r.ventas.efectivo,
+        ventasTarjeta:        r.ventas.tarjeta,
+        ventasTransferencia:  r.ventas.transferencia,
+        ventasMixto:          r.ventas.mixto,
+        ventasMixtoEfectivo:  r.ventas.mixtoEfectivo,
+        ventasTotal:          r.ventas.total,
+        gastosTotal:          r.gastos.total,
+        gastosDetalle:        r.gastos.detalle
+            .map((g) => {'categoria': g.categoria, 'descripcion': '', 'monto': g.monto, 'metodo_pago': g.metodoPago})
+            .toList(),
+        abonosEfectivo:       r.abonos.efectivo,
+        abonosTarjeta:        r.abonos.tarjeta,
+        abonosTransferencia:  r.abonos.transferencia,
+        abonosTotal:          r.abonos.total,
+        abonosCreditoEfectivo: r.abonos.creditoEfectivo,
+        cancelacionesEfectivo: r.abonos.cancelacionesEfectivo,
+        ingresosManual:        r.abonos.ingresosManual,
+        numAbonos:             r.abonos.cantidad,
+        abonosDetalle:         r.abonos.detalle,
+        devolucionesEfectivo:  r.devoluciones.netoEfectivo,
+        devolucionesDirectasEf: r.devoluciones.efectivo,
+        cambiosCobrarEf:       r.devoluciones.cambiosCobrar,
+        cambiosDevEf:          r.devoluciones.cambiosDevolver,
+        cambiosCobrarTar:      r.devoluciones.cambiosCobrarTar,
+        cambiosDevTar:         r.devoluciones.cambiosDevTar,
+        cambiosCobrarTra:      r.devoluciones.cambiosCobrarTra,
+        cambiosDevTra:         r.devoluciones.cambiosDevTra,
+        numDevoluciones:       r.devoluciones.cantidad,
+        numCambiosProducto:    r.devoluciones.cambiosProducto,
+        devolucionesDetalle:   r.devoluciones.detalle,
+        ventasDetalle:         r.ventasDetalle,
+        cuentasResumen:        _resumenCuentas,
+        montoFinalSistema:     r.montoEsperadoCaja,
+        montoFinalReal:        montoFinal,
+        diferencia:            montoFinal - r.montoEsperadoCaja,
+        numTransacciones:      r.ventas.numTransacciones,
+      );
+    }
+
+    if (sesion == null) return;
+
+    // PDF + WhatsApp + DocumentoService (sin imprimir térmica aquí)
+    try {
+      await exportarCierrePDF(sesion,
+          tipoPapel: tipoPapel, nit: nit, dir: dir, tel: tel,
+          messenger: messenger, skipThermal: true);
+    } catch (e) {
+      debugPrint('[Cierre] Error en PDF/WhatsApp: $e');
+      messenger?.showSnackBar(SnackBar(
+        content: Text('Error al generar cierre: $e'),
+        backgroundColor: const Color(0xFFBE123C),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ));
+    }
+
+    // Impresión térmica: usa buildCierreTurno = mismo ticket que la reimpresión manual
+    if (tipoPapel != 'pdf') {
+      try {
+        final ps = tipoPapel == '58mm' ? PaperSize.mm58 : PaperSize.mm80;
+        if (!kIsWeb && await WindowsPrinterService.hasSavedPrinter()) {
+          final ventasNorm = _normalizarVentas(sesion.ventasDetalle);
+
+          // Separados del turno (misma fecha de apertura)
+          final fechaSep = sesion.fechaApertura.length >= 10
+              ? sesion.fechaApertura.substring(0, 10)
+              : DateTime.now().toString().substring(0, 10);
+          List<Map<String, dynamic>> separadosDia = [];
+          if (tiendaId > 0) {
+            try {
+              separadosDia = await ContabilidadService()
+                  .getSeparadosDia(fechaSep, tiendaId);
+            } catch (_) {}
+          }
+
+          final bytes = await ThermalPrinterService.buildCierreTurno(
+            sesion:         _toSesionCaja(sesion),
+            empresaNombre:  sesion.tiendaNombre,
+            metodosPago:    _metodosPagoDesdeHistorial(sesion),
+            totalGastos:    sesion.gastosTotal,
+            nit: nit, direccion: dir, telefono: tel,
+            paperSize:      ps,
+            resumenCuentas: _resumenCuentas,
+            gastosSesion:   sesion.gastosDetalle,
+            ventasDia:      ventasNorm,
+            abonosDia:      sesion.abonosDetalle,
+            devolucionesDia: sesion.devolucionesDetalle,
+            separadosDia:   separadosDia,
+            topProductos:   _calcTopProductos(ventasNorm),
+          );
+          await WindowsPrinterService.printRaw(bytes);
+        }
+      } catch (e) {
+        debugPrint('[Cierre] Error en impresión térmica: $e');
+      }
+    }
+  }
+
+  // Construye un SesionCaja provisional a partir de SesionHistorial para buildCierreTurno.
+  static SesionCaja _toSesionCaja(SesionHistorial h) {
+    DateTime apertura;
+    DateTime? cierre;
+    try { apertura = DateTime.parse(h.fechaApertura).toLocal(); } catch (_) { apertura = DateTime.now(); }
+    try { cierre = h.fechaCierre.isNotEmpty ? DateTime.parse(h.fechaCierre).toLocal() : null; } catch (_) {}
+    return SesionCaja(
+      id:                  h.id,
+      estado:              h.estado,
+      saldo_inicial:       h.saldoInicial,
+      saldo_final:         h.montoFinalReal,
+      fecha_apertura:      apertura,
+      fecha_cierre:        cierre,
+      ventasTotal:         h.ventasTotal,
+      ventasEfectivo:      h.ventasEfectivo,
+      ventasTarjeta:       h.ventasTarjeta,
+      ventasTransferencia: h.ventasTransferencia,
+      ventasMixtoEfectivo: h.ventasMixtoEfectivo,
+      ventasBono:          h.ventasBono,
+      numTransacciones:    h.numTransacciones,
+      gastosTotal:         h.gastosTotal,
+      montoEsperado:       h.montoFinalSistema,
+      tiendaNombre:        h.tiendaNombre,
+      empleadoNombre:      h.empleadoNombre,
+      abonosTotal:         h.abonosTotal,
+      abonosEfectivo:      h.abonosEfectivo,
+      abonosTarjeta:       h.abonosTarjeta,
+      abonosTransferencia: h.abonosTransferencia,
+      numAbonos:           h.numAbonos,
+      cambiosCobrarEf:     h.cambiosCobrarEf,
+      cambiosCobrarTar:    h.cambiosCobrarTar,
+      cambiosDevTar:       h.cambiosDevTar,
+      cambiosCobrarTra:    h.cambiosCobrarTra,
+      cambiosDevTra:       h.cambiosDevTra,
+      observaciones:       h.observaciones,
+    );
+  }
+
+  // Construye el mapa de métodos de pago para buildCierreTurno.
+  static Map<String, double> _metodosPagoDesdeHistorial(SesionHistorial h) {
+    final m = <String, double>{};
+    if (h.ventasEfectivo      > 0) m['efectivo']      = h.ventasEfectivo;
+    if (h.ventasTarjeta       > 0) m['tarjeta']       = h.ventasTarjeta;
+    if (h.ventasTransferencia > 0) m['transferencia'] = h.ventasTransferencia;
+    if (h.ventasMixto         > 0) m['mixto']         = h.ventasMixto;
+    if (h.ventasBono          > 0) m['bono']          = h.ventasBono;
+    return m;
+  }
+
+  // Calcula top 5 productos desde la lista de ventas normalizadas.
+  static List<TopProducto> _calcTopProductos(
+      List<Map<String, dynamic>> ventas) {
+    final acum = <String, Map<String, dynamic>>{};
+    for (final v in ventas) {
+      if ((v['estado']?.toString() ?? '') == 'anulada') continue;
+      for (final d in (v['detalles'] as List? ?? [])) {
+        if (d is! Map) continue;
+        final nombre   = d['producto_nombre']?.toString() ?? '';
+        final cantidad = (d['cantidad'] as num?)?.toDouble() ?? 0.0;
+        final subtotal = (d['subtotal']  as num?)?.toDouble() ?? 0.0;
+        if (nombre.isEmpty) continue;
+        acum.update(nombre, (e) => {
+          'nombre':   nombre,
+          'cantidad': (e['cantidad'] as double) + cantidad,
+          'subtotal': (e['subtotal'] as double) + subtotal,
+        }, ifAbsent: () => {'nombre': nombre, 'cantidad': cantidad, 'subtotal': subtotal});
+      }
+    }
+    final lista = acum.values.toList()
+      ..sort((a, b) =>
+          (b['subtotal'] as double).compareTo(a['subtotal'] as double));
+    return lista.take(5).map((e) => TopProducto(
+      producto:      e['nombre'] as String,
+      categoria:     '',
+      totalVendido:  e['cantidad'] as double,
+      totalIngresos: e['subtotal'] as double,
+    )).toList();
+  }
+
+  // Normaliza ventas_detalle del historial al formato esperado por buildCierreTurno.
+  // El SesionCajaSerializer usa 'productos'/'producto' mientras buildCierreTurno
+  // espera 'detalles'/'producto_nombre' (igual que VentaSerializer).
+  static List<Map<String, dynamic>> _normalizarVentas(
+      List<Map<String, dynamic>> raw) {
+    return raw.map((v) {
+      final prods = (v['productos'] as List?) ??
+          (v['detalles'] as List?) ?? [];
+      final detalles = prods.map((p) => <String, dynamic>{
+        'producto_nombre': p['producto_nombre'] ?? p['producto'] ?? '',
+        'cantidad':        p['cantidad'],
+        'subtotal':        p['subtotal'],
+      }).toList();
+      return <String, dynamic>{
+        ...v,
+        'estado':   v['estado']  ?? 'completada',
+        'detalles': detalles,
+      };
+    }).toList();
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════

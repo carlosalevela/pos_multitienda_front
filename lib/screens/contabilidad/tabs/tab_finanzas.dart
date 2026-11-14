@@ -5,6 +5,7 @@ import '../../../theme/app_colors.dart';
 import '../../../providers/contabilidad_provider.dart';
 import 'tab_pl.dart';
 import 'tab_rentabilidad.dart';
+import 'tab_cuentas_bancarias.dart';
 
 class TabFinanzas extends StatefulWidget {
   final ContabilidadProvider cont;
@@ -26,12 +27,20 @@ class _TabFinanzasState extends State<TabFinanzas> {
   int _sel = 0;
 
   @override
+  void didUpdateWidget(TabFinanzas oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tiendaId != widget.tiendaId) {
+      setState(() {});
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _SubSelector(
-          labels: const ['P&L', 'Rentabilidad'],
+          labels: const ['P&L', 'Rentabilidad', 'Cuentas'],
           selected: _sel,
           onChanged: (i) => setState(() => _sel = i),
         ),
@@ -40,8 +49,17 @@ class _TabFinanzasState extends State<TabFinanzas> {
           child: IndexedStack(
             index: _sel,
             children: [
-              TabPL(cont: widget.cont, fmt: widget.fmt, tiendaId: widget.tiendaId),
+              TabPL(
+                key: ValueKey(widget.tiendaId),
+                cont: widget.cont,
+                fmt: widget.fmt,
+                tiendaId: widget.tiendaId,
+              ),
               TabRentabilidad(tiendaId: widget.tiendaId),
+              TabCuentasBancarias(
+                key: ValueKey('cuentas_${widget.tiendaId}'),
+                tiendaId: widget.tiendaId,
+              ),
             ],
           ),
         ),

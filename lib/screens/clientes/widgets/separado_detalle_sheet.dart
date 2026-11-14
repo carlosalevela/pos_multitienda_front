@@ -641,7 +641,8 @@ class _SeparadoDetalleSheetState extends State<SeparadoDetalleSheet> {
 
   // ── Imprimir ──────────────────────────────────────────────
   Future<void> _imprimir(BuildContext context) async {
-    final tipoPapel = context.read<ConfigProvider>().tipoPapel;
+    final config    = context.read<ConfigProvider>();
+    final tipoPapel = config.tipoPapel;
     final paperSize = tipoPapel == '58mm' ? PaperSize.mm58 : PaperSize.mm80;
     final auth      = context.read<AuthProvider>();
     final empresaNombre = auth.empresaNombre.isNotEmpty
@@ -653,7 +654,8 @@ class _SeparadoDetalleSheetState extends State<SeparadoDetalleSheet> {
         final dev = await ThermalPrinterService.getAutoDevice();
         if (dev != null) {
           final bytes = await ThermalPrinterService.buildSeparadoRecibo(
-              _separado, empresaNombre: empresaNombre, paperSize: paperSize);
+              _separado, empresaNombre: empresaNombre, paperSize: paperSize,
+              nit: config.nit, direccion: config.direccion, telefono: config.telefono);
           await ThermalPrinterService.printBytes(dev, bytes);
           return;
         }
@@ -661,7 +663,8 @@ class _SeparadoDetalleSheetState extends State<SeparadoDetalleSheet> {
     } else if (!kIsWeb && await WindowsPrinterService.hasSavedPrinter()) {
       try {
         final bytes = await ThermalPrinterService.buildSeparadoRecibo(
-            _separado, empresaNombre: empresaNombre, paperSize: paperSize);
+            _separado, empresaNombre: empresaNombre, paperSize: paperSize,
+            nit: config.nit, direccion: config.direccion, telefono: config.telefono);
         await WindowsPrinterService.printRaw(bytes);
         return;
       } catch (_) {}
@@ -669,7 +672,8 @@ class _SeparadoDetalleSheetState extends State<SeparadoDetalleSheet> {
 
     if (!context.mounted) return;
     await ReciboPdfService.imprimirSeparado(
-        separado: _separado, empresaNombre: empresaNombre);
+        separado: _separado, empresaNombre: empresaNombre,
+        nit: config.nit, direccion: config.direccion, telefono: config.telefono);
   }
 }
 

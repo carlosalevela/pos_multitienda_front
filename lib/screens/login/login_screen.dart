@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../services/update_service.dart';
+import '../../services/update_service.dart' show UpdateService, currentVersion;
 
 Future<void> _abrirWhatsAppAdmin() async {
   // Número con código de país Colombia (+57)
@@ -80,7 +80,8 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future.delayed(const Duration(milliseconds: 800));
       if (mounted) UpdateService.chequear(context);
     });
   }
@@ -298,12 +299,114 @@ class _LeftPanel extends StatelessWidget {
               Text('© ${DateTime.now().year} POS Multitienda Inc.',
                   style: GoogleFonts.inter(
                       fontSize: 10, color: _C.textHint)),
-              Text('Soporte técnico',
-                  style: GoogleFonts.inter(
-                      fontSize: 10,
-                      color: _C.greenDark,
-                      fontWeight: FontWeight.w600)),
+              GestureDetector(
+                onTap: () {
+                  // Soporte técnico (sin acción)
+                },
+                child: Text('Soporte técnico',
+                    style: GoogleFonts.inter(
+                        fontSize: 10,
+                        color: _C.greenDark,
+                        fontWeight: FontWeight.w600)),
+              ),
             ],
+          ),
+          const SizedBox(height: 8),
+          // Chip de versión: error > update disponible > al día
+          ValueListenableBuilder<String?>(
+            valueListenable: UpdateService.updateError,
+            builder: (ctx, error, _) {
+              return ValueListenableBuilder<Map<String, dynamic>?>(
+                valueListenable: UpdateService.updateDisponible,
+                builder: (ctx2, info, _) {
+                  final bool hayError  = error != null;
+                  final bool hayUpdate = info != null && !hayError;
+
+                  Color chipBg, chipBorder, iconColor, textColor;
+                  IconData chipIcon;
+                  String chipLabel;
+                  VoidCallback? onTap;
+
+                  if (hayError) {
+                    chipBg     = const Color(0xFFFFF7ED);
+                    chipBorder = const Color(0xFFFBBF24);
+                    iconColor  = const Color(0xFFB45309);
+                    textColor  = const Color(0xFFB45309);
+                    chipIcon   = Icons.warning_amber_rounded;
+                    chipLabel  = 'Error al cargar versión';
+                    onTap = () => showDialog(
+                      context: ctx2,
+                      builder: (_) => AlertDialog(
+                        title: const Text('Error al verificar versión'),
+                        content: SingleChildScrollView(
+                          child: Text(error,
+                              style: const TextStyle(fontSize: 12,
+                                  fontFamily: 'monospace')),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(ctx2);
+                              UpdateService.chequear(ctx2);
+                            },
+                            child: const Text('Reintentar'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx2),
+                            child: const Text('Cerrar'),
+                          ),
+                        ],
+                      ),
+                    );
+                  } else if (hayUpdate) {
+                    chipBg     = const Color(0xFFFEF2F2);
+                    chipBorder = const Color(0xFFFCA5A5);
+                    iconColor  = const Color(0xFFDC2626);
+                    textColor  = const Color(0xFFDC2626);
+                    chipIcon   = Icons.system_update_rounded;
+                    chipLabel  = 'v$currentVersion → v${info!['version']} disponible';
+                    onTap = () => UpdateService.mostrarDialogo(ctx2);
+                  } else {
+                    chipBg     = _C.greenLight;
+                    chipBorder = _C.greenBorder.withOpacity(0.5);
+                    iconColor  = _C.greenDark;
+                    textColor  = _C.greenDark;
+                    chipIcon   = Icons.check_circle_rounded;
+                    chipLabel  = 'v$currentVersion — al día';
+                    onTap = null;
+                  }
+
+                  return GestureDetector(
+                    onTap: onTap,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: chipBg,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: chipBorder),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(chipIcon, size: 11, color: iconColor),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(chipLabel,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: textColor,
+                                )),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
           ),
         ],
       ),

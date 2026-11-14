@@ -88,6 +88,7 @@ class DevolucionesProvider extends ChangeNotifier {
     String? metodoPagoDiferencia,
     double? montoRecibido,
     int?    cuentaDestinoId,
+    String  motivoCambio = 'averia',
   }) async {
     if (_procesando) return {'success': false, 'error': 'Procesando'};
     _procesando = true;
@@ -103,6 +104,7 @@ class DevolucionesProvider extends ChangeNotifier {
         metodoPagoDiferencia: metodoPagoDiferencia,
         montoRecibido: montoRecibido,
         cuentaDestinoId: cuentaDestinoId,
+        motivoCambio: motivoCambio,
       );
 
       if (resp['success'] == true) {

@@ -100,6 +100,13 @@ class PosProvider extends ChangeNotifier {
   String _mixtoOtroMetodo  = 'transferencia';
   int?   _cuentaDestinoId;
 
+  // ── Bono ──────────────────────────────────────────────
+  String  _codigoBono        = '';
+  Map<String, dynamic>? _bonoValidado;
+  String? _bonoOtroMetodo;        // 'efectivo' | 'tarjeta' | 'transferencia' cuando hay faltante
+  int?    _bonoOtroCuentaId;     // cuenta destino para bono+transferencia
+  double  _bonoEfectivoRecibido = 0; // efectivo entregado cuando el faltante se paga en cash
+
   // ── Tickets parkados ──────────────────────────────────
   static const _kStorageKey = 'pos_tickets_parkados';
   final List<TicketParkado> _ticketsParkados = [];
@@ -135,13 +142,66 @@ class PosProvider extends ChangeNotifier {
   String get mixtoOtroMetodo   => _mixtoOtroMetodo;
   double get mixtoOtroMonto    => (totalConDescuento - _mixtoEfectivo).clamp(0, double.infinity);
   int?   get cuentaDestinoId   => _cuentaDestinoId;
+  String get codigoBono        => _codigoBono;
+  Map<String, dynamic>? get bonoValidado => _bonoValidado;
+  double get bonoSaldo         => (_bonoValidado?['saldo'] as num?)?.toDouble() ?? 0;
+  double get bonoMontoUsado    => _metodoPago == 'bono' && _bonoValidado != null
+      ? bonoSaldo.clamp(0.0, totalConDescuento)
+      : 0.0;
+  double get bonoFaltante      => _metodoPago == 'bono' && _bonoValidado != null
+      ? (totalConDescuento - bonoSaldo).clamp(0.0, double.infinity)
+      : 0.0;
+  String? get bonoOtroMetodo        => _bonoOtroMetodo;
+  int?    get bonoOtroCuentaId      => _bonoOtroCuentaId;
+  double  get bonoEfectivoRecibido  => _bonoEfectivoRecibido;
+  double  get bonoVuelto            =>
+      (_bonoOtroMetodo == 'efectivo' && _bonoEfectivoRecibido > 0)
+          ? (_bonoEfectivoRecibido - bonoFaltante).clamp(0, double.infinity)
+          : 0.0;
 
   // ── Setters ───────────────────────────────────────────
+
+  void setBonoOtroMetodo(String? metodo) {
+    _bonoOtroMetodo        = metodo;
+    _bonoOtroCuentaId      = null;
+    _bonoEfectivoRecibido  = 0;
+    notifyListeners();
+  }
+
+  void setBonoOtroCuentaId(int? id) {
+    _bonoOtroCuentaId = id;
+    notifyListeners();
+  }
+
+  void setBonoEfectivoRecibido(double monto) {
+    _bonoEfectivoRecibido = monto;
+    notifyListeners();
+  }
 
   void setMetodoPago(String metodo) {
     _metodoPago = metodo;
     if (metodo == 'mixto') _mixtoEfectivo = 0;
     if (metodo == 'efectivo' || metodo == 'credito') _cuentaDestinoId = null;
+    if (metodo != 'bono') {
+      _codigoBono       = '';
+      _bonoValidado     = null;
+      _bonoOtroMetodo   = null;
+      _bonoOtroCuentaId = null;
+    }
+    notifyListeners();
+  }
+
+  void setCodigoBono(String codigo) {
+    _codigoBono   = codigo;
+    _bonoValidado = null;
+    notifyListeners();
+  }
+
+  void setBonoValidado(Map<String, dynamic>? bono) {
+    _bonoValidado          = bono;
+    _bonoOtroMetodo        = null;
+    _bonoOtroCuentaId      = null;
+    _bonoEfectivoRecibido  = 0;
     notifyListeners();
   }
 
@@ -306,6 +366,11 @@ class PosProvider extends ChangeNotifier {
     _mixtoEfectivo    = 0;
     _mixtoOtroMetodo  = 'transferencia';
     _cuentaDestinoId  = null;
+    _codigoBono       = '';
+    _bonoValidado     = null;
+    _bonoOtroMetodo        = null;
+    _bonoOtroCuentaId      = null;
+    _bonoEfectivoRecibido  = 0;
     notifyListeners();
   }
 
@@ -474,6 +539,35 @@ class PosProvider extends ChangeNotifier {
         return false;
       }
     }
+    if (_metodoPago == 'bono') {
+      if (_bonoValidado == null) {
+        _errorMsg = 'Valida el código del bono antes de cobrar';
+        notifyListeners();
+        return false;
+      }
+      if ((_bonoValidado!['esta_vigente'] as bool? ?? false) == false) {
+        _errorMsg = 'El bono no está vigente';
+        notifyListeners();
+        return false;
+      }
+      if (bonoFaltante > 0) {
+        if (_bonoOtroMetodo == null) {
+          _errorMsg = 'Selecciona cómo pagar el faltante de \$${bonoFaltante.toStringAsFixed(0)}';
+          notifyListeners();
+          return false;
+        }
+        if (_bonoOtroMetodo == 'efectivo' && _bonoEfectivoRecibido < bonoFaltante) {
+          _errorMsg = 'El monto recibido en efectivo es menor al faltante';
+          notifyListeners();
+          return false;
+        }
+        if (_bonoOtroMetodo == 'transferencia' && _bonoOtroCuentaId == null) {
+          _errorMsg = 'Selecciona la cuenta de destino para la transferencia';
+          notifyListeners();
+          return false;
+        }
+      }
+    }
 
     _procesando = true;
     _errorMsg   = '';
@@ -486,27 +580,49 @@ class PosProvider extends ChangeNotifier {
         'descuento':       item.descuento.toString(),
       }).toList();
 
-      final List<Map<String, dynamic>> pagos = _metodoPago == 'mixto'
-          ? [
-              {'metodo': 'efectivo',       'monto': _mixtoEfectivo},
-              {'metodo': _mixtoOtroMetodo, 'monto': totalConDescuento - _mixtoEfectivo},
-            ]
-          : [];
+      // Determinar método de pago final y pagos para bono parcial
+      final bool esBonoConFaltante = _metodoPago == 'bono' && bonoFaltante > 0 && _bonoOtroMetodo != null;
+      final String metodoPagoFinal = esBonoConFaltante
+          ? 'bono_$_bonoOtroMetodo'
+          : _metodoPago;
+
+      final List<Map<String, dynamic>> pagos;
+      if (esBonoConFaltante) {
+        pagos = [
+          {'metodo': 'bono',           'monto': bonoMontoUsado},
+          {'metodo': _bonoOtroMetodo!, 'monto': bonoFaltante},
+        ];
+      } else if (_metodoPago == 'mixto') {
+        pagos = [
+          {'metodo': 'efectivo',       'monto': _mixtoEfectivo},
+          {'metodo': _mixtoOtroMetodo, 'monto': totalConDescuento - _mixtoEfectivo},
+        ];
+      } else {
+        pagos = [];
+      }
+
+      final int? cuentaDestino = esBonoConFaltante && _bonoOtroMetodo == 'transferencia'
+          ? _bonoOtroCuentaId
+          : _cuentaDestinoId;
 
       final result = await _ventaService.crearVenta(
         tiendaId:        tiendaId,
-        metodoPago:      _metodoPago,
-        montoRecibido:   _montoRecibido,
+        metodoPago:      metodoPagoFinal,
+        montoRecibido:   _metodoPago == 'bono' ? bonoMontoUsado : _montoRecibido,
         descuento:       _descuento,
         clienteId:       clienteId,
         aCredito:        _metodoPago == 'credito',
         detalles:        detalles,
         pagos:           pagos,
-        cuentaDestinoId: _cuentaDestinoId,
+        cuentaDestinoId: cuentaDestino,
+        codigoBono:      _metodoPago == 'bono' ? _codigoBono : null,
       );
 
       if (result['success'] == true) {
-        final msg = '✅ Venta registrada — Vuelto: \$${vuelto.toStringAsFixed(0)}';
+        final double vueltoReal = esBonoConFaltante && _bonoOtroMetodo == 'efectivo'
+            ? bonoVuelto
+            : vuelto;
+        final msg = '✅ Venta registrada — Vuelto: \$${vueltoReal.toStringAsFixed(0)}';
         _ultimaVenta = result['data'] as Map<String, dynamic>?;
         limpiarCarrito();
         _successMsg = msg;

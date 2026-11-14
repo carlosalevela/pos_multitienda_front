@@ -39,10 +39,27 @@ class AuthService {
       return {'success': true, 'empleado': empleado};
 
     } on DioException catch (e) {
-      // ✅ FIX: distingue errores de credenciales vs errores de red/servidor
       final status = e.response?.statusCode;
-      if (status == 401 || status == 400) {
-        return {'success': false, 'error': 'Email o contraseña incorrectos'};
+      if (status == 401) {
+        return {'success': false, 'error': 'Contraseña incorrecta'};
+      }
+      if (status == 400) {
+        // Mostrar el mensaje real del backend (ej: cédula no encontrada)
+        final data = e.response?.data;
+        String msg = 'Error de autenticación';
+        if (data is Map) {
+          if (data.containsKey('detail')) {
+            msg = data['detail'].toString();
+          } else {
+            final first = data.values.firstOrNull;
+            if (first is List && first.isNotEmpty) {
+              msg = first.first.toString();
+            } else if (first != null) {
+              msg = first.toString();
+            }
+          }
+        }
+        return {'success': false, 'error': msg};
       }
       if (e.type == DioExceptionType.connectionError ||
           e.type == DioExceptionType.connectionTimeout) {

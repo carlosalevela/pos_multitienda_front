@@ -23,6 +23,7 @@ import '../../services/thermal_printer_service.dart';
 import '../../services/windows_printer_service.dart';
 import '../../providers/config_provider.dart';
 import '../../services/barcode_service.dart';
+import '../../services/bono_service.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import '../devoluciones/widgets/devolucion_form_sheet.dart';
@@ -55,10 +56,13 @@ class PosScreen extends StatefulWidget {
 }
 
 class _PosScreenState extends State<PosScreen> {
-  final _searchCtrl          = TextEditingController();
-  final _montoCtrl           = TextEditingController();
-  final _descuentoCtrl       = TextEditingController();
-  final _mixtoEfectivoCtrl   = TextEditingController();
+  final _searchCtrl           = TextEditingController();
+  final _montoCtrl            = TextEditingController();
+  final _descuentoCtrl        = TextEditingController();
+  final _mixtoEfectivoCtrl    = TextEditingController();
+  final _bonoCtrl             = TextEditingController();
+  final _bonoEfectivoCtrl     = TextEditingController();
+  bool  _validandoBono        = false;
 
   // Categories
   List<Map<String, dynamic>> _categorias   = [];
@@ -96,7 +100,6 @@ class _PosScreenState extends State<PosScreen> {
       _notifProv = context.read<NotificacionesProvider>()..iniciarPolling();
       _cargarAlertas();
       _cargarCategorias();
-      _cargarTodos();
       context.read<PosProvider>().cargarTicketsGuardados();
       _cargarConfig();
     });
@@ -111,6 +114,8 @@ class _PosScreenState extends State<PosScreen> {
     _montoCtrl.dispose();
     _descuentoCtrl.dispose();
     _mixtoEfectivoCtrl.dispose();
+    _bonoCtrl.dispose();
+    _bonoEfectivoCtrl.dispose();
     _debounceSearch?.cancel();
     _notifOverlay?.remove();
     super.dispose();
@@ -124,12 +129,8 @@ class _PosScreenState extends State<PosScreen> {
     if (tiendaId <= 0) return;
     final empresaId = int.tryParse(auth.empresaId);
     final config = context.read<ConfigProvider>();
-    if (!config.cargada) {
-      await config.cargar(tiendaId, empresaId: empresaId);
-    } else {
-      // Siempre refrescar cuentas por si se agregaron nuevas en el admin
-      unawaited(config.recargarCuentas(tiendaId));
-    }
+    // Siempre recargar para reflejar cambios del admin (tipoPapel, cuentas, etc.)
+    await config.cargar(tiendaId, empresaId: empresaId);
   }
 
   Future<void> _cargarAlertas() async {
@@ -146,27 +147,20 @@ class _PosScreenState extends State<PosScreen> {
   Future<void> _cargarCategorias() async {
     setState(() => _cargandoCats = true);
     final tid = context.read<AuthProvider>().tiendaId;
-    // Carga todos los productos de la tienda para extraer categorías reales
-    final r = await InventarioService().getProductos(
+    final r = await InventarioService().getCategorias(
       tiendaId: tid > 0 ? tid : null,
     );
     if (mounted) {
+      final cats = (r['success'] == true
+              ? r['data'] as List<Map<String, dynamic>>
+              : <Map<String, dynamic>>[])
+          .map((c) => {'id': c['id'] as int?, 'nombre': c['nombre'] as String})
+          .toList();
+      cats.sort((a, b) =>
+          (a['nombre'] as String).compareTo(b['nombre'] as String));
       setState(() {
         _cargandoCats = false;
-        if (r['success'] == true) {
-          final productos = r['data'] as List<Producto>;
-          final seen = <int?>{};
-          final cats = <Map<String, dynamic>>[];
-          for (final p in productos) {
-            if (p.categoriaId != null && !seen.contains(p.categoriaId)) {
-              seen.add(p.categoriaId);
-              cats.add({'id': p.categoriaId, 'nombre': p.categoria});
-            }
-          }
-          cats.sort((a, b) =>
-              (a['nombre'] as String).compareTo(b['nombre'] as String));
-          _categorias = cats;
-        }
+        _categorias = cats;
       });
     }
   }
@@ -187,6 +181,12 @@ class _PosScreenState extends State<PosScreen> {
       tiendaId:    tid > 0 ? tid : null,
       categoriaId: catId,
     );
+  }
+
+  void _limpiarBusqueda() {
+    _searchCtrl.clear();
+    final tid = context.read<AuthProvider>().tiendaId;
+    context.read<PosProvider>().buscarProductos('', tid > 0 ? tid : 0);
   }
 
   Future<void> _cargarClienteResumen(int clienteId) async {
@@ -268,6 +268,7 @@ class _PosScreenState extends State<PosScreen> {
       }
       context.read<PosProvider>().agregarAlCarrito(p);
       _aplicarDescuentoTierSiNecesario();
+      _limpiarBusqueda();
       HapticFeedback.lightImpact();
       return;
     }
@@ -912,12 +913,24 @@ class _PosScreenState extends State<PosScreen> {
       return const Center(child: CircularProgressIndicator(color: _kGreen, strokeWidth: 2.5));
     }
     if (pos.resultados.isEmpty) {
+      final buscando = _searchCtrl.text.isNotEmpty;
+      final filtrando = _catId != null;
       return _emptyState(
-        icon: _searchCtrl.text.isNotEmpty ? Icons.search_off_rounded : Icons.inventory_2_outlined,
-        title: _searchCtrl.text.isNotEmpty ? 'Sin resultados' : 'Sin productos',
-        sub: _searchCtrl.text.isNotEmpty
+        icon: buscando
+            ? Icons.search_off_rounded
+            : filtrando
+                ? Icons.inventory_2_outlined
+                : Icons.search_rounded,
+        title: buscando
+            ? 'Sin resultados'
+            : filtrando
+                ? 'Sin productos'
+                : 'Busca un producto',
+        sub: buscando
             ? 'No encontramos "${_searchCtrl.text}"'
-            : 'No hay productos disponibles en esta categoría',
+            : filtrando
+                ? 'No hay productos disponibles en esta categoría'
+                : 'Escribe el nombre, código o selecciona una categoría',
       );
     }
     if (_viewMode == _ViewMode.list) {
@@ -965,6 +978,7 @@ class _PosScreenState extends State<PosScreen> {
       onTap: sinStock ? null : () {
         pos.agregarAlCarrito(p);
         _aplicarDescuentoTierSiNecesario();
+        _limpiarBusqueda();
         HapticFeedback.lightImpact();
       },
       child: Container(
@@ -1087,6 +1101,7 @@ class _PosScreenState extends State<PosScreen> {
       onTap: sinStock ? null : () {
         pos.agregarAlCarrito(p);
         _aplicarDescuentoTierSiNecesario();
+        _limpiarBusqueda();
         HapticFeedback.lightImpact();
       },
       child: Container(
@@ -1662,7 +1677,12 @@ class _PosScreenState extends State<PosScreen> {
         const SizedBox(height: 10),
         _buildCreditoInfo(),
       ],
-      if (pos.metodoPago != 'efectivo' && pos.metodoPago != 'credito') ...[
+      if (pos.metodoPago == 'bono') ...[
+        const SizedBox(height: 10),
+        _buildBonoSection(pos),
+      ],
+      if (pos.metodoPago != 'efectivo' && pos.metodoPago != 'credito'
+          && pos.metodoPago != 'bono') ...[
         const SizedBox(height: 10),
         _buildCuentaSelector(pos),
       ],
@@ -1764,11 +1784,12 @@ class _PosScreenState extends State<PosScreen> {
               final metodoPago       = pos.metodoPago;
               _montoCtrl.clear();
               _descuentoCtrl.clear();
+              _bonoEfectivoCtrl.clear();
               final ok = await pos.cobrar(auth.tiendaId, clienteId: clienteAntes?.id);
               if (!mounted) return;
               setState(() => _clienteSeleccionado = null);
               if (ok) {
-                final esCash = metodoPago == 'efectivo' || metodoPago == 'mixto';
+                final esCash = metodoPago == 'efectivo' || metodoPago == 'mixto' || metodoPago == 'bono_efectivo';
                 if (esCash) unawaited(_kickCajon());
                 if (clienteAntes != null) {
                   final feedback = pos.ultimaVenta?['tier_feedback'] as Map<String, dynamic>?;
@@ -1826,7 +1847,7 @@ class _PosScreenState extends State<PosScreen> {
 
       const SizedBox(height: 6),
 
-      // Quick actions — 4 íconos
+      // Quick actions — 5 íconos
       Row(children: [
         _quickIcon(Icons.percent_rounded,
             label: 'Aplicar descuento',
@@ -1994,11 +2015,12 @@ class _PosScreenState extends State<PosScreen> {
 
   Widget _buildMetodosPago(PosProvider pos) {
     const metodos = [
-      ('efectivo',      Icons.payments_rounded,        'Efectivo'),
-      ('tarjeta',       Icons.credit_card_rounded,      'Tarjeta'),
-      ('transferencia', Icons.account_balance_rounded,  'Transf.'),
-      ('mixto',         Icons.call_split_rounded,       'Mixto'),
-      ('credito',       Icons.handshake_rounded,        'Fiado'),
+      ('efectivo',      Icons.payments_rounded,         'Efectivo'),
+      ('tarjeta',       Icons.credit_card_rounded,       'Tarjeta'),
+      ('transferencia', Icons.account_balance_rounded,   'Transf.'),
+      ('mixto',         Icons.call_split_rounded,        'Mixto'),
+      ('credito',       Icons.handshake_rounded,         'Fiado'),
+      ('bono',          Icons.card_giftcard_rounded,     'Bono'),
     ];
     final tieneCredito = (_clienteSeleccionado?.limiteCredito ?? 0) > 0;
 
@@ -2057,6 +2079,7 @@ class _PosScreenState extends State<PosScreen> {
                 pos.setMontoRecibido(pos.totalConDescuento);
               }
               if (value != 'mixto') _mixtoEfectivoCtrl.clear();
+              if (value != 'bono') { _bonoCtrl.clear(); _bonoEfectivoCtrl.clear(); }
               setState(() {});
             },
             child: chip,
@@ -2179,6 +2202,321 @@ class _PosScreenState extends State<PosScreen> {
           ),
         ),
       ]),
+    );
+  }
+
+  // ── Sección bono ─────────────────────────────────────────
+
+  Widget _buildBonoSection(PosProvider pos) {
+    final bono = pos.bonoValidado;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Expanded(
+          child: TextField(
+            controller: _bonoCtrl,
+            textCapitalization: TextCapitalization.characters,
+            style: GoogleFonts.inter(
+                fontSize: 14, fontWeight: FontWeight.w700,
+                color: _kText, letterSpacing: 1.2),
+            decoration: InputDecoration(
+              labelText: 'Código del bono',
+              hintText: 'BON-XXXXXX',
+              prefixIcon: const Icon(Icons.card_giftcard_rounded, size: 18),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+            onChanged: (v) => pos.setCodigoBono(v.trim().toUpperCase()),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          height: 48,
+          child: ElevatedButton(
+            onPressed: _validandoBono || _bonoCtrl.text.trim().isEmpty
+                ? null
+                : () async {
+                    final codigo = _bonoCtrl.text.trim().toUpperCase();
+                    setState(() => _validandoBono = true);
+                    final r = await BonoService().validarBono(codigo);
+                    if (!mounted) return;
+                    setState(() => _validandoBono = false);
+                    if (r['success'] == true) {
+                      final b = r['data'];
+                      final data = {
+                        'codigo':       b.codigo,
+                        'saldo':        b.saldo,
+                        'esta_vigente': b.estaVigente,
+                        'estado':       b.estado,
+                        'valor_original': b.valorOriginal,
+                      };
+                      pos.setBonoValidado(data);
+                      _bonoEfectivoCtrl.clear();
+                    } else {
+                      pos.setBonoValidado(null);
+                      _bonoEfectivoCtrl.clear();
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(r['error'] ?? 'Error validando bono'),
+                        backgroundColor: Colors.red.shade700,
+                      ));
+                    }
+                  },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _kGreen,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: _validandoBono
+                ? const SizedBox(width: 18, height: 18,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2))
+                : Text('Validar', style: GoogleFonts.inter(
+                    fontSize: 12, fontWeight: FontWeight.w700)),
+          ),
+        ),
+      ]),
+      if (bono != null) ...[
+        const SizedBox(height: 8),
+        Builder(builder: (ctx) {
+          final vigente   = bono['esta_vigente'] as bool? ?? false;
+          final saldo     = (bono['saldo'] as num).toDouble();
+          final faltante  = pos.bonoFaltante;
+          final esParc    = vigente && faltante > 0;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: vigente
+                      ? const Color(0xFFECFDF5)
+                      : const Color(0xFFFFF1F2),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: vigente
+                        ? _kGreenDark.withValues(alpha: 0.4)
+                        : Colors.red.shade300,
+                  ),
+                ),
+                child: Row(children: [
+                  Icon(
+                    vigente
+                        ? Icons.check_circle_rounded
+                        : Icons.cancel_rounded,
+                    size: 16,
+                    color: vigente ? _kGreenDark : Colors.red.shade700,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(bono['codigo'] as String,
+                          style: GoogleFonts.inter(
+                              fontSize: 12, fontWeight: FontWeight.w700,
+                              color: _kText, letterSpacing: 1)),
+                      Text(
+                        vigente
+                            ? 'Saldo: \$${saldo.toStringAsFixed(0)}'
+                              '${esParc ? '  ·  cubre \$${pos.bonoMontoUsado.toStringAsFixed(0)}' : '  ·  cubre el total'}'
+                            : 'No vigente · Estado: ${bono['estado']}',
+                        style: GoogleFonts.inter(
+                            fontSize: 11, color: _kTextMuted),
+                      ),
+                    ],
+                  )),
+                ]),
+              ),
+              if (esParc) ...[
+                const SizedBox(height: 8),
+                // ── Selector de método para el faltante ──────────
+                _buildBonoFaltanteSelector(pos, faltante),
+              ],
+            ],
+          );
+        }),
+      ],
+    ]);
+  }
+
+  // ── Selector de método para faltante de bono ─────────────
+
+  Widget _buildBonoFaltanteSelector(PosProvider pos, double faltante) {
+    final todasCuentas = context.watch<ConfigProvider>().cuentas;
+    final otroMetodo   = pos.bonoOtroMetodo;
+    final metodos = [
+      ('efectivo',      'Efectivo',      Icons.payments_outlined),
+      ('tarjeta',       'Tarjeta',       Icons.credit_card_outlined),
+      ('transferencia', 'Transferencia', Icons.swap_horiz_rounded),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Icon(Icons.warning_amber_rounded, size: 14, color: Colors.amber.shade700),
+          const SizedBox(width: 6),
+          Expanded(child: Text(
+            'Faltante \$${faltante.toStringAsFixed(0)} — ¿cómo se paga?',
+            style: GoogleFonts.inter(
+                fontSize: 11, fontWeight: FontWeight.w600,
+                color: Colors.amber.shade800),
+          )),
+        ]),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: metodos.map((m) {
+            final sel = otroMetodo == m.$1;
+            return GestureDetector(
+              onTap: () {
+                pos.setBonoOtroMetodo(sel ? null : m.$1);
+                _bonoEfectivoCtrl.clear();
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: sel ? _kGreen.withValues(alpha: 0.10) : _kSurfaceLow,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: sel ? _kGreen : _kBorder,
+                    width: sel ? 1.5 : 1,
+                  ),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(m.$3, size: 13, color: sel ? _kGreenDark : _kTextMuted),
+                  const SizedBox(width: 5),
+                  Text(m.$2, style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: sel ? FontWeight.w700 : FontWeight.w600,
+                      color: sel ? _kGreenDark : _kText)),
+                ]),
+              ),
+            );
+          }).toList(),
+        ),
+        // Input de monto recibido cuando el faltante se paga en efectivo
+        if (otroMetodo == 'efectivo') ...[
+          const SizedBox(height: 8),
+          TextField(
+            controller: _bonoEfectivoCtrl,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            style: GoogleFonts.inter(
+                fontSize: 14, fontWeight: FontWeight.w700, color: _kText),
+            decoration: InputDecoration(
+              labelText: 'Efectivo recibido',
+              hintText: '\$${faltante.toStringAsFixed(0)}',
+              prefixIcon: const Icon(Icons.payments_outlined, size: 18),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 10),
+            ),
+            onChanged: (v) {
+              final val = double.tryParse(v) ?? 0;
+              pos.setBonoEfectivoRecibido(val);
+            },
+          ),
+          if (pos.bonoEfectivoRecibido >= faltante && pos.bonoVuelto > 0) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFECFDF5),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: _kGreenDark.withValues(alpha: 0.4)),
+              ),
+              child: Row(children: [
+                Icon(Icons.check_circle_rounded,
+                    size: 14, color: _kGreenDark),
+                const SizedBox(width: 6),
+                Text(
+                  'Vuelto: \$${pos.bonoVuelto.toStringAsFixed(0)}',
+                  style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: _kGreenDark),
+                ),
+              ]),
+            ),
+          ],
+        ],
+        // Selector de cuenta cuando se elige transferencia o tarjeta
+        if (otroMetodo == 'transferencia' || otroMetodo == 'tarjeta') ...[
+          const SizedBox(height: 8),
+          Builder(builder: (ctx) {
+            final cuentas = todasCuentas.where((c) =>
+              otroMetodo == 'tarjeta' ? c.tipo == 'tarjeta' : c.tipo != 'tarjeta',
+            ).toList();
+            if (cuentas.isEmpty) return const SizedBox.shrink();
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  const Icon(Icons.account_balance_wallet_outlined,
+                      size: 13, color: _kTextMuted),
+                  const SizedBox(width: 5),
+                  Text('¿A qué cuenta llega?',
+                    style: GoogleFonts.inter(fontSize: 11, color: _kTextMuted,
+                        fontWeight: FontWeight.w500)),
+                ]),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: cuentas.map((c) {
+                    final sel = pos.bonoOtroCuentaId == c.id;
+                    return GestureDetector(
+                      onTap: () => pos.setBonoOtroCuentaId(sel ? null : c.id),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 120),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: sel
+                              ? _kGreen.withValues(alpha: 0.10)
+                              : _kSurfaceLow,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: sel ? _kGreen : _kBorder,
+                            width: sel ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(_iconoCuenta(c.tipo), size: 13,
+                              color: sel ? _kGreenDark : _kTextMuted),
+                          const SizedBox(width: 5),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(c.nombre,
+                                style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    fontWeight: sel
+                                        ? FontWeight.w700
+                                        : FontWeight.w600,
+                                    color: sel ? _kGreenDark : _kText)),
+                              Text(c.tipoDisplay,
+                                style: GoogleFonts.inter(
+                                    fontSize: 10, color: _kTextMuted)),
+                            ],
+                          ),
+                        ]),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            );
+          }),
+        ],
+      ],
     );
   }
 
@@ -2825,12 +3163,21 @@ class _PosScreenState extends State<PosScreen> {
 
   Future<void> _cobrarEImprimir(PosProvider pos, AuthProvider auth) async {
     // Snapshot antes de cobrar — pos limpia el carrito en caso de éxito
-    final items         = List<ItemCarrito>.from(pos.carrito);
-    final descuento     = pos.descuento;
-    final total         = pos.totalConDescuento;
-    final montoRecibido = pos.montoRecibido;
-    final vuelto        = pos.vuelto;
-    final metodoPago    = pos.metodoPago;
+    final items           = List<ItemCarrito>.from(pos.carrito);
+    final descuento       = pos.descuento;
+    final total           = pos.totalConDescuento;
+    final montoRecibido   = pos.montoRecibido;
+    final vuelto          = pos.vuelto;
+    final metodoPago      = pos.metodoPago;
+    final montoEfectivo      = pos.mixtoEfectivo;
+    final montoTarjeta       = pos.mixtoOtroMonto;
+    final montoBono          = pos.bonoMontoUsado;
+    final faltanteBono       = pos.bonoFaltante;
+    final bonoEfectivoRec    = pos.bonoEfectivoRecibido;
+    final bonoVueltoVal      = pos.bonoVuelto;
+    // Para bono_efectivo: el recibido y vuelto son los del efectivo del faltante
+    final montoRecibidoRec   = metodoPago == 'bono_efectivo' ? bonoEfectivoRec : montoRecibido;
+    final vueltoRec          = metodoPago == 'bono_efectivo' ? bonoVueltoVal    : vuelto;
     final clienteAntes       = _clienteSeleccionado;
     final clienteNombre      = clienteAntes?.nombre ?? '';
     final clienteId          = clienteAntes?.id;
@@ -2838,6 +3185,7 @@ class _PosScreenState extends State<PosScreen> {
 
     _montoCtrl.clear();
     _descuentoCtrl.clear();
+    _bonoEfectivoCtrl.clear();
 
     final ok = await pos.cobrar(auth.tiendaId, clienteId: clienteId);
     if (mounted) setState(() => _clienteSeleccionado = null);
@@ -2858,7 +3206,7 @@ class _PosScreenState extends State<PosScreen> {
     final factura    = pos.ultimaVenta?['numero_factura']?.toString() ?? '-';
     final config     = context.read<ConfigProvider>();
     final tipoPapel  = config.tipoPapel;
-    final esCash     = metodoPago == 'efectivo' || metodoPago == 'mixto';
+    final esCash     = metodoPago == 'efectivo' || metodoPago == 'mixto' || metodoPago == 'bono_efectivo';
 
     try {
       final paperSize = tipoPapel == '58mm' ? PaperSize.mm58 : PaperSize.mm80;
@@ -2869,11 +3217,15 @@ class _PosScreenState extends State<PosScreen> {
         if (device != null) {
           final bytes = await ThermalPrinterService.buildRecibo(
             items: items, numeroFactura: factura,
-            tiendaNombre: auth.tiendaNombre, empresaNombre: auth.empresaNombre,
+            tiendaNombre: auth.tiendaNombre,
             cajeroNombre: auth.nombre, metodoPago: metodoPago,
             descuento: descuento, total: total,
-            montoRecibido: montoRecibido, vuelto: vuelto, paperSize: paperSize,
-            clienteNombre: clienteNombre,
+            montoRecibido: montoRecibidoRec, vuelto: vueltoRec,
+            montoEfectivo: montoEfectivo, montoTarjeta: montoTarjeta,
+            mensajePie: config.mensajePie,
+            nit: config.nit, direccion: config.direccion, telefono: config.telefono,
+            clienteNombre: clienteNombre, paperSize: paperSize,
+            montoBono: montoBono, faltanteBono: faltanteBono,
           );
           await ThermalPrinterService.printBytes(device, bytes);
           if (esCash && await ThermalPrinterService.hasCashDrawer()) {
@@ -2881,10 +3233,14 @@ class _PosScreenState extends State<PosScreen> {
           }
           unawaited(ReciboPdfService.imprimirRecibo(
             items: items, numeroFactura: factura,
-            tiendaNombre: auth.tiendaNombre, empresaNombre: auth.empresaNombre,
+            tiendaNombre: auth.tiendaNombre,
             cajeroNombre: auth.nombre, metodoPago: metodoPago,
             descuento: descuento, total: total,
-            montoRecibido: montoRecibido, vuelto: vuelto,
+            montoRecibido: montoRecibidoRec, vuelto: vueltoRec,
+            montoEfectivo: montoEfectivo, montoTarjeta: montoTarjeta,
+            montoBono: montoBono, faltanteBono: faltanteBono,
+            mensajePie: config.mensajePie,
+            nit: config.nit, direccion: config.direccion, telefono: config.telefono,
             clienteNombre: clienteNombre, soloGuardar: true,
           ));
           return;
@@ -2894,11 +3250,15 @@ class _PosScreenState extends State<PosScreen> {
         // Exe: ESC/POS RAW via WritePrinter (COM, USB, red — cualquier puerto)
         final bytes = await ThermalPrinterService.buildRecibo(
           items: items, numeroFactura: factura,
-          tiendaNombre: auth.tiendaNombre, empresaNombre: auth.empresaNombre,
+          tiendaNombre: auth.tiendaNombre,
           cajeroNombre: auth.nombre, metodoPago: metodoPago,
           descuento: descuento, total: total,
-          montoRecibido: montoRecibido, vuelto: vuelto, paperSize: paperSize,
-          clienteNombre: clienteNombre,
+          montoRecibido: montoRecibidoRec, vuelto: vueltoRec,
+          montoEfectivo: montoEfectivo, montoTarjeta: montoTarjeta,
+          mensajePie: config.mensajePie,
+          nit: config.nit, direccion: config.direccion, telefono: config.telefono,
+          clienteNombre: clienteNombre, paperSize: paperSize,
+          montoBono: montoBono, faltanteBono: faltanteBono,
         );
         await WindowsPrinterService.printRaw(bytes);
         if (esCash && await ThermalPrinterService.hasCashDrawer()) {
@@ -2907,10 +3267,14 @@ class _PosScreenState extends State<PosScreen> {
         }
         unawaited(ReciboPdfService.imprimirRecibo(
           items: items, numeroFactura: factura,
-          tiendaNombre: auth.tiendaNombre, empresaNombre: auth.empresaNombre,
+          tiendaNombre: auth.tiendaNombre,
           cajeroNombre: auth.nombre, metodoPago: metodoPago,
           descuento: descuento, total: total,
-          montoRecibido: montoRecibido, vuelto: vuelto,
+          montoRecibido: montoRecibidoRec, vuelto: vueltoRec,
+          montoEfectivo: montoEfectivo, montoTarjeta: montoTarjeta,
+          montoBono: montoBono, faltanteBono: faltanteBono,
+          mensajePie: config.mensajePie,
+          nit: config.nit, direccion: config.direccion, telefono: config.telefono,
           clienteNombre: clienteNombre, soloGuardar: true,
         ));
         return;
@@ -2920,13 +3284,20 @@ class _PosScreenState extends State<PosScreen> {
         items:          items,
         numeroFactura:  factura,
         tiendaNombre:   auth.tiendaNombre,
-        empresaNombre:  auth.empresaNombre,
         cajeroNombre:   auth.nombre,
         metodoPago:     metodoPago,
         descuento:      descuento,
         total:          total,
-        montoRecibido:  montoRecibido,
-        vuelto:         vuelto,
+        montoRecibido:  montoRecibidoRec,
+        vuelto:         vueltoRec,
+        montoEfectivo:  montoEfectivo,
+        montoTarjeta:   montoTarjeta,
+        montoBono:      montoBono,
+        faltanteBono:   faltanteBono,
+        mensajePie:     config.mensajePie,
+        nit:            config.nit,
+        direccion:      config.direccion,
+        telefono:       config.telefono,
         clienteNombre:  clienteNombre,
       );
     } catch (e) {

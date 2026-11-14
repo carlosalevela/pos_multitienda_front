@@ -44,26 +44,34 @@ class ResumenDiario {
   final double totalVentas;
   final int    numVentas;
   final double totalGastos;
-  // ✅ NUEVO
   final double totalDevoluciones;
   final int    numDevoluciones;
   final double totalNeto;
   final double utilidadBruta;
   final List<Map<String, dynamic>> ventasPorMetodo;
-  // ✅ NUEVO
   final List<Map<String, dynamic>> devolucionesPorMetodo;
+  final List<Map<String, dynamic>> gastosPorCategoria;
+  final List<Map<String, dynamic>> ventasPorHora;
+  final List<Map<String, dynamic>> topProductosDia;
+  final List<Map<String, dynamic>> vendedoresDia;
+  final Map<String, dynamic>       cuadreEfectivo;
 
   ResumenDiario({
     required this.fecha,
     required this.totalVentas,
     required this.numVentas,
     required this.totalGastos,
-    required this.totalDevoluciones,  // ✅
-    required this.numDevoluciones,    // ✅
-    required this.totalNeto,          // ✅
+    required this.totalDevoluciones,
+    required this.numDevoluciones,
+    required this.totalNeto,
     required this.utilidadBruta,
     required this.ventasPorMetodo,
-    required this.devolucionesPorMetodo, // ✅
+    required this.devolucionesPorMetodo,
+    this.gastosPorCategoria = const [],
+    this.ventasPorHora      = const [],
+    this.topProductosDia    = const [],
+    this.vendedoresDia      = const [],
+    this.cuadreEfectivo     = const {},
   });
 
   factory ResumenDiario.fromJson(Map<String, dynamic> j) => ResumenDiario(
@@ -71,16 +79,17 @@ class ResumenDiario {
     totalVentas:         (j['total_ventas'] ?? 0).toDouble(),
     numVentas:           j['num_ventas']    ?? 0,
     totalGastos:         (j['total_gastos'] ?? 0).toDouble(),
-    // ✅ NUEVO — con fallback a 0 por compatibilidad
     totalDevoluciones:   (j['total_devoluciones'] ?? 0).toDouble(),
     numDevoluciones:     j['num_devoluciones']    ?? 0,
     totalNeto:           (j['total_neto'] ?? j['total_ventas'] ?? 0).toDouble(),
     utilidadBruta:       (j['utilidad_bruta'] ?? 0).toDouble(),
-    ventasPorMetodo:     List<Map<String, dynamic>>.from(
-        j['ventas_por_metodo_pago']   ?? []),
-    // ✅ NUEVO
-    devolucionesPorMetodo: List<Map<String, dynamic>>.from(
-        j['devoluciones_por_metodo'] ?? []),
+    ventasPorMetodo:     List<Map<String, dynamic>>.from(j['ventas_por_metodo_pago'] ?? []),
+    devolucionesPorMetodo: List<Map<String, dynamic>>.from(j['devoluciones_por_metodo'] ?? []),
+    gastosPorCategoria:  List<Map<String, dynamic>>.from(j['gastos_por_categoria']  ?? []),
+    ventasPorHora:       List<Map<String, dynamic>>.from(j['ventas_por_hora']       ?? []),
+    topProductosDia:     List<Map<String, dynamic>>.from(j['top_productos_dia']     ?? []),
+    vendedoresDia:       List<Map<String, dynamic>>.from(j['vendedores_dia']        ?? []),
+    cuadreEfectivo:      Map<String, dynamic>.from(j['cuadre_efectivo']            ?? {}),
   );
 }
 
@@ -90,40 +99,52 @@ class ResumenDiario {
 class ResumenMensual {
   final int    anio, mes;
   final double totalVentas, totalGastos;
-  // ✅ NUEVO
   final double totalDevoluciones;
   final double totalNeto;
   final double utilidadBruta;
   final List<Map<String, dynamic>> ventasPorDia;
-  // ✅ NUEVO
   final List<Map<String, dynamic>> devolucionesPorDia;
+  final List<Map<String, dynamic>> gastosPorCategoria;
+  final List<Map<String, dynamic>> gastosPorDia;
+  final List<Map<String, dynamic>> metodosPagoMes;
+  final List<Map<String, dynamic>> topProductosMes;
+  final List<Map<String, dynamic>> vendedoresMes;
+  final Map<String, dynamic>       mesAnterior;
 
   ResumenMensual({
     required this.anio,
     required this.mes,
     required this.totalVentas,
     required this.totalGastos,
-    required this.totalDevoluciones,  // ✅
-    required this.totalNeto,          // ✅
+    required this.totalDevoluciones,
+    required this.totalNeto,
     required this.utilidadBruta,
     required this.ventasPorDia,
-    required this.devolucionesPorDia, // ✅
+    required this.devolucionesPorDia,
+    required this.gastosPorCategoria,
+    required this.gastosPorDia,
+    required this.metodosPagoMes,
+    required this.topProductosMes,
+    required this.vendedoresMes,
+    required this.mesAnterior,
   });
 
   factory ResumenMensual.fromJson(Map<String, dynamic> j) => ResumenMensual(
     anio:               j['anio'] ?? 0,
     mes:                j['mes']  ?? 0,
-    totalVentas:        (j['total_ventas'] ?? 0).toDouble(),
-    totalGastos:        (j['total_gastos'] ?? 0).toDouble(),
-    // ✅ NUEVO — con fallback a 0
-    totalDevoluciones:  (j['total_devoluciones'] ?? 0).toDouble(),
-    totalNeto:          (j['total_neto'] ?? j['total_ventas'] ?? 0).toDouble(),
-    utilidadBruta:      (j['utilidad_bruta'] ?? 0).toDouble(),
-    ventasPorDia:       List<Map<String, dynamic>>.from(
-        j['ventas_por_dia']       ?? []),
-    // ✅ NUEVO
-    devolucionesPorDia: List<Map<String, dynamic>>.from(
-        j['devoluciones_por_dia'] ?? []),
+    totalVentas:        (j['total_ventas']        ?? 0).toDouble(),
+    totalGastos:        (j['total_gastos']        ?? 0).toDouble(),
+    totalDevoluciones:  (j['total_devoluciones']  ?? 0).toDouble(),
+    totalNeto:          (j['total_neto']           ?? j['total_ventas'] ?? 0).toDouble(),
+    utilidadBruta:      (j['utilidad_bruta']       ?? 0).toDouble(),
+    ventasPorDia:       List<Map<String, dynamic>>.from(j['ventas_por_dia']       ?? []),
+    devolucionesPorDia: List<Map<String, dynamic>>.from(j['devoluciones_por_dia'] ?? []),
+    gastosPorCategoria: List<Map<String, dynamic>>.from(j['gastos_por_categoria'] ?? []),
+    gastosPorDia:       List<Map<String, dynamic>>.from(j['gastos_por_dia']       ?? []),
+    metodosPagoMes:     List<Map<String, dynamic>>.from(j['metodos_pago_mes']     ?? []),
+    topProductosMes:    List<Map<String, dynamic>>.from(j['top_productos_mes']    ?? []),
+    vendedoresMes:      List<Map<String, dynamic>>.from(j['vendedores_mes']       ?? []),
+    mesAnterior:        Map<String, dynamic>.from(j['mes_anterior']               ?? {}),
   );
 }
 
@@ -285,43 +306,6 @@ class GastosCierre {
     detalle:  (j['detalle'] as List? ?? [])
         .map((e) => GastoDetalle.fromJson(e as Map<String, dynamic>))
         .toList(),
-  );
-}
-
-
-// ── ResumenCierre ──────────────────────────────────────
-// Sin cambios
-
-class ResumenCierre {
-  final int    sesionId;
-  final String tiendaNombre, empleadoNombre, fechaApertura;
-  final double montoInicial, montoEsperadoCaja;
-  final VentasCierre ventas;
-  final GastosCierre gastos;
-  final AbonosCierre abonos;
-
-  ResumenCierre({
-    required this.sesionId,         required this.tiendaNombre,
-    required this.empleadoNombre,   required this.fechaApertura,
-    required this.montoInicial,     required this.montoEsperadoCaja,
-    required this.ventas,           required this.gastos,
-    required this.abonos,
-  });
-
-  factory ResumenCierre.fromJson(Map<String, dynamic> j) => ResumenCierre(
-    sesionId:          j['sesion_id']       ?? 0,
-    tiendaNombre:      j['tienda_nombre']   ?? '',
-    empleadoNombre:    j['empleado_nombre'] ?? '',
-    fechaApertura:     j['fecha_apertura']  ?? '',
-    montoInicial:      double.tryParse(
-        j['monto_inicial']?.toString()       ?? '0') ?? 0.0,
-    montoEsperadoCaja: double.tryParse(
-        j['monto_esperado_caja']?.toString() ?? '0') ?? 0.0,
-    abonos: j['abonos'] != null
-        ? AbonosCierre.fromJson(j['abonos'])
-        : AbonosCierre.vacio(),
-    ventas: VentasCierre.fromJson(j['ventas'] ?? {}),
-    gastos: GastosCierre.fromJson(j['gastos'] ?? {}),
   );
 }
 

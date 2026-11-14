@@ -1,5 +1,7 @@
 // ignore_for_file: deprecated_member_use
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -45,6 +47,7 @@ class CajeroDashboard extends StatefulWidget {
 class _CajeroDashboardState extends State<CajeroDashboard> {
   final _clienteSvc = ClienteService();
   final _ventaSvc   = VentaService();
+  Timer? _refreshTimer;
 
   bool                 _loading        = true;
   String?              _error;
@@ -57,6 +60,15 @@ class _CajeroDashboardState extends State<CajeroDashboard> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _cargar());
+    _refreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted && !_loading) _cargar();
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _cargar() async {

@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import '../../../services/inventario_service.dart';
 
 class AveriasDialog extends StatefulWidget {
@@ -140,6 +141,24 @@ class _AveriasDialogState extends State<AveriasDialog> {
     if (v == null) return 0.0;
     if (v is num) return v.toDouble();
     return double.tryParse(v.toString()) ?? 0.0;
+  }
+
+  // ── Detalle / historial ────────────────────────────────
+  Future<void> _verDetalle(Map<String, dynamic> item) async {
+    final productoId = item['producto'] as int;
+    final tiendaId   = item['tienda']   as int;
+    final nombre     = (item['producto_nombre'] ?? '') as String;
+
+    showDialog(
+      context: context,
+      builder: (_) => _AveriaDetalleDialog(
+        service:     _service,
+        productoId:  productoId,
+        tiendaId:    tiendaId,
+        nombre:      nombre,
+        stockActual: _toDouble(item['stock_averias']),
+      ),
+    );
   }
 
   // ── Build ──────────────────────────────────────────────
@@ -286,6 +305,13 @@ class _AveriasDialogState extends State<AveriasDialog> {
             ]),
             if (!isExpanded) ...[
               const SizedBox(width: 12),
+              _btnAccion(
+                label: 'Detalle',
+                icon:  Icons.history_rounded,
+                color: _amber, bg: _amberBg,
+                onTap: () => _verDetalle(item),
+              ),
+              const SizedBox(width: 6),
               _btnAccion(
                 label: 'Recuperar',
                 icon:  Icons.refresh_rounded,
@@ -462,6 +488,254 @@ class _AveriasDialogState extends State<AveriasDialog> {
               color: sel ? color : _muted)),
         ]),
       ),
+    );
+  }
+}
+
+
+// ════════════════════════════════════════════════════════
+// DIALOG: Historial de averías de un producto
+// ════════════════════════════════════════════════════════
+class _AveriaDetalleDialog extends StatefulWidget {
+  const _AveriaDetalleDialog({
+    required this.service,
+    required this.productoId,
+    required this.tiendaId,
+    required this.nombre,
+    required this.stockActual,
+  });
+
+  final InventarioService service;
+  final int    productoId;
+  final int    tiendaId;
+  final String nombre;
+  final double stockActual;
+
+  @override
+  State<_AveriaDetalleDialog> createState() => _AveriaDetalleDialogState();
+}
+
+class _AveriaDetalleDialogState extends State<_AveriaDetalleDialog> {
+  static const _amber    = Color(0xFFB45309);
+  static const _amberBg  = Color(0xFFFEF3C7);
+  static const _text     = Color(0xFF111827);
+  static const _muted    = Color(0xFF6B7280);
+  static const _border   = Color(0xFFE5E7EB);
+  static const _surface  = Colors.white;
+  static const _surfLow  = Color(0xFFF9FAFB);
+
+  bool   _cargando = true;
+  String? _error;
+  List<Map<String, dynamic>> _movimientos = [];
+
+  static final _fmtFecha = DateFormat('dd/MM/yyyy', 'es');
+  static final _fmtHora  = DateFormat('HH:mm');
+  static final _fmtNum   = NumberFormat('#,##0.##', 'es_CO');
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  Future<void> _cargar() async {
+    final r = await widget.service.getMovimientosProducto(
+      productoId: widget.productoId,
+      tiendaId:   widget.tiendaId,
+    );
+    if (!mounted) return;
+    if (r['success'] == true) {
+      final todos = List<Map<String, dynamic>>.from(r['data'] as List);
+      setState(() {
+        _movimientos = todos
+            .where((m) => m['tipo'] == 'averia')
+            .toList();
+        _cargando = false;
+      });
+    } else {
+      setState(() {
+        _error    = r['error'] as String?;
+        _cargando = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: _surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+      child: SizedBox(
+        width: 520,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          // ── Header ─────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
+            child: Row(children: [
+              Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                  color: _amberBg,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: const Icon(Icons.history_rounded,
+                    color: _amber, size: 18),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Historial de averías',
+                      style: GoogleFonts.inter(
+                          fontSize: 15, fontWeight: FontWeight.w700,
+                          color: _text)),
+                  Text(widget.nombre,
+                      style: GoogleFonts.inter(fontSize: 12, color: _muted),
+                      overflow: TextOverflow.ellipsis),
+                ],
+              )),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: _amberBg,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(children: [
+                  Text(_fmtNum.format(widget.stockActual),
+                      style: GoogleFonts.inter(
+                          fontSize: 15, fontWeight: FontWeight.w800,
+                          color: _amber)),
+                  Text('en averías',
+                      style: GoogleFonts.inter(fontSize: 9, color: _amber)),
+                ]),
+              ),
+              const SizedBox(width: 6),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close_rounded, color: _muted, size: 20),
+                splashRadius: 16,
+              ),
+            ]),
+          ),
+          const Divider(height: 1, color: _border),
+
+          // ── Cuerpo ──────────────────────────────────────
+          Flexible(
+            child: _cargando
+                ? const Padding(
+                    padding: EdgeInsets.all(40),
+                    child: Center(child: CircularProgressIndicator(
+                        strokeWidth: 2, color: _amber)))
+                : _error != null
+                    ? Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Text(_error!,
+                            style: GoogleFonts.inter(
+                                color: const Color(0xFFBE123C), fontSize: 13),
+                            textAlign: TextAlign.center))
+                    : _movimientos.isEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.all(40),
+                            child: Column(mainAxisSize: MainAxisSize.min, children: [
+                              const Icon(Icons.check_circle_outline_rounded,
+                                  color: Color(0xFF006C49), size: 36),
+                              const SizedBox(height: 10),
+                              Text('Sin movimientos de avería registrados',
+                                  style: GoogleFonts.inter(
+                                      fontSize: 13, color: _muted),
+                                  textAlign: TextAlign.center),
+                            ]))
+                        : ListView.separated(
+                            padding: const EdgeInsets.all(16),
+                            shrinkWrap: true,
+                            itemCount: _movimientos.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 8),
+                            itemBuilder: (_, i) => _buildFila(_movimientos[i]),
+                          ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildFila(Map<String, dynamic> m) {
+    final cantidad  = double.tryParse(m['cantidad']?.toString() ?? '0') ?? 0.0;
+    final obs       = (m['observacion'] ?? '').toString().trim();
+    final empleado  = (m['empleado_nombre'] ?? 'Sistema').toString();
+    final fechaRaw  = m['created_at']?.toString() ?? '';
+    String fechaStr = '—';
+    String horaStr  = '';
+    if (fechaRaw.isNotEmpty) {
+      try {
+        final dt = DateTime.parse(fechaRaw.replaceAll(' ', 'T')).toLocal();
+        fechaStr = _fmtFecha.format(dt);
+        horaStr  = _fmtHora.format(dt);
+      } catch (_) {}
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _surfLow,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _border),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Ícono
+        Container(
+          width: 32, height: 32,
+          decoration: BoxDecoration(
+            color: _amberBg, borderRadius: BorderRadius.circular(8)),
+          child: const Icon(Icons.warning_amber_rounded,
+              size: 16, color: _amber),
+        ),
+        const SizedBox(width: 10),
+
+        // Detalle
+        Expanded(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Text('$fechaStr${horaStr.isNotEmpty ? '  $horaStr' : ''}',
+                  style: GoogleFonts.inter(
+                      fontSize: 11, color: _muted)),
+              const Spacer(),
+              Text('${_fmtNum.format(cantidad)} ud${cantidad != 1 ? 's' : ''}',
+                  style: GoogleFonts.inter(
+                      fontSize: 13, fontWeight: FontWeight.w700,
+                      color: _amber)),
+            ]),
+            const SizedBox(height: 4),
+            Text(empleado,
+                style: GoogleFonts.inter(
+                    fontSize: 12, fontWeight: FontWeight.w600,
+                    color: _text)),
+            if (obs.isNotEmpty) ...[
+              const SizedBox(height: 3),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: _border),
+                ),
+                child: Text(obs,
+                    style: GoogleFonts.inter(
+                        fontSize: 11, color: _text,
+                        fontStyle: FontStyle.italic)),
+              ),
+            ] else
+              Text('Sin observación registrada',
+                  style: GoogleFonts.inter(
+                      fontSize: 11, color: _muted,
+                      fontStyle: FontStyle.italic)),
+          ],
+        )),
+      ]),
     );
   }
 }

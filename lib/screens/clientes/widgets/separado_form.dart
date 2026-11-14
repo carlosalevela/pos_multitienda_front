@@ -301,10 +301,12 @@ class _SeparadoFormState extends State<SeparadoForm> {
         }
       } else {
         final empNombre = context.read<AuthProvider>().empresaNombre;
+        final cfg       = context.read<ConfigProvider>();
         unawaited(ReciboPdfService.imprimirSeparado(
           separado: creado,
           empresaNombre: empNombre.isNotEmpty ? empNombre : creado.tiendaNombre,
           soloGuardar: true,
+          nit: cfg.nit, direccion: cfg.direccion, telefono: cfg.telefono,
         ));
       }
 
@@ -331,7 +333,8 @@ class _SeparadoFormState extends State<SeparadoForm> {
   Future<void> _imprimirSeparado(Separado separado) async {
     final empresaNombre = context.read<AuthProvider>().empresaNombre;
     final nombre        = empresaNombre.isNotEmpty ? empresaNombre : separado.tiendaNombre;
-    final tipoPapel     = context.read<ConfigProvider>().tipoPapel;
+    final config        = context.read<ConfigProvider>();
+    final tipoPapel     = config.tipoPapel;
     final paperSize     = tipoPapel == '58mm' ? PaperSize.mm58 : PaperSize.mm80;
 
     if (ThermalPrinterService.isWebUsbSupported) {
@@ -339,10 +342,12 @@ class _SeparadoFormState extends State<SeparadoForm> {
         final dev = await ThermalPrinterService.getAutoDevice();
         if (dev != null) {
           final bytes = await ThermalPrinterService.buildSeparadoRecibo(
-              separado, empresaNombre: nombre, paperSize: paperSize);
+              separado, empresaNombre: nombre, paperSize: paperSize,
+              nit: config.nit, direccion: config.direccion, telefono: config.telefono);
           await ThermalPrinterService.printBytes(dev, bytes);
           unawaited(ReciboPdfService.imprimirSeparado(
             separado: separado, empresaNombre: nombre, soloGuardar: true,
+            nit: config.nit, direccion: config.direccion, telefono: config.telefono,
           ));
           return;
         }
@@ -350,17 +355,20 @@ class _SeparadoFormState extends State<SeparadoForm> {
     } else if (!kIsWeb && await WindowsPrinterService.hasSavedPrinter()) {
       try {
         final bytes = await ThermalPrinterService.buildSeparadoRecibo(
-            separado, empresaNombre: nombre, paperSize: paperSize);
+            separado, empresaNombre: nombre, paperSize: paperSize,
+            nit: config.nit, direccion: config.direccion, telefono: config.telefono);
         await WindowsPrinterService.printRaw(bytes);
         unawaited(ReciboPdfService.imprimirSeparado(
           separado: separado, empresaNombre: nombre, soloGuardar: true,
+          nit: config.nit, direccion: config.direccion, telefono: config.telefono,
         ));
         return;
       } catch (_) {}
     }
     if (!mounted) return;
     await ReciboPdfService.imprimirSeparado(
-        separado: separado, empresaNombre: nombre);
+        separado: separado, empresaNombre: nombre,
+        nit: config.nit, direccion: config.direccion, telefono: config.telefono);
   }
 
   void _snack(String msg, {bool isError = false}) {

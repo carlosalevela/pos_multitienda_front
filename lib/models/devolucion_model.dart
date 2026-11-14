@@ -26,8 +26,19 @@ class DevolucionModel {
   final double? montoRecibido;
   final double? cambioEntregado;
 
+  final String motivoCambio;
+
   final List<DetalleDevolucionModel> detalles;
   final List<DetalleReemplazoModel> reemplazos;
+
+  String get motivoCambioLabel {
+    switch (motivoCambio) {
+      case 'gusto':          return 'Por gusto';
+      case 'averia':
+      case 'producto_danado':return 'Por avería/daño';
+      default:               return '';
+    }
+  }
 
   const DevolucionModel({
     required this.id,
@@ -54,6 +65,7 @@ class DevolucionModel {
     this.metodoPagoDiferencia,
     this.montoRecibido,
     this.cambioEntregado,
+    this.motivoCambio = '',
     required this.detalles,
     this.reemplazos = const [],
   });
@@ -101,6 +113,8 @@ class DevolucionModel {
           ? double.tryParse(j['cambio_entregado'].toString())
           : null,
 
+      motivoCambio: j['motivo_cambio'] as String? ?? '',
+
       detalles: (j['detalles'] as List? ?? [])
           .map((d) => DetalleDevolucionModel.fromJson(
                 Map<String, dynamic>.from(d as Map),
@@ -139,6 +153,7 @@ class DevolucionModel {
     String? metodoPagoDiferencia,
     double? montoRecibido,
     double? cambioEntregado,
+    String? motivoCambio,
     List<DetalleDevolucionModel>? detalles,
     List<DetalleReemplazoModel>? reemplazos,
   }) {
@@ -169,6 +184,7 @@ class DevolucionModel {
           metodoPagoDiferencia ?? this.metodoPagoDiferencia,
       montoRecibido: montoRecibido ?? this.montoRecibido,
       cambioEntregado: cambioEntregado ?? this.cambioEntregado,
+      motivoCambio: motivoCambio ?? this.motivoCambio,
       detalles: detalles ?? this.detalles,
       reemplazos: reemplazos ?? this.reemplazos,
     );

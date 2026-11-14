@@ -10,6 +10,7 @@ class ContabilidadProvider extends ChangeNotifier {
   ResumenDiario?         resumenDiario;
   ResumenMensual?        resumenMensual;
   Map<String, dynamic>?  resumenAnual;
+  Map<String, dynamic>?  resumenRango;
   Map<String, dynamic>?  gastosResumenRango;
   List<TopProducto>      topProductos  = [];
   List<Gasto>            gastos        = [];
@@ -30,17 +31,19 @@ class ContabilidadProvider extends ChangeNotifier {
   bool   _guardando       = false;
   bool   _cargandoPl      = false;
   bool   _cargandoFlujo   = false;
+  bool   _cargandoRango   = false;
   bool   _exportando      = false;
   String _errorMsg        = '';
   String _successMsg      = '';
 
-  bool   get cargando      => _cargando;
-  bool   get guardando     => _guardando;
-  bool   get cargandoPl    => _cargandoPl;
-  bool   get cargandoFlujo => _cargandoFlujo;
-  bool   get exportando    => _exportando;
-  String get errorMsg      => _errorMsg;
-  String get successMsg    => _successMsg;
+  bool   get cargando       => _cargando;
+  bool   get guardando      => _guardando;
+  bool   get cargandoPl     => _cargandoPl;
+  bool   get cargandoFlujo  => _cargandoFlujo;
+  bool   get cargandoRango  => _cargandoRango;
+  bool   get exportando     => _exportando;
+  String get errorMsg       => _errorMsg;
+  String get successMsg     => _successMsg;
 
   void limpiarMensajes() {
     _errorMsg   = '';
@@ -178,6 +181,31 @@ class ContabilidadProvider extends ChangeNotifier {
       debugPrint('❌ cargarGastos: $e');
     } finally {
       _cargando = false;
+      notifyListeners();
+    }
+  }
+
+  // ── Resumen por rango (semana / personalizado) ───────
+
+  Future<void> cargarResumenRango({
+    required String fechaIni,
+    required String fechaFin,
+    int? tiendaId,
+  }) async {
+    _cargandoRango = true;
+    _errorMsg = '';
+    notifyListeners();
+    try {
+      resumenRango = await _service.getResumenRango(
+        fechaIni: fechaIni,
+        fechaFin: fechaFin,
+        tiendaId: tiendaId,
+      );
+    } catch (e) {
+      _errorMsg = 'Error al cargar resumen del período';
+      debugPrint('❌ cargarResumenRango: $e');
+    } finally {
+      _cargandoRango = false;
       notifyListeners();
     }
   }

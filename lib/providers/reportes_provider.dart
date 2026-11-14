@@ -144,6 +144,21 @@ class ReportesProvider extends ChangeNotifier {
       final total = _toDouble(v['total']);
       result[metodo] = (result[metodo] ?? 0) + total;
     }
+    // Sumar abonos cobrados por método de pago
+    for (final a in _abonos) {
+      final metodo = a['metodo_pago']?.toString() ?? 'efectivo';
+      final monto = _toDouble(a['monto']);
+      result[metodo] = (result[metodo] ?? 0) + monto;
+    }
+    // Sumar diferencia cobrada en cambios por método de pago
+    for (final d in _devoluciones.where((d) =>
+        _toStr(d['estado']) != 'cancelada' &&
+        _toStr(d['tipo']) == 'cambio' &&
+        _toStr(d['tipo_diferencia']) == 'cobrar')) {
+      final metodo = d['metodo_pago_diferencia']?.toString() ?? 'efectivo';
+      final diferencia = _toDouble(d['diferencia']);
+      result[metodo] = (result[metodo] ?? 0) + diferencia;
+    }
     return result;
   }
 

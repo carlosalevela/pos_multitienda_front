@@ -17,8 +17,14 @@ class HistorialCard extends StatelessWidget {
   static final _fmt = NumberFormat('#,##0', 'en_US');
 
   static String _formatFecha(String f) {
-    final c = f.replaceAll('T', ' ');
-    return c.length >= 16 ? c.substring(0, 16) : c;
+    try {
+      final dt = DateTime.parse(f.replaceAll(' ', 'T')).toLocal();
+      return '${dt.year}-${dt.month.toString().padLeft(2,'0')}-${dt.day.toString().padLeft(2,'0')} '
+             '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
+    } catch (_) {
+      final c = f.replaceAll('T', ' ');
+      return c.length >= 16 ? c.substring(0, 16) : c;
+    }
   }
 
   @override

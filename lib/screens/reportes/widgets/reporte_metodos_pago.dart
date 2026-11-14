@@ -10,7 +10,7 @@ class ReporteMetodosPago extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final metodos = rep.totalPorMetodo;
-    final totalBase = rep.totalDia > 0 ? rep.totalDia : 0.0;
+    final totalBase = metodos.values.fold(0.0, (s, v) => s + v);
 
     return reporteCard(
       child: Column(

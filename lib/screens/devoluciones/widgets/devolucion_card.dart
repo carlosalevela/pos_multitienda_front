@@ -149,6 +149,21 @@ class DevolucionCard extends StatelessWidget {
                     }
                     return const SizedBox.shrink();
                   }(),
+                  // Motivo del cambio
+                  if (dev.motivoCambioLabel.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(
+                        dev.motivoCambioLabel,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: dev.motivoCambio == 'gusto'
+                              ? _kGreen
+                              : Colors.orange.shade700,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                 ],
               ],
             ),

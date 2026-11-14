@@ -162,14 +162,13 @@ class CajaProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final raw = await _service.getHistorialSesiones(
+      final r = await _service.getHistorialSesiones(
         tiendaId: tiendaId,
         estado:   estado ?? 'cerrada',
         fecha:    fecha,
       );
-      // ← CAMBIAR: parsear a SesionHistorial
-      _historial = (raw as List)
-          .map((e) => SesionHistorial.fromJson(e as Map<String, dynamic>))
+      _historial = (r['items'] as List<Map<String, dynamic>>)
+          .map((e) => SesionHistorial.fromJson(e))
           .toList();
     } catch (e) {
       _historial = [];

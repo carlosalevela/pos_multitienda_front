@@ -93,6 +93,8 @@ class GastosCierre {
 // ── NUEVO ─────────────────────────────────────────────────────
 class DevolucionesCierre {
   final double efectivo, cambiosCobrar, cambiosDevolver, netoEfectivo;
+  final double cambiosCobrarTar, cambiosDevTar;
+  final double cambiosCobrarTra, cambiosDevTra;
   final int    cantidad;
   final int    cambiosProducto;
   final List<Map<String, dynamic>> detalle;
@@ -102,20 +104,31 @@ class DevolucionesCierre {
     required this.cambiosCobrar,
     required this.cambiosDevolver,
     required this.netoEfectivo,
+    this.cambiosCobrarTar = 0,
+    this.cambiosDevTar    = 0,
+    this.cambiosCobrarTra = 0,
+    this.cambiosDevTra    = 0,
     required this.cantidad,
     required this.cambiosProducto,
     this.detalle = const [],
   });
 
+  double get netoCambiosTarjeta      => cambiosCobrarTar - cambiosDevTar;
+  double get netoCambiosTransferencia => cambiosCobrarTra - cambiosDevTra;
+
   factory DevolucionesCierre.fromJson(Map<String, dynamic> j) =>
       DevolucionesCierre(
-        efectivo:        double.tryParse(j['efectivo']?.toString()         ?? '0') ?? 0.0,
-        cambiosCobrar:   double.tryParse(j['cambios_cobrar']?.toString()   ?? '0') ?? 0.0,
-        cambiosDevolver: double.tryParse(j['cambios_devolver']?.toString() ?? '0') ?? 0.0,
-        netoEfectivo:    double.tryParse(j['neto_efectivo']?.toString()    ?? '0') ?? 0.0,
-        cantidad:        (j['cantidad'] as num?)?.toInt() ?? 0,
-        cambiosProducto: (j['cambios_producto'] as num?)?.toInt() ?? 0,
-        detalle:         (j['detalle'] as List<dynamic>?)
+        efectivo:         double.tryParse(j['efectivo']?.toString()            ?? '0') ?? 0.0,
+        cambiosCobrar:    double.tryParse(j['cambios_cobrar']?.toString()      ?? '0') ?? 0.0,
+        cambiosDevolver:  double.tryParse(j['cambios_devolver']?.toString()    ?? '0') ?? 0.0,
+        netoEfectivo:     double.tryParse(j['neto_efectivo']?.toString()       ?? '0') ?? 0.0,
+        cambiosCobrarTar: double.tryParse(j['cambios_cobrar_tar']?.toString()  ?? '0') ?? 0.0,
+        cambiosDevTar:    double.tryParse(j['cambios_devolver_tar']?.toString() ?? '0') ?? 0.0,
+        cambiosCobrarTra: double.tryParse(j['cambios_cobrar_tra']?.toString()  ?? '0') ?? 0.0,
+        cambiosDevTra:    double.tryParse(j['cambios_devolver_tra']?.toString() ?? '0') ?? 0.0,
+        cantidad:         (j['cantidad'] as num?)?.toInt() ?? 0,
+        cambiosProducto:  (j['cambios_producto'] as num?)?.toInt() ?? 0,
+        detalle:          (j['detalle'] as List<dynamic>?)
             ?.map((e) => Map<String, dynamic>.from(e as Map))
             .toList() ?? const [],
       );

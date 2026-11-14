@@ -227,6 +227,11 @@ class _BuscadorProductosSheetState extends State<BuscadorProductosSheet> {
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Text(p.categoria,
+                          style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: const Color(0xFF01696F),
+                              fontWeight: FontWeight.w500)),
                       Text(p.referencia.isNotEmpty ? p.referencia : 'Sin código',
                           style: GoogleFonts.poppins(
                               fontSize: 12, color: Colors.grey.shade500)),

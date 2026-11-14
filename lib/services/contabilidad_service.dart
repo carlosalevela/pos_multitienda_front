@@ -94,6 +94,30 @@ class ContabilidadService {
     }
   }
 
+  Future<Map<String, dynamic>?> getResumenRango({
+    required String fechaIni,
+    required String fechaFin,
+    int? tiendaId,
+  }) async {
+    try {
+      final r = await ApiClient.instance.get(
+        '/contabilidad/reportes/rango/',
+        queryParameters: {
+          'fecha_ini': fechaIni,
+          'fecha_fin': fechaFin,
+          if (tiendaId != null) 'tienda_id': tiendaId,
+        },
+      );
+      return Map<String, dynamic>.from(r.data);
+    } on DioException catch (e) {
+      debugPrint('❌ getResumenRango error: ${e.response?.data}');
+      return null;
+    } catch (e) {
+      debugPrint('❌ getResumenRango error: $e');
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>?> getResumenAnual({
     int? tiendaId,
     required int anio,

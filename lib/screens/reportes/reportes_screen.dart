@@ -81,12 +81,13 @@ class _ReportesScreenState extends State<ReportesScreen> {
     if (!mounted) return;
     final auth = context.read<AuthProvider>();
     if (auth.rol != 'cajero') return;
-    final lista = await _cajaService.getHistorialSesiones(
+    final r = await _cajaService.getHistorialSesiones(
       tiendaId:    auth.tiendaId,
       fecha:       _fechaStr,
       estado:      'cerrada',
       misSesiones: true,
     );
+    final lista = r['items'] as List<Map<String, dynamic>>;
     if (mounted && lista.isNotEmpty) {
       setState(() => _sesionHistorial = SesionCaja.fromJson(lista.first));
     }
@@ -106,6 +107,16 @@ class _ReportesScreenState extends State<ReportesScreen> {
       tiendaId: auth.tiendaId,
       fecha: _fechaStr,
     );
+    // Recarga separadosDia, abonosDia y topProductos para la fecha seleccionada
+    context.read<ContabilidadProvider>().cargarResumenDiario(
+      tiendaId: auth.tiendaId,
+      fecha: _fecha,
+    );
+    context.read<ContabilidadProvider>().cargarTopProductos(
+      tiendaId: auth.tiendaId,
+      fechaIni: _fecha,
+      fechaFin: _fecha,
+    );
     // Para hoy: refresca la sesión activa y carga gastos en vivo.
     // Para fechas pasadas: carga la sesión cerrada de ese día desde historial.
     if (auth.rol == 'cajero') {
@@ -117,27 +128,29 @@ class _ReportesScreenState extends State<ReportesScreen> {
           caja.cargarGastosSesion(caja.sesionActiva!.id);
         } else {
           // Caja cerrada hoy: cargar la sesión del día para mostrar el resumen
-          final lista = await _cajaService.getHistorialSesiones(
+          final r2 = await _cajaService.getHistorialSesiones(
             tiendaId:    auth.tiendaId,
             fecha:       _fechaStr,
             estado:      'cerrada',
             misSesiones: true,
           );
-          if (mounted && lista.isNotEmpty) {
-            setState(() => _sesionHistorial = SesionCaja.fromJson(lista.first));
+          final lista2 = r2['items'] as List<Map<String, dynamic>>;
+          if (mounted && lista2.isNotEmpty) {
+            setState(() => _sesionHistorial = SesionCaja.fromJson(lista2.first));
           }
         }
       } else {
-        final lista = await _cajaService.getHistorialSesiones(
+        final r3 = await _cajaService.getHistorialSesiones(
           tiendaId:    auth.tiendaId,
           fecha:       _fechaStr,
           estado:      'cerrada',
           misSesiones: true,
         );
+        final lista3 = r3['items'] as List<Map<String, dynamic>>;
         if (mounted) {
           setState(() {
-            _sesionHistorial = lista.isNotEmpty
-                ? SesionCaja.fromJson(lista.first)
+            _sesionHistorial = lista3.isNotEmpty
+                ? SesionCaja.fromJson(lista3.first)
                 : null;
           });
         }
@@ -204,7 +217,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
     final contab   = context.watch<ContabilidadProvider>();
     final esCajero = auth.rol == 'cajero';
     final sesionCard = esCajero
-        ? (caja.sesionActiva ?? _sesionHistorial)
+        ? (_esHoy ? (caja.sesionActiva ?? _sesionHistorial) : _sesionHistorial)
         : null;
 
     final totalGastos =
@@ -217,10 +230,39 @@ class _ReportesScreenState extends State<ReportesScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _buildHeader(rep, auth, contab),
+            // Banner de error sutil cuando hay datos cargados pero el refresh falló
+            if (rep.errorMsg.isNotEmpty && rep.ventas.isNotEmpty)
+              Material(
+                color: const Color(0xFFFFEDEA),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(children: [
+                    const Icon(Icons.wifi_off_rounded,
+                        size: 15, color: _kError),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text('Sin conexión — mostrando datos anteriores',
+                        style: GoogleFonts.inter(fontSize: 12, color: _kError))),
+                    TextButton(
+                      onPressed: _cargar,
+                      style: TextButton.styleFrom(
+                        foregroundColor: _kError,
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(60, 28),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text('Reintentar',
+                          style: GoogleFonts.inter(
+                              fontSize: 12, fontWeight: FontWeight.w700)),
+                    ),
+                  ]),
+                ),
+              ),
             Expanded(
-              child: rep.cargando
+              child: (rep.cargando && rep.ventas.isEmpty)
                   ? const Center(
                       child: CircularProgressIndicator(color: _kSecondary))
+                  : (rep.errorMsg.isNotEmpty && rep.ventas.isEmpty)
+                      ? _buildErrorState()
                   : LayoutBuilder(
                       builder: (_, lbc) {
                         final contentW = lbc.maxWidth - 48;
@@ -778,6 +820,58 @@ class _ReportesScreenState extends State<ReportesScreen> {
                   fontWeight: FontWeight.w600,
                   color: color)),
         ],
+      ),
+    );
+  }
+
+  // ── Error state ────────────────────────────────────────────
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72, height: 72,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFEDEA),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: _kError.withValues(alpha: 0.3)),
+              ),
+              child: const Icon(Icons.wifi_off_rounded,
+                  size: 36, color: _kError),
+            ),
+            const SizedBox(height: 16),
+            Text('Sin conexión con el servidor',
+                style: GoogleFonts.inter(
+                    fontSize: 16, fontWeight: FontWeight.w700,
+                    color: _kPrimary)),
+            const SizedBox(height: 6),
+            Text('El servidor puede estar reiniciándose.\nEspera un momento e intenta de nuevo.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                    fontSize: 13, color: _kOnSurfVar, height: 1.5)),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _cargar,
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: Text('Reintentar',
+                  style: GoogleFonts.inter(
+                      fontSize: 13, fontWeight: FontWeight.w700)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _kSecondary,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

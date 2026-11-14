@@ -400,7 +400,13 @@ class _HistorialAdminTabState extends State<HistorialAdminTab> {
     );
 
   String _formatFecha(String fecha) {
-    if (fecha.length >= 16) return fecha.substring(0, 16).replaceAll('T', ' ');
-    return fecha.replaceAll('T', ' ');
+    try {
+      final dt = DateTime.parse(fecha.replaceAll(' ', 'T')).toLocal();
+      return '${dt.year}-${dt.month.toString().padLeft(2,'0')}-${dt.day.toString().padLeft(2,'0')} '
+             '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
+    } catch (_) {
+      if (fecha.length >= 16) return fecha.substring(0, 16).replaceAll('T', ' ');
+      return fecha.replaceAll('T', ' ');
+    }
   }
 }

@@ -277,6 +277,7 @@ class _AbonarSheetState extends State<AbonarSheet> {
 
   Future<void> _imprimirReciboAbono(double monto, String metodo) async {
     final auth          = context.read<AuthProvider>();
+    final config        = context.read<ConfigProvider>();
     final empresaNombre = auth.empresaNombre.isNotEmpty
         ? auth.empresaNombre
         : widget.separado.tiendaNombre;
@@ -288,6 +289,7 @@ class _AbonarSheetState extends State<AbonarSheet> {
           final bytes = await ThermalPrinterService.buildReciboAbono(
             separado: widget.separado, monto: monto,
             metodoPago: metodo, empresaNombre: empresaNombre,
+            nit: config.nit, direccion: config.direccion, telefono: config.telefono,
           );
           await ThermalPrinterService.printBytes(dev, bytes);
           return;
@@ -298,6 +300,7 @@ class _AbonarSheetState extends State<AbonarSheet> {
         final bytes = await ThermalPrinterService.buildReciboAbono(
           separado: widget.separado, monto: monto,
           metodoPago: metodo, empresaNombre: empresaNombre,
+          nit: config.nit, direccion: config.direccion, telefono: config.telefono,
         );
         await WindowsPrinterService.printRaw(bytes);
         return;
@@ -307,6 +310,7 @@ class _AbonarSheetState extends State<AbonarSheet> {
     await ReciboPdfService.imprimirReciboAbono(
       separado: widget.separado, monto: monto,
       metodoPago: metodo, empresaNombre: empresaNombre,
+      nit: config.nit, direccion: config.direccion, telefono: config.telefono,
     );
   }
 

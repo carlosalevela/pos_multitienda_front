@@ -79,7 +79,7 @@ class DevolucionDetalleSheet extends StatelessWidget {
                 icon: const Icon(Icons.print_rounded, size: 16),
                 label: Text('Imprimir comprobante',
                     style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 14)),
-                onPressed: () => DevolucionPrintService.imprimir(context, dev),
+                onPressed: () => DevolucionPrintService.imprimir(context, dev, esCopia: true),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _kGreen,
                   foregroundColor: Colors.white,
@@ -163,11 +163,8 @@ class DevolucionDetalleSheet extends StatelessWidget {
   Widget _seccionInfo() {
     final date      = DateFormat('dd/MM/yyyy · HH:mm').format(dev.createdAt);
     final esCambio  = dev.tipo == 'cambio';
-    // Limpiar "Motivo: Avería — " del texto de observaciones para mostrar solo la parte humana
-    final obsRaw    = dev.observaciones;
-    final obsDisplay = obsRaw.startsWith('Motivo:')
-        ? obsRaw.contains(' — ') ? obsRaw.split(' — ').skip(1).join(' — ') : ''
-        : obsRaw;
+    final obsDisplay = dev.observaciones;
+    final motivoLabel = dev.motivoCambioLabel;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -177,13 +174,15 @@ class DevolucionDetalleSheet extends StatelessWidget {
         border: Border.all(color: _kBorder),
       ),
       child: Column(children: [
-        // Para devolución normal mostrar método; para cambio el método va en la sección de total
         if (!esCambio)
           _InfoRow(icon: Icons.payment_rounded, label: 'Método',
               value: _metodoLabel(dev.metodoDevolucion)),
         if (esCambio && dev.metodoPagoDiferencia != null && (dev.diferencia ?? 0) > 0)
           _InfoRow(icon: Icons.payment_rounded, label: 'Pago diferencia',
               value: _metodoLabel(dev.metodoPagoDiferencia!)),
+        if (esCambio && motivoLabel.isNotEmpty)
+          _InfoRow(icon: Icons.info_outline_rounded, label: 'Motivo',
+              value: motivoLabel),
         _InfoRow(icon: Icons.calendar_today_rounded, label: 'Fecha', value: date),
         if (obsDisplay.isNotEmpty)
           _InfoRow(icon: Icons.notes_rounded, label: 'Notas', value: obsDisplay),

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../theme/app_colors.dart';
 import '../../../models/contabilidad_models.dart';
 import '../../../services/contabilidad_service.dart';
+import '../../../utils/range_picker.dart';
 
 enum _Periodo { hoy, semana, mes, custom }
 
@@ -84,12 +85,7 @@ class _TabTopClientesState extends State<TabTopClientes> {
       firstDate:    DateTime(2020),
       lastDate:     DateTime.now(),
       initialDateRange: DateTimeRange(start: _customIni, end: _customFin),
-      builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.light(primary: AppColors.secondary),
-        ),
-        child: child!,
-      ),
+      builder: (ctx, child) => rangePickerDialog(ctx, child!),
     );
     if (rango == null) return;
     setState(() {

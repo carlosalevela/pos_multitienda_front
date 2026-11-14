@@ -108,6 +108,7 @@ class DevolucionesService {
     String? metodoPagoDiferencia,
     double? montoRecibido,
     int?    cuentaDestinoId,
+    String  motivoCambio = 'averia',
   }) async {
     try {
       final response = await ApiClient.instance.post(
@@ -117,6 +118,7 @@ class DevolucionesService {
           'metodo_devolucion': metodoPago,
           'detalles': detalles,
           'productos_reemplazo': productosReemplazo,
+          'motivo_cambio': motivoCambio,
           if (metodoPagoDiferencia != null && metodoPagoDiferencia.isNotEmpty)
             'metodo_pago_diferencia': metodoPagoDiferencia,
           if (montoRecibido != null) 'monto_recibido': montoRecibido,

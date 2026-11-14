@@ -87,6 +87,16 @@ class _ContabilidadScreenState extends State<ContabilidadScreen>
     final cont = context.read<ContabilidadProvider>();
     final auth = context.read<AuthProvider>();
     _cargarTodo(cont, auth, _tiendaId);
+    _recargarPL();
+  }
+
+  void _recargarPL() {
+    final cont = context.read<ContabilidadProvider>();
+    final now  = DateTime.now();
+    final ini  = DateTime(now.year, now.month, 1);
+    String _s(DateTime d) =>
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    cont.cargarPL(fechaIni: _s(ini), fechaFin: _s(now), tiendaId: _tiendaId);
   }
 
   String _labelTienda(AuthProvider auth) {

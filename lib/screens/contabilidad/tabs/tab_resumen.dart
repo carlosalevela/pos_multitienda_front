@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../theme/app_colors.dart';
+import '../../../utils/range_picker.dart';
 
 import '../../../providers/contabilidad_provider.dart';
 import 'tab_resumen_dia.dart';
 import 'tab_mensual.dart';
 import 'tab_anual.dart';
+import 'tab_rango.dart';
 
-enum _Vista { hoy, mes, anio }
+enum _Vista { hoy, semana, mes, anio, rango }
 
 class TabResumen extends StatefulWidget {
   final ContabilidadProvider cont;
@@ -29,26 +31,74 @@ class TabResumen extends StatefulWidget {
 }
 
 class _TabResumenState extends State<TabResumen> {
-  _Vista _vista    = _Vista.hoy;
-  int    _anioMes  = DateTime.now().year;
-  int    _mesSel   = DateTime.now().month;
-  int    _anioAnual = DateTime.now().year;
+  _Vista   _vista     = _Vista.hoy;
+  int      _anioMes   = DateTime.now().year;
+  int      _mesSel    = DateTime.now().month;
+  int      _anioAnual = DateTime.now().year;
+  DateTime _rangoIni  = _inicioSemanaActual();
+  DateTime _rangoFin  = DateTime.now();
 
-  static const _meses   = [
+  static DateTime _inicioSemanaActual() {
+    final hoy = DateTime.now();
+    return hoy.subtract(Duration(days: hoy.weekday - 1));
+  }
+
+  static const _meses = [
     'Ene','Feb','Mar','Abr','May','Jun',
     'Jul','Ago','Sep','Oct','Nov','Dic',
   ];
 
-  void _switchVista(_Vista v) {
+  void _switchVista(_Vista v) async {
+    if (v == _Vista.rango) {
+      final range = await showDateRangePicker(
+        context:          context,
+        initialDateRange: DateTimeRange(start: _rangoIni, end: _rangoFin),
+        firstDate:        DateTime(DateTime.now().year - 2),
+        lastDate:         DateTime.now(),
+        locale:           const Locale('es', 'CO'),
+        builder: (ctx, child) => rangePickerDialog(ctx, child!),
+      );
+      if (range == null) return;
+      setState(() {
+        _rangoIni = range.start;
+        _rangoFin = range.end;
+        _vista    = _Vista.rango;
+      });
+      _cargarRango();
+      return;
+    }
+    if (v == _Vista.semana) {
+      setState(() {
+        _rangoIni = _inicioSemanaActual();
+        _rangoFin = DateTime.now();
+        _vista    = _Vista.semana;
+      });
+      _cargarRango();
+      return;
+    }
     if (_vista == v) return;
     setState(() => _vista = v);
     _recargarVista(v);
+  }
+
+  void _cargarRango() {
+    final ini = '${_rangoIni.year}-'
+                '${_rangoIni.month.toString().padLeft(2, '0')}-'
+                '${_rangoIni.day.toString().padLeft(2, '0')}';
+    final fin = '${_rangoFin.year}-'
+                '${_rangoFin.month.toString().padLeft(2, '0')}-'
+                '${_rangoFin.day.toString().padLeft(2, '0')}';
+    widget.cont.cargarResumenRango(
+        fechaIni: ini, fechaFin: fin, tiendaId: widget.tiendaId);
   }
 
   void _recargarVista(_Vista v) {
     switch (v) {
       case _Vista.hoy:
         widget.cont.cargarResumenDiario(tiendaId: widget.tiendaId);
+      case _Vista.semana:
+      case _Vista.rango:
+        _cargarRango();
       case _Vista.mes:
         widget.cont.cargarResumenMensual(
             tiendaId: widget.tiendaId, anio: _anioMes, mes: _mesSel);
@@ -84,11 +134,15 @@ class _TabResumenState extends State<TabResumen> {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(children: [
-        _chip('Hoy',      Icons.today_rounded,          _Vista.hoy),
+        _chip('Hoy',       Icons.today_rounded,          _Vista.hoy),
         const SizedBox(width: 8),
-        _chip('Este mes', Icons.calendar_month_rounded, _Vista.mes),
+        _chip('Semana',    Icons.view_week_rounded,      _Vista.semana),
         const SizedBox(width: 8),
-        _chip('Este año', Icons.bar_chart_rounded,      _Vista.anio),
+        _chip('Este mes',  Icons.calendar_month_rounded, _Vista.mes),
+        const SizedBox(width: 8),
+        _chip('Este año',  Icons.bar_chart_rounded,      _Vista.anio),
+        const SizedBox(width: 8),
+        _chip('Rango',     Icons.date_range_rounded,     _Vista.rango),
       ]),
     );
   }
@@ -125,6 +179,15 @@ class _TabResumenState extends State<TabResumen> {
           cont:     widget.cont,
           fmt:      widget.fmt,
           tiendaId: widget.tiendaId,
+        );
+      case _Vista.semana:
+      case _Vista.rango:
+        return TabRango(
+          cont:     widget.cont,
+          fmt:      widget.fmt,
+          tiendaId: widget.tiendaId,
+          fechaIni: _rangoIni,
+          fechaFin: _rangoFin,
         );
       case _Vista.mes:
         return TabMensual(

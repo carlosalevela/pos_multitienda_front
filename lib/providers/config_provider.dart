@@ -51,6 +51,9 @@ class ConfigProvider extends ChangeNotifier {
   bool   _mostrarNit           = true;
   String _mensajePie           = '';
   String _nombreDispositivo    = '';
+  String _nit                  = '';
+  String _direccion            = '';
+  String _telefono             = '';
 
   // ── Cuentas bancarias (Nequi, DaviPlata, Datáfono…) ─────
   List<CuentaBancaria> _cuentas = [];
@@ -95,6 +98,9 @@ class ConfigProvider extends ChangeNotifier {
   bool   get mostrarNit        => _mostrarNit;
   String get mensajePie        => _mensajePie;
   String get nombreDispositivo => _nombreDispositivo;
+  String get nit               => _nit;
+  String get direccion         => _direccion;
+  String get telefono          => _telefono;
 
   // ── Estado ────────────────────────────────────────────────
   bool   get cargando  => _cargando;
@@ -155,6 +161,9 @@ class ConfigProvider extends ChangeNotifier {
         _mostrarNit        = d['mostrar_nit']        as bool?   ?? true;
         _mensajePie        = d['mensaje_pie']        as String? ?? '';
         _nombreDispositivo = d['nombre_dispositivo'] as String? ?? '';
+        _nit               = d['nit']               as String? ?? '';
+        _direccion         = d['direccion']          as String? ?? '';
+        _telefono          = d['telefono']           as String? ?? '';
       }
 
       if (results.length > 2 && results[2]['success'] == true) {

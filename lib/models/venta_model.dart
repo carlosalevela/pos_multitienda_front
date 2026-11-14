@@ -23,7 +23,7 @@ class VentaResumenModel {
         clienteNombre: j['cliente_nombre'] as String? ?? 'Consumidor Final',
         total:         double.tryParse(j['total'].toString()) ?? 0,
         estado:        j['estado']         as String? ?? '',
-        createdAt:     DateTime.parse(j['created_at'] as String),
+        createdAt:     DateTime.parse(j['created_at'] as String).toLocal(),
       );
 }
 

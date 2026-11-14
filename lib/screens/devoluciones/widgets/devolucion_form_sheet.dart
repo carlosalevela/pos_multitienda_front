@@ -84,7 +84,7 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
   String _metodoPago            = 'efectivo';
   String _tipoOperacion         = 'devolucion';
   String _metodoPagoDiferencia  = 'efectivo';
-  String _motivoCambio          = 'averia'; // 'averia' | 'producto_danado'
+  String _motivoCambio          = 'gusto'; // 'gusto' | 'averia'
   int?   _cuentaSeleccionadaId;
   bool   _guardando             = false;
   bool   _cargandoVenta         = false;
@@ -327,14 +327,19 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
 
     double? montoRecibido;
     if (_tipoOperacion == 'cambio' && _saldoPendiente > 0) {
-      montoRecibido = double.tryParse(_montoRecibidoCtrl.text.trim());
-      if (montoRecibido == null || montoRecibido <= 0) {
-        _showSnack('Ingresa el monto recibido del cliente.', error: true);
-        return;
-      }
-      if (montoRecibido < _saldoPendiente) {
-        _showSnack('El monto recibido no cubre la diferencia.', error: true);
-        return;
+      if (_metodoPagoDiferencia == 'efectivo') {
+        montoRecibido = double.tryParse(_montoRecibidoCtrl.text.trim());
+        if (montoRecibido == null || montoRecibido <= 0) {
+          _showSnack('Ingresa el monto recibido del cliente.', error: true);
+          return;
+        }
+        if (montoRecibido < _saldoPendiente) {
+          _showSnack('El monto recibido no cubre la diferencia.', error: true);
+          return;
+        }
+      } else {
+        // Tarjeta / transferencia: el monto recibido es exactamente la diferencia
+        montoRecibido = _saldoPendiente;
       }
     }
 
@@ -349,11 +354,6 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
 
     Map<String, dynamic> resp;
     if (_tipoOperacion == 'cambio') {
-      final motivoLabel = _motivoCambio == 'averia' ? 'Avería' : 'Producto dañado';
-      final obsConMotivo = [
-        'Motivo: $motivoLabel',
-        if (_obsCtrl.text.trim().isNotEmpty) _obsCtrl.text.trim(),
-      ].join(' — ');
       resp = await context.read<DevolucionesProvider>().crearCambio(
         ventaId:              _ventaDisp!.ventaId,
         metodoPago:           _metodoPago,
@@ -362,7 +362,10 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
           'producto': i.producto.id,
           'cantidad': i.cantidad,
         }).toList(),
-        observaciones:        obsConMotivo,
+        motivoCambio:         _motivoCambio,
+        observaciones:        _obsCtrl.text.trim().isNotEmpty
+            ? _obsCtrl.text.trim()
+            : null,
         metodoPagoDiferencia: (_saldoPendiente > 0 || _saldoADevolver > 0)
             ? _metodoPagoDiferencia
             : null,
@@ -387,7 +390,11 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
       try {
         final rawData = resp['data'];
         if (rawData is Map<String, dynamic>) {
-          devCreada = DevolucionModel.fromJson(rawData);
+          // Preferir el sub-campo 'data' (DevolucionSerializer completo) si existe
+          final src = rawData['data'] is Map<String, dynamic>
+              ? rawData['data'] as Map<String, dynamic>
+              : rawData;
+          devCreada = DevolucionModel.fromJson(src);
         }
       } catch (_) {}
 
@@ -481,17 +488,19 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
                       _seccionMetodoPago(),
                     ],
 
-                    // 8. Observaciones
-                    const SizedBox(height: 20),
-                    _FormLabel(
-                      label: 'Observaciones (opcional)',
-                      child: TextFormField(
-                        controller: _obsCtrl,
-                        maxLines: 2,
-                        decoration: _inputDeco('Motivo general de la devolución...'),
-                        style: GoogleFonts.inter(fontSize: 14),
+                    // 8. Observaciones (solo devolución; en cambio el motivo lo cubre)
+                    if (_tipoOperacion != 'cambio') ...[
+                      const SizedBox(height: 20),
+                      _FormLabel(
+                        label: 'Observaciones (opcional)',
+                        child: TextFormField(
+                          controller: _obsCtrl,
+                          maxLines: 2,
+                          decoration: _inputDeco('Motivo general de la devolución...'),
+                          style: GoogleFonts.inter(fontSize: 14),
+                        ),
                       ),
-                    ),
+                    ],
                     const SizedBox(height: 16),
                   ],
                 ),
@@ -872,7 +881,8 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
 
             const SizedBox(height: 14),
 
-            // Campo monto recibido
+            // Campo monto recibido — solo para efectivo
+            if (_metodoPagoDiferencia == 'efectivo') ...[
             Text('Monto recibido del cliente',
                 style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600,
                     color: Colors.grey.shade500)),
@@ -916,6 +926,7 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
                 return null;
               },
             ),
+            ], // fin if efectivo — monto recibido
 
             // Cambio a devolver
             if (_metodoPagoDiferencia == 'efectivo' && montoRaw >= _saldoPendiente && montoRaw > 0) ...[
@@ -1077,10 +1088,6 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
   // ─────────────────────────────────────────────────────
 
   Widget _seccionMotivoCambio() {
-    const opciones = [
-      ('averia',          'Avería',          Icons.build_outlined),
-      ('producto_danado', 'Producto dañado', Icons.broken_image_outlined),
-    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1090,44 +1097,44 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
               color: Colors.grey.shade600),
         ),
         const SizedBox(height: 10),
-        Row(
-          children: opciones.map((o) {
-            final selected = _motivoCambio == o.$1;
-            return Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(right: o.$1 == opciones.first.$1 ? 8 : 0),
-                child: GestureDetector(
-                  onTap: () => setState(() => _motivoCambio = o.$1),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: selected ? _kGreen.withValues(alpha: 0.08) : Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: selected ? _kGreen : _kBorder,
-                        width: selected ? 1.5 : 1,
-                      ),
-                    ),
-                    child: Row(children: [
-                      Icon(o.$3, size: 16, color: selected ? _kGreen : _kTextMuted),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(o.$2, style: GoogleFonts.inter(
-                          fontSize: 13, fontWeight: FontWeight.w500,
-                          color: selected ? _kGreen : _kTextMuted,
-                        )),
-                      ),
-                      if (selected)
-                        Icon(Icons.check_circle, size: 14, color: _kGreen),
-                    ]),
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
+        Row(children: [
+          Expanded(child: _motivoChip('gusto', 'Por gusto',
+              Icons.thumb_up_outlined)),
+          const SizedBox(width: 8),
+          Expanded(child: _motivoChip('averia', 'Por avería/daño',
+              Icons.build_outlined)),
+        ]),
       ],
+    );
+  }
+
+  Widget _motivoChip(String valor, String label, IconData icono) {
+    final selected = _motivoCambio == valor;
+    return GestureDetector(
+      onTap: () => setState(() => _motivoCambio = valor),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: selected ? _kGreen.withValues(alpha: 0.08) : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? _kGreen : _kBorder,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(children: [
+          Icon(icono, size: 16, color: selected ? _kGreen : _kTextMuted),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(label, style: GoogleFonts.inter(
+              fontSize: 13, fontWeight: FontWeight.w500,
+              color: selected ? _kGreen : _kTextMuted,
+            )),
+          ),
+          if (selected) Icon(Icons.check_circle, size: 14, color: _kGreen),
+        ]),
+      ),
     );
   }
 
@@ -1338,6 +1345,7 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
         ..._items.map((item) => _ItemProductoCard(
               key: ValueKey(item.producto.productoId),
               item: item,
+              esCambio: _tipoOperacion == 'cambio',
               onToggle: () => setState(() => item.seleccionado = !item.seleccionado),
               onChanged: () => setState(() {}),
             )),
@@ -1747,11 +1755,13 @@ class _ItemProductoCard extends StatelessWidget {
   final _ItemCtrl    item;
   final VoidCallback onToggle;
   final VoidCallback onChanged;
+  final bool         esCambio;
   const _ItemProductoCard({
     super.key,
     required this.item,
     required this.onToggle,
     required this.onChanged,
+    this.esCambio = false,
   });
 
   @override
@@ -1832,14 +1842,16 @@ class _ItemProductoCard extends StatelessWidget {
                     },
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextFormField(
-                    controller: item.motivoCtrl,
-                    decoration: _deco('Motivo (opcional)'),
-                    style: GoogleFonts.inter(fontSize: 13),
+                if (!esCambio) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextFormField(
+                      controller: item.motivoCtrl,
+                      decoration: _deco('Motivo (opcional)'),
+                      style: GoogleFonts.inter(fontSize: 13),
+                    ),
                   ),
-                ),
+                ],
               ]),
             ),
           ],

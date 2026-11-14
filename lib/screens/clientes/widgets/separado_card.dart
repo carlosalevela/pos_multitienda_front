@@ -46,7 +46,20 @@ class SeparadoCard extends StatelessWidget {
     _           => Icons.schedule_rounded,
   };
 
-  // ── Alerta de fecha límite ─────────────────────────────
+  // ── Días restantes (siempre visible si hay fechaLimite) ──────
+  _AlertaFecha? _diasChip() {
+    if (separado.fechaLimite == null || !separado.esActivo) return null;
+    final limite = DateTime.tryParse(separado.fechaLimite!);
+    if (limite == null) return null;
+    final hoy  = DateTime.now();
+    final dias = limite.difference(DateTime(hoy.year, hoy.month, hoy.day)).inDays;
+    if (dias < 0)  return _AlertaFecha('Vencido hace ${dias.abs()}d', Colors.red.shade400);
+    if (dias == 0) return _AlertaFecha('Vence hoy',                   Colors.orange.shade600);
+    if (dias <= 3) return _AlertaFecha('$dias día${dias != 1 ? 's' : ''}', Colors.orange.shade400);
+    return _AlertaFecha('$dias días',                                  const Color(0xFF01696F));
+  }
+
+  // ── Alerta de fecha límite (banner + borde, solo urgentes) ────
   _AlertaFecha? _alertaFecha() {
     if (separado.fechaLimite == null || !separado.esActivo) return null;
     final limite = DateTime.tryParse(separado.fechaLimite!);
@@ -62,6 +75,7 @@ class SeparadoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final alerta      = _alertaFecha();
+    final diasChip    = _diasChip();
     final cancelado   = separado.esCancelado;
     final colorEstado = _colorEstado();
 
@@ -288,8 +302,9 @@ class SeparadoCard extends StatelessWidget {
                     ),
                   ),
 
-                  // Fecha límite o creación
+                  // Fecha límite o creación + chip días
                   Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         separado.fechaLimite != null
@@ -314,6 +329,27 @@ class SeparadoCard extends StatelessWidget {
                               : FontWeight.normal,
                         ),
                       ),
+                      if (diasChip != null) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: diasChip.color.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                                color: diasChip.color.withOpacity(0.35)),
+                          ),
+                          child: Text(
+                            diasChip.mensaje,
+                            style: GoogleFonts.poppins(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: diasChip.color,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ],

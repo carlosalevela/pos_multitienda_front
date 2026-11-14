@@ -82,8 +82,13 @@ List<_Mov> _buildMovs(SesionHistorial s) {
   if (s.abonosTotal > 0) {
     list.add(_Mov('—', 'Abonos (${s.numAbonos})', 'INGRESO', s.abonosTotal));
   }
-  if (s.devolucionesEfectivo > 0) {
-    list.add(_Mov('—', 'Devoluciones Efectivo', 'EGRESO', s.devolucionesEfectivo));
+  if (s.devolucionesEfectivo != 0) {
+    list.add(_Mov(
+      '—',
+      s.devolucionesEfectivo > 0 ? 'Devoluciones Efectivo' : 'Devoluciones Neto (ingreso)',
+      s.devolucionesEfectivo > 0 ? 'EGRESO' : 'INGRESO',
+      s.devolucionesEfectivo.abs(),
+    ));
   }
   if (s.gastosTotal > 0) {
     list.add(_Mov('—', 'Gastos del Turno', 'EGRESO', s.gastosTotal));

@@ -226,11 +226,13 @@ class CajaService {
 
   // ── Historial de sesiones ──────────────────────────────
 
-  Future<List<Map<String, dynamic>>> getHistorialSesiones({
+  Future<Map<String, dynamic>> getHistorialSesiones({
     int?    tiendaId,
     String? estado,
     String? fecha,
     bool    misSesiones = false,
+    int     limit  = 20,
+    int     offset = 0,
   }) async {
     try {
       final r = await ApiClient.instance.get(
@@ -240,16 +242,23 @@ class CajaService {
           if (estado      != null) 'estado':       estado,
           if (fecha       != null) 'fecha':        fecha,
           if (misSesiones)         'mis_sesiones': 'true',
+          'limit':  limit.toString(),
+          'offset': offset.toString(),
         },
       );
-      final List data = r.data is List ? r.data : r.data['results'] ?? [];
-      return List<Map<String, dynamic>>.from(data);
+      final List items = r.data is List ? r.data : (r.data['results'] ?? []);
+      final int  count = r.data is Map  ? (r.data['count'] as int? ?? items.length) : items.length;
+      return {
+        'items':   List<Map<String, dynamic>>.from(items),
+        'count':   count,
+        'hasMore': offset + items.length < count,
+      };
     } on DioException catch (e) {
       debugPrint('❌ getHistorialSesiones error: ${e.response?.data}');
-      return [];
+      return {'items': <Map<String, dynamic>>[], 'count': 0, 'hasMore': false};
     } catch (e) {
       debugPrint('❌ getHistorialSesiones error: $e');
-      return [];
+      return {'items': <Map<String, dynamic>>[], 'count': 0, 'hasMore': false};
     }
   }
 }

@@ -1,6 +1,7 @@
 // lib/screens/dashboard/admin_dashboard.dart
 // ignore_for_file: deprecated_member_use
 
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -27,6 +28,8 @@ import '../separados/separados_screen.dart';
 import '../configuracion/configuracion_screen.dart';
 import '../etiquetas/etiquetas_screen.dart';
 import '../documentos/documentos_screen.dart';
+import '../bonos/bonos_screen.dart';
+import '../../services/update_service.dart';
 
 class _C {
   static const bg = Color(0xFFF5F7F8);
@@ -85,6 +88,7 @@ const _allNavItems = <_NavItem>[
   // ── ANÁLISIS ─────────────────────────────────────────────
   _NavItem(label: 'Contabilidad', screen: 'contabilidad', icon: Icons.bar_chart_rounded),
   _NavItem(label: 'Reportes',     screen: 'reports',      icon: Icons.assessment_rounded),
+  _NavItem(label: 'Bonos',        screen: 'bonos',        icon: Icons.card_giftcard_rounded),
   _NavItem(label: 'Documentos',   screen: 'documentos',   icon: Icons.folder_copy_rounded),
   // ── ADMINISTRACIÓN ───────────────────────────────────────
   _NavItem(label: 'Etiquetas',              screen: 'etiquetas',    icon: Icons.label_rounded),
@@ -108,6 +112,7 @@ String _sectionFor(String screen) {
       return 'CLIENTES';
     case 'contabilidad':
     case 'reports':
+    case 'bonos':
     case 'documentos':
       return 'ANÁLISIS';
     case 'etiquetas':
@@ -129,12 +134,13 @@ List<_NavItem> _buildNavItems(String rol) {
       case 'inventory':    return true;
       case 'compras':      return ['admin', 'supervisor', 'superadmin'].contains(rol);
       case 'devoluciones': return true;
-      // Cajero ve "Separados" — no "Clientes" (pantalla diferente)
-      case 'clientes':     return ['admin', 'supervisor', 'superadmin'].contains(rol);
+      // Cajero puede ver, crear y editar clientes de su tienda
+      case 'clientes':     return true;
       case 'separados':    return true;
       case 'contabilidad': return ['admin', 'supervisor', 'superadmin'].contains(rol);
       // Reportes de turno: cajero + supervisor (supervisor revisa sus cajeros)
       case 'reports':      return ['cajero', 'supervisor'].contains(rol);
+      case 'bonos':        return true;
       case 'documentos':   return ['admin', 'supervisor', 'superadmin'].contains(rol);
       case 'etiquetas':    return ['admin', 'supervisor', 'superadmin'].contains(rol);
       case 'empleados':    return ['admin', 'superadmin'].contains(rol);
@@ -160,6 +166,26 @@ class _AdminDashboardState extends State<AdminDashboard> {
   final _scaffoldKey  = GlobalKey<ScaffoldState>();
   String _activeScreen  = 'dashboard';
   bool   _navCollapsed  = false;
+  Timer? _updateTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Chequear al entrar y luego cada 2 horas
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future.delayed(const Duration(seconds: 2));
+      if (mounted) UpdateService.chequear(context);
+    });
+    _updateTimer = Timer.periodic(const Duration(hours: 2), (_) {
+      if (mounted) UpdateService.chequear(context);
+    });
+  }
+
+  @override
+  void dispose() {
+    _updateTimer?.cancel();
+    super.dispose();
+  }
 
   void _navigate(String screen) {
     setState(() => _activeScreen = screen);
@@ -193,6 +219,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       case 'stores': return const TiendasScreen();
       case 'empresas': return const EmpresasScreen();
       case 'configuracion': return const ConfiguracionScreen();
+      case 'bonos':         return const BonosScreen();
       case 'documentos':    return const DocumentosScreen();
       default: return _PlaceholderScreen(screen: screen, onBack: () => _navigate('dashboard'));
     }
@@ -311,13 +338,15 @@ class _Sidebar extends StatelessWidget {
         Container(
           height: 64,
           padding: const EdgeInsets.symmetric(horizontal: 20),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: _C.border)),
+          ),
           child: Row(children: [
             Container(width: 30, height: 30, decoration: BoxDecoration(color: _C.green, borderRadius: BorderRadius.circular(7)), child: const Icon(Icons.point_of_sale_rounded, size: 16, color: Colors.white)),
             const SizedBox(width: 10),
             Text('SIS POS', style: GoogleFonts.inter(color: _C.textPrimary, fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
           ]),
         ),
-        Container(height: 1, color: _C.border),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
@@ -390,7 +419,7 @@ class _TopBar extends StatelessWidget {
     final w        = MediaQuery.of(context).size.width;
     final isNarrow = w < 700;
     return Container(
-      height: 56,
+      height: 64,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(color: _C.surface, border: Border(bottom: BorderSide(color: _C.border))),
       child: Row(children: [
@@ -466,6 +495,113 @@ class _TopBar extends StatelessWidget {
         ]),
 
         const SizedBox(width: 8),
+
+        // ── Botón de actualización ────────────────────
+        ValueListenableBuilder<String?>(
+          valueListenable: UpdateService.updateError,
+          builder: (ctx, error, _) {
+            return ValueListenableBuilder<Map<String, dynamic>?>(
+              valueListenable: UpdateService.updateDisponible,
+              builder: (ctx2, info, _) {
+                final hayError  = error != null;
+                final hayUpdate = info != null && !hayError;
+
+                final IconData icono = hayError
+                    ? Icons.warning_amber_rounded
+                    : hayUpdate
+                        ? Icons.system_update_rounded
+                        : Icons.download_done_rounded;
+                final Color color = hayError
+                    ? const Color(0xFFB45309)
+                    : hayUpdate
+                        ? _C.greenDark
+                        : _C.textFaint;
+                final String tooltip = hayError
+                    ? 'Error al verificar: $error'
+                    : hayUpdate
+                        ? 'Nueva versión ${info!['version']} disponible'
+                        : 'v$currentVersion — al día';
+
+                return Tooltip(
+                  message: tooltip,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      IconButton(
+                        icon: Icon(icono, size: 20, color: color),
+                        onPressed: () {
+                          if (hayError) {
+                            showDialog(
+                              context: ctx2,
+                              builder: (_) => AlertDialog(
+                                title: const Text('Error al verificar versión'),
+                                content: SingleChildScrollView(
+                                  child: Text(error!,
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          fontFamily: 'monospace')),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () {
+                                      Navigator.pop(ctx2);
+                                      UpdateService.chequear(ctx2);
+                                    },
+                                    child: const Text('Reintentar'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(ctx2),
+                                    child: const Text('Cerrar'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          } else if (hayUpdate) {
+                            UpdateService.mostrarDialogo(ctx2);
+                          } else {
+                            ScaffoldMessenger.of(ctx2).showSnackBar(
+                              SnackBar(
+                                content: Text('v$currentVersion — estás al día'),
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          }
+                        },
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                            minWidth: 36, minHeight: 36),
+                      ),
+                      if (hayUpdate || hayError)
+                        Positioned(
+                          top: 4, right: 4,
+                          child: Container(
+                            width: 16, height: 16,
+                            decoration: BoxDecoration(
+                              color: hayError
+                                  ? const Color(0xFFB45309)
+                                  : const Color(0xFFDC2626),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text(
+                                hayError ? '!' : '1',
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        ),
+
+        const SizedBox(width: 4),
       ]),
     );
   }
@@ -481,6 +617,7 @@ class _DashboardBody extends StatefulWidget {
 
 class _DashboardBodyState extends State<_DashboardBody> {
   final _svc = VentaService();
+  Timer? _refreshTimer;
 
   bool    _loading = true;
   String? _error;
@@ -502,6 +639,15 @@ class _DashboardBodyState extends State<_DashboardBody> {
   void initState() {
     super.initState();
     _cargar();
+    _refreshTimer = Timer.periodic(const Duration(minutes: 2), (_) {
+      if (mounted && !_loading) _cargar();
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _cargar() async {

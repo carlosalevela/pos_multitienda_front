@@ -15,6 +15,7 @@ class SesionHistorial {
   final double ventasTransferencia;
   final double ventasMixto;
   final double ventasMixtoEfectivo;
+  final double ventasBono;
   final double ventasTotal;
   // Gastos
   final double gastosTotal;
@@ -30,6 +31,10 @@ class SesionHistorial {
   final double devolucionesDirectasEf;
   final double cambiosCobrarEf;
   final double cambiosDevEf;
+  final double cambiosCobrarTar;
+  final double cambiosDevTar;
+  final double cambiosCobrarTra;
+  final double cambiosDevTra;
   final int    numDevoluciones;
   // Movimientos adicionales
   final double cancelacionesEfectivo;
@@ -66,6 +71,7 @@ class SesionHistorial {
     required this.ventasTransferencia,
     required this.ventasMixto,
     required this.ventasMixtoEfectivo,
+    this.ventasBono = 0,
     required this.ventasTotal,
     required this.gastosTotal,
     // Abonos ← NUEVO
@@ -78,8 +84,12 @@ class SesionHistorial {
     //
     required this.devolucionesEfectivo,
     this.devolucionesDirectasEf = 0,
-    this.cambiosCobrarEf = 0,
-    this.cambiosDevEf = 0,
+    this.cambiosCobrarEf  = 0,
+    this.cambiosDevEf     = 0,
+    this.cambiosCobrarTar = 0,
+    this.cambiosDevTar    = 0,
+    this.cambiosCobrarTra = 0,
+    this.cambiosDevTra    = 0,
     required this.numDevoluciones,
     required this.numCambiosProducto,
     this.cancelacionesEfectivo = 0,
@@ -109,6 +119,7 @@ class SesionHistorial {
     ventasTransferencia:   double.tryParse(j['ventas_transferencia']?.toString()       ?? '0') ?? 0.0,
     ventasMixto:           double.tryParse(j['ventas_mixto']?.toString()               ?? '0') ?? 0.0,
     ventasMixtoEfectivo:   double.tryParse(j['ventas_mixto_efectivo']?.toString()    ?? '0') ?? 0.0,
+    ventasBono:            double.tryParse(j['ventas_bono']?.toString()               ?? '0') ?? 0.0,
     ventasTotal:           double.tryParse(j['ventas_total']?.toString()               ?? '0') ?? 0.0,
     gastosTotal:           double.tryParse(j['gastos_total']?.toString()               ?? '0') ?? 0.0,
     // Abonos ← NUEVO
@@ -119,10 +130,14 @@ class SesionHistorial {
     abonosCreditoEfectivo: double.tryParse(j['abonos_credito_efectivo']?.toString() ?? '0') ?? 0.0,
     numAbonos:             (j['num_abonos']        as num?)?.toInt() ?? 0,
     //
-    devolucionesEfectivo:    double.tryParse(j['devoluciones_efectivo']?.toString()      ?? '0') ?? 0.0,
-    devolucionesDirectasEf:  double.tryParse(j['devoluciones_directas_ef']?.toString()  ?? '0') ?? 0.0,
-    cambiosCobrarEf:         double.tryParse(j['cambios_cobrar_ef']?.toString()          ?? '0') ?? 0.0,
-    cambiosDevEf:            double.tryParse(j['cambios_devolver_ef']?.toString()        ?? '0') ?? 0.0,
+    devolucionesEfectivo:    double.tryParse(j['devoluciones_efectivo']?.toString()       ?? '0') ?? 0.0,
+    devolucionesDirectasEf:  double.tryParse(j['devoluciones_directas_ef']?.toString()   ?? '0') ?? 0.0,
+    cambiosCobrarEf:         double.tryParse(j['cambios_cobrar_ef']?.toString()           ?? '0') ?? 0.0,
+    cambiosDevEf:            double.tryParse(j['cambios_devolver_ef']?.toString()         ?? '0') ?? 0.0,
+    cambiosCobrarTar:        double.tryParse(j['cambios_cobrar_tar']?.toString()          ?? '0') ?? 0.0,
+    cambiosDevTar:           double.tryParse(j['cambios_devolver_tar']?.toString()        ?? '0') ?? 0.0,
+    cambiosCobrarTra:        double.tryParse(j['cambios_cobrar_tra']?.toString()          ?? '0') ?? 0.0,
+    cambiosDevTra:           double.tryParse(j['cambios_devolver_tra']?.toString()        ?? '0') ?? 0.0,
     numDevoluciones:         (j['num_devoluciones']       as num?)?.toInt() ?? 0,
     numCambiosProducto:      (j['num_cambios_producto']   as num?)?.toInt() ?? 0,
     cancelacionesEfectivo:   double.tryParse(j['cancelaciones_efectivo']?.toString()     ?? '0') ?? 0.0,
@@ -139,10 +154,16 @@ class SesionHistorial {
     abonosDetalle:           (j['abonos_detalle'] as List<dynamic>?)
         ?.map((e) => Map<String, dynamic>.from(e as Map))
         .toList() ?? const [],
+    cuentasResumen:          (j['cuentas_resumen'] as List<dynamic>?)
+        ?.map((e) => Map<String, dynamic>.from(e as Map))
+        .toList() ?? const [],
     montoFinalSistema:     double.tryParse(
                              (j['monto_esperado'] ?? j['monto_final_sistema'])?.toString() ?? '0') ?? 0.0,
     montoFinalReal:        double.tryParse(j['monto_final_real']?.toString()           ?? '0') ?? 0.0,
     diferencia:            double.tryParse(j['diferencia']?.toString()                 ?? '0') ?? 0.0,
     numTransacciones:      (j['num_transacciones'] as num?)?.toInt() ?? 0,
   );
+
+  double get netoCambiosTarjeta       => cambiosCobrarTar - cambiosDevTar;
+  double get netoCambiosTransferencia => cambiosCobrarTra - cambiosDevTra;
 }

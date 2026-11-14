@@ -41,24 +41,18 @@ Name: "desktopicon"; Description: "Crear acceso directo en el Escritorio"; Group
 
 [Files]
 ; Ejecutable principal
-Source: "{#BuildDir}\{#AppExeName}";       DestDir: "{app}"; Flags: ignoreversion
+Source: "{#BuildDir}\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
-; DLLs de Flutter / plugins
-Source: "{#BuildDir}\flutter_windows.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#BuildDir}\pdfium.dll";          DestDir: "{app}"; Flags: ignoreversion
-Source: "{#BuildDir}\printing_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#BuildDir}\url_launcher_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
+; Todas las DLLs (flutter_windows, plugins, pdfium, etc.)
+Source: "{#BuildDir}\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Carpeta data (assets, fuentes, flutter_assets, etc.)
 Source: "{#BuildDir}\data\*"; DestDir: "{app}\data"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-; Acceso directo en el menú inicio
-Name: "{group}\{#AppName}";         Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\{#AppExeName}"
+Name: "{group}\{#AppName}";             Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\{#AppExeName}"
 Name: "{group}\Desinstalar {#AppName}"; Filename: "{uninstallexe}"
-
-; Acceso directo en escritorio (opcional, según tarea elegida)
-Name: "{autodesktop}\{#AppName}";   Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\{#AppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#AppName}";       Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "Abrir {#AppName}"; Flags: nowait postinstall skipifsilent

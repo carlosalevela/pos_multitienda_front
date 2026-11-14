@@ -96,16 +96,23 @@ class _UpdateDialog extends StatefulWidget {
 }
 
 class _UpdateDialogState extends State<_UpdateDialog> {
-  double _progreso = 0;
-  bool   _descargando = false;
-  String _estado = '';
+  double  _progreso   = 0;
+  bool    _descargando = false;
+  String  _estado     = '';
+  String? _error;
 
   Future<void> _descargar() async {
-    setState(() { _descargando = true; _estado = 'Descargando...'; });
+    setState(() { _descargando = true; _estado = 'Descargando...'; _error = null; _progreso = 0; });
     try {
       final dir  = await getTemporaryDirectory();
       final path = '${dir.path}\\SIS_POS_${widget.version}_setup.exe';
-      await Dio().download(
+      final dio  = Dio(BaseOptions(
+        followRedirects: true,
+        maxRedirects:    5,
+        receiveTimeout:  const Duration(minutes: 10),
+        connectTimeout:  const Duration(seconds: 30),
+      ));
+      await dio.download(
         widget.downloadUrl,
         path,
         onReceiveProgress: (rec, total) {
@@ -124,7 +131,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       await Future.delayed(const Duration(seconds: 1));
       exit(0);
     } catch (e) {
-      setState(() { _descargando = false; _estado = 'Error: $e'; });
+      setState(() { _descargando = false; _error = e.toString(); });
     }
   }
 
@@ -143,6 +150,10 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             LinearProgressIndicator(value: _progreso > 0 ? _progreso : null),
             const SizedBox(height: 8),
             Text(_estado, style: const TextStyle(fontSize: 12)),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(_error!, style: const TextStyle(fontSize: 12, color: Colors.red)),
           ],
         ],
       ),

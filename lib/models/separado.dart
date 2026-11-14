@@ -77,7 +77,7 @@ class AbonoSeparado {
     monto:          _toDouble(j['monto']),
     metodoPago:     j['metodo_pago'] as String? ?? 'efectivo',
     createdAt:      j['created_at'] != null        // ✅ parseo seguro
-        ? DateTime.parse(j['created_at'] as String)
+        ? DateTime.parse(j['created_at'] as String).toLocal()
         : DateTime.now(),
   );
 
@@ -145,7 +145,7 @@ class Separado {
     fechaLimite:    j['fecha_limite'] as String?,
     estado:         j['estado']      as String? ?? 'activo',
     createdAt:      j['created_at'] != null           // ✅ parseo seguro
-        ? DateTime.parse(j['created_at'] as String)
+        ? DateTime.parse(j['created_at'] as String).toLocal()
         : DateTime.now(),
     detalles: (j['detalles'] as List? ?? [])
         .map((e) => DetalleSeparado.fromJson(e as Map<String, dynamic>))

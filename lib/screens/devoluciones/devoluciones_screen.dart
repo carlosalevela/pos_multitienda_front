@@ -810,7 +810,7 @@ class _DetallePanel extends StatelessWidget {
                   icon: const Icon(Icons.print_rounded, size: 16),
                   label: Text('Imprimir comprobante',
                       style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13)),
-                  onPressed: () => DevolucionPrintService.imprimir(context, dev),
+                  onPressed: () => DevolucionPrintService.imprimir(context, dev, esCopia: true),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _kGreen,
                     foregroundColor: Colors.white,

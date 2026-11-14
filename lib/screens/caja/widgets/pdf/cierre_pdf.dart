@@ -962,7 +962,7 @@ pw.Widget _gastosDetalleTable(SesionHistorial sesion) {
 // ════════════════════════════════════════════════════════
 
 pw.Widget _devolucionesDetail(SesionHistorial sesion) {
-  final detalle = sesion.devolucionesDetalle;
+  final detalle     = sesion.devolucionesDetalle;
   final netoMostrar = sesion.devolucionesEfectivo;
 
   final tableBorder = pw.TableBorder(
@@ -975,15 +975,15 @@ pw.Widget _devolucionesDetail(SesionHistorial sesion) {
   );
 
   String fmtMetodo(String m) {
-    if (m == 'efectivo')    return 'Efectivo';
-    if (m == 'tarjeta')     return 'Datáfono';
-    if (m == 'nota_credito') return 'N. Crédito';
+    if (m == 'efectivo')      return 'Efectivo';
+    if (m == 'tarjeta')       return 'Datáfono';
+    if (m == 'nota_credito')  return 'N. Crédito';
     return 'Transf.';
   }
 
   String fmtTipo(String tipo, String tipoDif) {
-    if (tipo == 'devolucion') return 'Devolución';
-    if (tipoDif == 'cobrar')  return 'Cambio+Cobro';
+    if (tipo == 'devolucion')  return 'Devolución';
+    if (tipoDif == 'cobrar')   return 'Cambio+Cobro';
     if (tipoDif == 'devolver') return 'Cambio+Dev.';
     return 'Cambio Exacto';
   }
@@ -993,141 +993,173 @@ pw.Widget _devolucionesDetail(SesionHistorial sesion) {
     final tipoDif = d['tipo_diferencia']?.toString() ?? '';
     final dev     = double.tryParse(d['total_devuelto']?.toString() ?? '0') ?? 0;
     final dif     = double.tryParse(d['diferencia']?.toString() ?? '0') ?? 0;
-    if (tipo == 'devolucion') return '-${_m(dev)}';
-    if (tipoDif == 'cobrar')  return '+${_m(dif)}';
+    if (tipo == 'devolucion')  return '-${_m(dev)}';
+    if (tipoDif == 'cobrar')   return '+${_m(dif)}';
     if (tipoDif == 'devolver') return '-${_m(dif)}';
     return 'Exacto';
   }
 
-  return pw.Table(
-    border: tableBorder,
-    columnWidths: const {
-      0: pw.FlexColumnWidth(1.4),
-      1: pw.FlexColumnWidth(1.4),
-      2: pw.FlexColumnWidth(1.5),
-      3: pw.FlexColumnWidth(1.6),
-      4: pw.FlexColumnWidth(1.2),
-    },
-    children: [
-      pw.TableRow(
-        decoration: const pw.BoxDecoration(color: _pNavy),
-        children: [
-          _th('FACTURA'),
-          _th('TIPO'),
-          _th('MÉTODO'),
-          _th('CUENTA / PRODUCTO'),
-          _th('IMPACTO', align: pw.TextAlign.right),
-        ],
-      ),
-      if (detalle.isEmpty)
-        pw.TableRow(children: [
-          _tdLabel('Sin detalle disponible'),
-          _tdLabel(''), _tdLabel(''), _tdLabel(''), _tdLabel(''),
-        ])
-      else
-        ...detalle.asMap().entries.map((e) {
-          final d       = e.value;
-          final odd     = e.key.isOdd;
-          final tipo    = d['tipo']?.toString() ?? '';
-          final tipoDif = d['tipo_diferencia']?.toString() ?? '';
-          final metodo  = d['metodo']?.toString() ?? '';
-          final cuenta  = d['cuenta_nombre']?.toString() ?? '';
-          final reempl  = d['producto_reemplazo']?.toString() ?? '';
-          final factura = d['venta_numero']?.toString() ?? 'DEV-${d['id']}';
-          // Preferir lista de reemplazos; caer al campo legacy
-          final reemplazosRaw = d['reemplazos'] as List? ?? [];
-          final reemplazosLabel = reemplazosRaw.isNotEmpty
-              ? reemplazosRaw.map((r) {
-                  final m = r is Map ? r : {};
-                  final c = (m['cantidad'] as num?)?.toStringAsFixed(0) ?? '1';
-                  final n = m['nombre']?.toString() ?? '';
-                  return '$c× $n';
-                }).join(', ')
-              : reempl;
-          final cuentaLabel = cuenta.isNotEmpty
-              ? cuenta
-              : (reemplazosLabel.isNotEmpty ? reemplazosLabel : '—');
+  final rows = <pw.TableRow>[
+    pw.TableRow(
+      decoration: const pw.BoxDecoration(color: _pNavy),
+      children: [
+        _th('FACTURA'),
+        _th('TIPO'),
+        _th('MÉTODO / CUENTA', align: pw.TextAlign.center),
+        _th('PRODUCTOS RECIBIDOS / ENTREGADOS'),
+        _th('IMPACTO', align: pw.TextAlign.right),
+      ],
+    ),
+  ];
 
-          return pw.TableRow(
-            decoration: pw.BoxDecoration(color: odd ? _pSurfLow : _pWhite),
-            children: [
-              _tdLabel(factura),
-              _tdLabel(fmtTipo(tipo, tipoDif)),
-              pw.Padding(
-                padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-                child: pw.Text(fmtMetodo(metodo),
-                    textAlign: pw.TextAlign.center,
-                    style: pw.TextStyle(fontSize: 9, color: _pOnVar)),
-              ),
-              _tdLabel(cuentaLabel),
-              pw.Padding(
-                padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-                child: pw.Text(fmtImpacto(d),
-                    textAlign: pw.TextAlign.right,
-                    style: pw.TextStyle(fontSize: 9, color: _pOnSurf)),
-              ),
-            ],
-          );
-        }),
-      pw.TableRow(
+  if (detalle.isEmpty) {
+    rows.add(pw.TableRow(children: [
+      _tdLabel('Sin detalle disponible'),
+      _tdLabel(''), _tdLabel(''), _tdLabel(''), _tdLabel(''),
+    ]));
+  } else {
+    for (int i = 0; i < detalle.length; i++) {
+      final d        = detalle[i];
+      final odd      = i.isOdd;
+      final tipo     = d['tipo']?.toString() ?? '';
+      final tipoDif  = d['tipo_diferencia']?.toString() ?? '';
+      final metodo   = d['metodo']?.toString() ?? '';
+      final cuenta   = d['cuenta_nombre']?.toString() ?? '';
+      final factura  = d['venta_numero']?.toString() ?? 'DEV-${d['id']}';
+      final esCambio = tipo == 'cambio';
+
+      final metodoLabel = cuenta.isNotEmpty ? cuenta : fmtMetodo(metodo);
+
+      final detallesRaw   = d['detalles']   as List? ?? [];
+      final reemplazosRaw = d['reemplazos'] as List? ?? [];
+
+      final detallesLines = detallesRaw.map((p) {
+        final m = p is Map ? p : {};
+        final c = (m['cantidad'] as num?)?.toStringAsFixed(0) ?? '1';
+        final n = m['nombre']?.toString() ?? '';
+        final s = double.tryParse(m['subtotal']?.toString() ?? '0') ?? 0;
+        return '↩ $c× $n  (${_m(s)})';
+      }).toList();
+
+      final reemplazosLines = reemplazosRaw.map((r) {
+        final m = r is Map ? r : {};
+        final c = (m['cantidad'] as num?)?.toStringAsFixed(0) ?? '1';
+        final n = m['nombre']?.toString() ?? '';
+        final s = double.tryParse(m['subtotal']?.toString() ?? '0') ?? 0;
+        return '→ $c× $n  (${_m(s)})';
+      }).toList();
+
+      final allLines = <String>[
+        ...detallesLines,
+        if (esCambio && reemplazosLines.isNotEmpty) ...[
+          '── Entregado ──',
+          ...reemplazosLines,
+        ],
+      ];
+      final productosText = allLines.isEmpty ? '—' : allLines.join('\n');
+
+      rows.add(pw.TableRow(
+        decoration: pw.BoxDecoration(color: odd ? _pSurfLow : _pWhite),
+        children: [
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: pw.Text(factura,
+                style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold,
+                    color: _pGreen)),
+          ),
+          _tdLabel(fmtTipo(tipo, tipoDif)),
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: pw.Text(metodoLabel,
+                textAlign: pw.TextAlign.center,
+                style: pw.TextStyle(fontSize: 8, color: _pOnVar)),
+          ),
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: pw.Text(productosText,
+                style: pw.TextStyle(fontSize: 7.5, color: _pOnVar, lineSpacing: 1.5)),
+          ),
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: pw.Text(fmtImpacto(d),
+                textAlign: pw.TextAlign.right,
+                style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold,
+                    color: _pOnSurf)),
+          ),
+        ],
+      ));
+    }
+
+    rows.add(pw.TableRow(
+      decoration: const pw.BoxDecoration(color: _pSurfLow),
+      children: [
+        _tdLabel('NETO EFECTIVO DEVOLUCIONES (${sesion.numDevoluciones})', bold: true),
+        _tdLabel('', bold: false),
+        _tdLabel('', bold: false),
+        _tdLabel('', bold: false),
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+          child: pw.Text(_m(-netoMostrar),
+              textAlign: pw.TextAlign.right,
+              style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold,
+                  color: _pOnSurf)),
+        ),
+      ],
+    ));
+
+    if (sesion.netoCambiosTarjeta != 0)
+      rows.add(pw.TableRow(
         decoration: const pw.BoxDecoration(color: _pSurfLow),
         children: [
-          _tdLabel('NETO EFECTIVO DEVOLUCIONES (${sesion.numDevoluciones})', bold: true),
+          _tdLabel('NETO CAMBIOS TARJETA', bold: true),
           _tdLabel('', bold: false),
           _tdLabel('', bold: false),
           _tdLabel('', bold: false),
           pw.Padding(
             padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-            child: pw.Text(_m(-netoMostrar),
-                textAlign: pw.TextAlign.right,
-                style: pw.TextStyle(
-                    fontSize: 9, fontWeight: pw.FontWeight.bold, color: _pOnSurf)),
+            child: pw.Text(
+              sesion.netoCambiosTarjeta > 0
+                  ? '+${_m(sesion.netoCambiosTarjeta)}'
+                  : '-${_m(sesion.netoCambiosTarjeta.abs())}',
+              textAlign: pw.TextAlign.right,
+              style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold,
+                  color: sesion.netoCambiosTarjeta > 0 ? _pGreen : _pRed)),
           ),
         ],
-      ),
-      if (sesion.netoCambiosTarjeta != 0)
-        pw.TableRow(
-          decoration: const pw.BoxDecoration(color: _pSurfLow),
-          children: [
-            _tdLabel('NETO CAMBIOS TARJETA', bold: true),
-            _tdLabel('', bold: false),
-            _tdLabel('', bold: false),
-            _tdLabel('', bold: false),
-            pw.Padding(
-              padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-              child: pw.Text(
-                sesion.netoCambiosTarjeta > 0
-                    ? '+${_m(sesion.netoCambiosTarjeta)}'
-                    : '-${_m(sesion.netoCambiosTarjeta.abs())}',
-                textAlign: pw.TextAlign.right,
-                style: pw.TextStyle(
-                    fontSize: 9, fontWeight: pw.FontWeight.bold,
-                    color: sesion.netoCambiosTarjeta > 0 ? _pGreen : _pRed)),
-            ),
-          ],
-        ),
-      if (sesion.netoCambiosTransferencia != 0)
-        pw.TableRow(
-          decoration: const pw.BoxDecoration(color: _pSurfLow),
-          children: [
-            _tdLabel('NETO CAMBIOS TRANSFERENCIA', bold: true),
-            _tdLabel('', bold: false),
-            _tdLabel('', bold: false),
-            _tdLabel('', bold: false),
-            pw.Padding(
-              padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-              child: pw.Text(
-                sesion.netoCambiosTransferencia > 0
-                    ? '+${_m(sesion.netoCambiosTransferencia)}'
-                    : '-${_m(sesion.netoCambiosTransferencia.abs())}',
-                textAlign: pw.TextAlign.right,
-                style: pw.TextStyle(
-                    fontSize: 9, fontWeight: pw.FontWeight.bold,
-                    color: sesion.netoCambiosTransferencia > 0 ? _pGreen : _pRed)),
-            ),
-          ],
-        ),
-    ],
+      ));
+
+    if (sesion.netoCambiosTransferencia != 0)
+      rows.add(pw.TableRow(
+        decoration: const pw.BoxDecoration(color: _pSurfLow),
+        children: [
+          _tdLabel('NETO CAMBIOS TRANSFERENCIA', bold: true),
+          _tdLabel('', bold: false),
+          _tdLabel('', bold: false),
+          _tdLabel('', bold: false),
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            child: pw.Text(
+              sesion.netoCambiosTransferencia > 0
+                  ? '+${_m(sesion.netoCambiosTransferencia)}'
+                  : '-${_m(sesion.netoCambiosTransferencia.abs())}',
+              textAlign: pw.TextAlign.right,
+              style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold,
+                  color: sesion.netoCambiosTransferencia > 0 ? _pGreen : _pRed)),
+          ),
+        ],
+      ));
+  }
+
+  return pw.Table(
+    border: tableBorder,
+    columnWidths: const {
+      0: pw.FlexColumnWidth(1.3),
+      1: pw.FlexColumnWidth(1.4),
+      2: pw.FlexColumnWidth(1.5),
+      3: pw.FlexColumnWidth(3.2),
+      4: pw.FlexColumnWidth(1.2),
+    },
+    children: rows,
   );
 }
 
@@ -1155,14 +1187,17 @@ pw.Widget _cuadreCard(
     );
   }
 
-  return pw.Container(
-    decoration: pw.BoxDecoration(
-      border:       pw.Border.all(color: _pOutVar, width: 0.8),
-      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
-    ),
-    child: pw.Column(children: [
-      _cardTitle('Cálculo de Efectivo Esperado en Caja'),
-      pw.Padding(
+  return pw.Column(children: [
+    _cardTitle('Cálculo de Efectivo Esperado en Caja'),
+    pw.Container(
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: _pOutVar, width: 0.8),
+        borderRadius: const pw.BorderRadius.only(
+          bottomLeft:  pw.Radius.circular(8),
+          bottomRight: pw.Radius.circular(8),
+        ),
+      ),
+      child: pw.Padding(
         padding: const pw.EdgeInsets.fromLTRB(16, 10, 16, 14),
         child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [
 
@@ -1276,8 +1311,8 @@ pw.Widget _cuadreCard(
           ),
         ]),
       ),
-    ]),
-  );
+    ),
+  ]);
 }
 
 // ════════════════════════════════════════════════════════

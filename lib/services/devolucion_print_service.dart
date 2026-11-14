@@ -12,7 +12,7 @@ import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 class DevolucionPrintService {
   /// Imprime directo a la impresora térmica si está configurada.
   /// Si no hay impresora USB vinculada, abre el diálogo PDF del navegador.
-  static Future<void> imprimir(BuildContext context, DevolucionModel dev) async {
+  static Future<void> imprimir(BuildContext context, DevolucionModel dev, {bool esCopia = false}) async {
     final auth   = context.read<AuthProvider>();
     final config = context.read<ConfigProvider>();
 
@@ -24,7 +24,9 @@ class DevolucionPrintService {
         final device = await ThermalPrinterService.getOrRequestDevice();
         if (device != null) {
           final bytes = await ThermalPrinterService.buildComprobanteDevolucion(
-            dev: dev, empresaNombre: auth.empresaNombre, paperSize: paperSize,
+            dev: dev, empresaNombre: auth.empresaNombre,
+            nit: config.nit, direccion: config.direccion, telefono: config.telefono,
+            paperSize: paperSize, esCopia: esCopia,
           );
           await ThermalPrinterService.printBytes(device, bytes);
           return;
@@ -32,7 +34,9 @@ class DevolucionPrintService {
       } else if (!kIsWeb && await WindowsPrinterService.hasSavedPrinter()) {
         // Exe: ESC/POS RAW via WritePrinter (cualquier puerto: COM, USB, red)
         final bytes = await ThermalPrinterService.buildComprobanteDevolucion(
-          dev: dev, empresaNombre: auth.empresaNombre, paperSize: paperSize,
+          dev: dev, empresaNombre: auth.empresaNombre,
+          nit: config.nit, direccion: config.direccion, telefono: config.telefono,
+          paperSize: paperSize, esCopia: esCopia,
         );
         await WindowsPrinterService.printRaw(bytes);
         return;
@@ -41,6 +45,9 @@ class DevolucionPrintService {
       await ReciboPdfService.imprimirComprobanteDevolucion(
         dev:          dev,
         empresaNombre: auth.empresaNombre,
+        nit:           config.nit,
+        direccion:     config.direccion,
+        telefono:      config.telefono,
       );
     } catch (e, st) {
       debugPrint('DevolucionPrintService: $e\n$st');
