@@ -9,6 +9,10 @@ class AuthService {
       final response = await ApiClient.instance.post(
         '/auth/login/',
         data: {'email': email, 'password': password},
+        options: Options(
+          sendTimeout:    const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 20),
+        ),
       );
 
       // ✅ FIX: null-safe — evita CastError si el backend cambia la respuesta

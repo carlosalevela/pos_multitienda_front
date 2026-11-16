@@ -40,7 +40,10 @@ class ApiClient {
 
           final retries = error.requestOptions.extra['_retries'] as int? ?? 0;
 
-          if (isNetworkError && retries < 3) {
+          // No reintentar en endpoints de autenticación — falla rápido para dar feedback inmediato
+          final isAuthEndpoint = error.requestOptions.path.contains('/auth/');
+
+          if (isNetworkError && retries < 3 && !isAuthEndpoint) {
             // Espera exponencial: 1s, 2s, 4s
             await Future.delayed(Duration(seconds: 1 << retries));
             final opts = error.requestOptions;

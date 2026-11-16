@@ -359,6 +359,46 @@ class _ReporteDetalleDialogState extends State<ReporteDetalleDialog> {
                           _filaTotal('Cambio / vuelto', vuelto,
                               color: Colors.green.shade700),
                         ],
+                        // Saldo restante del bono después del pago parcial
+                        () {
+                          final bi = detalle['bono_info'] as Map<String, dynamic>?;
+                          if (bi == null) return const SizedBox.shrink();
+                          final saldoDespues = double.tryParse(bi['saldo_despues']?.toString() ?? '0') ?? 0;
+                          final codigo       = bi['codigo']?.toString() ?? '';
+                          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            const Divider(height: 12, color: Color(0xFFE6E8EA)),
+                            if (codigo.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Text('Bono: $codigo',
+                                    style: GoogleFonts.poppins(
+                                        fontSize: 11, color: const Color(0xFF6B7280))),
+                              ),
+                            _filaTotal('Saldo restante bono', saldoDespues,
+                                color: Colors.blue.shade700),
+                          ]);
+                        }(),
+                      ] else if (metodo == 'bono') ...[
+                        // Pago puro con bono: mostrar saldo usado y restante
+                        () {
+                          final bi = detalle['bono_info'] as Map<String, dynamic>?;
+                          final montoUsado   = bi != null ? (double.tryParse(bi['monto_usado']?.toString() ?? '0') ?? 0) : recibido;
+                          final saldoDespues = bi != null ? (double.tryParse(bi['saldo_despues']?.toString() ?? '0') ?? 0) : 0.0;
+                          final codigo       = bi?['codigo']?.toString() ?? '';
+                          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            if (codigo.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 6),
+                                child: Text('Bono: $codigo',
+                                    style: GoogleFonts.poppins(
+                                        fontSize: 11, color: const Color(0xFF6B7280))),
+                              ),
+                            _filaTotal('Bono utilizado', montoUsado),
+                            const SizedBox(height: 4),
+                            _filaTotal('Saldo restante', saldoDespues,
+                                color: Colors.blue.shade700),
+                          ]);
+                        }(),
                       ] else ...[
                         _filaTotal('Recibido', recibido),
                         if (vuelto > 0) ...[

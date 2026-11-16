@@ -6,6 +6,7 @@ class DevolucionModel {
   final String tiendaNombre;
   final int? empleadoId;
   final String empleadoNombre;
+  final String clienteNombre;
   final double totalDevuelto;
   final String metodoDevolucion;
   final String tipo;
@@ -48,6 +49,7 @@ class DevolucionModel {
     required this.tiendaNombre,
     this.empleadoId,
     required this.empleadoNombre,
+    this.clienteNombre = 'Consumidor Final',
     required this.totalDevuelto,
     required this.metodoDevolucion,
     required this.tipo,
@@ -79,6 +81,7 @@ class DevolucionModel {
       tiendaNombre: j['tienda_nombre'] as String? ?? '',
       empleadoId: j['empleado'] as int?,
       empleadoNombre: j['empleado_nombre'] as String? ?? 'Sin empleado',
+      clienteNombre:  j['cliente_nombre']  as String? ?? 'Consumidor Final',
       totalDevuelto: double.tryParse(j['total_devuelto']?.toString() ?? '') ?? 0,
       metodoDevolucion: j['metodo_devolucion'] as String? ?? 'efectivo',
       tipo: j['tipo'] as String? ?? 'devolucion',
@@ -136,6 +139,7 @@ class DevolucionModel {
     String? tiendaNombre,
     int? empleadoId,
     String? empleadoNombre,
+    String? clienteNombre,
     double? totalDevuelto,
     String? metodoDevolucion,
     String? tipo,
@@ -165,6 +169,7 @@ class DevolucionModel {
       tiendaNombre: tiendaNombre ?? this.tiendaNombre,
       empleadoId: empleadoId ?? this.empleadoId,
       empleadoNombre: empleadoNombre ?? this.empleadoNombre,
+      clienteNombre:  clienteNombre  ?? this.clienteNombre,
       totalDevuelto: totalDevuelto ?? this.totalDevuelto,
       metodoDevolucion: metodoDevolucion ?? this.metodoDevolucion,
       tipo: tipo ?? this.tipo,

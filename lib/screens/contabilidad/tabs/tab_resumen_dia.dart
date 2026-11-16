@@ -845,8 +845,10 @@ class _TabResumenDiaState extends State<TabResumenDia> {
     final totalAb = cont.abonosDia.fold<double>(0.0, (s, a) => s + _d(a, 'monto'));
 
     return _card(child: Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // ── Header ──
         Row(children: [
           Container(
             padding: const EdgeInsets.all(7),
@@ -872,57 +874,62 @@ class _TabResumenDiaState extends State<TabResumenDia> {
         Text('créditos y separados cobrados',
             style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant)),
         const SizedBox(height: 16),
+        // ── Lista scrolleable ──
         if (cont.abonosDia.isEmpty)
           _emptyState('Sin abonos este día', Icons.savings_outlined)
-        else ...[
-          ...cont.abonosDia.take(5).map((a) {
-            final monto   = _d(a, 'monto');
-            final cliente = a['cliente_nombre']?.toString() ?? '—';
-            final metodo  = a['metodo_pago']?.toString() ?? 'efectivo';
-            final hora    = _hora(a['created_at']?.toString() ?? '');
-            final tipo    = a['tipo']?.toString()?.contains('credito') == true
-                ? 'Crédito' : 'Separado';
-            final col     = _metodoPagoColor(metodo);
-            return Container(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: AppColors.outlineVariant))),
-              child: Row(children: [
-                Expanded(child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(cliente, overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600,
-                            color: AppColors.onSurface)),
-                    Text('$hora · $tipo',
-                        style: GoogleFonts.inter(fontSize: 10,
-                            color: AppColors.onSurfaceVariant)),
-                  ],
-                )),
-                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Text('+\$${widget.fmt.format(monto)}',
-                      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700,
-                          color: AppColors.secondary)),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: col.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(20)),
-                    child: Text(_metodoPagoLabel(metodo),
-                        style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600,
-                            color: col)),
-                  ),
-                ]),
-              ]),
-            );
-          }),
-          if (cont.abonosDia.length > 5)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text('+ ${cont.abonosDia.length - 5} más',
-                  style: GoogleFonts.inter(fontSize: 10,
-                      color: AppColors.onSurfaceVariant.withValues(alpha: 0.6))),
+        else
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 260),
+            child: ListView.builder(
+              shrinkWrap: true,
+              physics: const ClampingScrollPhysics(),
+              itemCount: cont.abonosDia.length,
+              itemBuilder: (_, i) {
+                final a       = cont.abonosDia[i];
+                final monto   = _d(a, 'monto');
+                final cliente = a['cliente_nombre']?.toString() ?? '—';
+                final metodo  = a['metodo_pago']?.toString() ?? 'efectivo';
+                final hora    = _hora(a['created_at']?.toString() ?? '');
+                final tipo    = a['tipo']?.toString()?.contains('credito') == true
+                    ? 'Crédito' : 'Separado';
+                final col     = _metodoPagoColor(metodo);
+                return Container(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    border: Border(bottom: BorderSide(color: AppColors.outlineVariant))),
+                  child: Row(children: [
+                    Expanded(child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(cliente, overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600,
+                                color: AppColors.onSurface)),
+                        Text('$hora · $tipo',
+                            style: GoogleFonts.inter(fontSize: 10,
+                                color: AppColors.onSurfaceVariant)),
+                      ],
+                    )),
+                    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                      Text('+\$${widget.fmt.format(monto)}',
+                          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700,
+                              color: AppColors.secondary)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: col.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20)),
+                        child: Text(_metodoPagoLabel(metodo),
+                            style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600,
+                                color: col)),
+                      ),
+                    ]),
+                  ]),
+                );
+              },
             ),
+          ),
+        // ── Total fijo al fondo ──
+        if (cont.abonosDia.isNotEmpty) ...[
           Divider(color: AppColors.outlineVariant),
           Row(children: [
             Text('Total abonos',

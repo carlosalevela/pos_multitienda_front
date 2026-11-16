@@ -30,38 +30,42 @@ String _normalizarMetodo(String? metodo) {
 
 Color colorMetodo(String? m) {
   switch (_normalizarMetodo(m)) {
-    case 'efectivo':
-      return Colors.green.shade600;
-    case 'transferencia':
-      return Colors.blue.shade600;
-    case 'tarjeta':
-      return Colors.purple.shade600;
-    default:
-      return Colors.grey.shade600;
+    case 'efectivo':        return Colors.green.shade600;
+    case 'transferencia':   return Colors.blue.shade600;
+    case 'tarjeta':         return Colors.purple.shade600;
+    case 'mixto':           return Colors.orange.shade600;
+    case 'bono':
+    case 'bono_efectivo':
+    case 'bono_tarjeta':
+    case 'bono_transferencia': return Colors.teal.shade600;
+    default:                return Colors.grey.shade600;
   }
 }
 
 IconData iconMetodo(String? m) {
   switch (_normalizarMetodo(m)) {
-    case 'efectivo':
-      return Icons.payments_rounded;
-    case 'transferencia':
-      return Icons.account_balance_rounded;
-    case 'tarjeta':
-      return Icons.credit_card_rounded;
-    default:
-      return Icons.attach_money_rounded;
+    case 'efectivo':        return Icons.payments_rounded;
+    case 'transferencia':   return Icons.account_balance_rounded;
+    case 'tarjeta':         return Icons.credit_card_rounded;
+    case 'mixto':           return Icons.layers_rounded;
+    case 'bono':
+    case 'bono_efectivo':
+    case 'bono_tarjeta':
+    case 'bono_transferencia': return Icons.card_giftcard_rounded;
+    default:                return Icons.attach_money_rounded;
   }
 }
 
 String labelMetodo(String? m) {
   switch (_normalizarMetodo(m)) {
-    case 'efectivo':
-      return 'Efectivo';
-    case 'transferencia':
-      return 'Transferencia';
-    case 'tarjeta':
-      return 'Tarjeta';
+    case 'efectivo':             return 'Efectivo';
+    case 'transferencia':        return 'Transferencia';
+    case 'tarjeta':              return 'Tarjeta';
+    case 'mixto':                return 'Mixto';
+    case 'bono':                 return 'Bono';
+    case 'bono_efectivo':        return 'Bono + Efectivo';
+    case 'bono_tarjeta':         return 'Bono + Tarjeta';
+    case 'bono_transferencia':   return 'Bono + Transferencia';
     default:
       final raw = (m ?? '').trim();
       return raw.isEmpty ? 'Sin definir' : raw;

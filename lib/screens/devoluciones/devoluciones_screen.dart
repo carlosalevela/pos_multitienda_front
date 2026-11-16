@@ -39,7 +39,27 @@ class _DevolucionesScreenState extends State<DevolucionesScreen> {
   String?          _fechaIniActual;
   String?          _fechaFinActual;
   String?          _estadoActual;
+  String           _busqueda = '';
   DevolucionModel? _selectedDev;   // panel derecho (desktop)
+
+  final _searchCtrl = TextEditingController();
+
+  List<DevolucionModel> _filtrar(List<DevolucionModel> devs) {
+    final q = _busqueda.toLowerCase().trim();
+    if (q.isEmpty) return devs;
+    return devs.where((d) {
+      if ('dev-${d.id}'.contains(q)) return true;
+      if (d.ventaNumero.toLowerCase().contains(q)) return true;
+      if (d.clienteNombre.toLowerCase().contains(q)) return true;
+      if (d.empleadoNombre.toLowerCase().contains(q)) return true;
+      if (d.totalDevuelto.toStringAsFixed(0).contains(q)) return true;
+      if (d.detalles.any((det) =>
+              det.productoNombre.toLowerCase().contains(q))) return true;
+      if (d.reemplazos.any((r) =>
+              r.productoNombre.toLowerCase().contains(q))) return true;
+      return false;
+    }).toList();
+  }
 
   // Barcode scanner
   StreamSubscription<String>? _barcodeSub;
@@ -59,6 +79,7 @@ class _DevolucionesScreenState extends State<DevolucionesScreen> {
   void dispose() {
     _barcodeSub?.cancel();
     _scanPulseTimer?.cancel();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -291,8 +312,9 @@ class _DevolucionesScreenState extends State<DevolucionesScreen> {
   Widget build(BuildContext context) {
     return Consumer<DevolucionesProvider>(
       builder: (context, prov, _) {
-        final devs = prov.devoluciones;
-        final proc = devs.where((d) => d.estado == 'procesada').toList();
+        final devs     = _filtrar(prov.devoluciones);
+        final allDevs  = prov.devoluciones;
+        final proc = allDevs.where((d) => d.estado == 'procesada').toList();
 
         final devuelto   = proc.fold<double>(0, (s, d) =>
             d.tipo == 'devolucion' ? s + d.totalDevuelto : s);
@@ -347,6 +369,10 @@ class _DevolucionesScreenState extends State<DevolucionesScreen> {
                   ),
                 ),
               ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: _buildSearchBar(),
+              ),
               if (prov.error != null)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
@@ -361,8 +387,11 @@ class _DevolucionesScreenState extends State<DevolucionesScreen> {
                       style: GoogleFonts.inter(
                           fontSize: 14, fontWeight: FontWeight.w700, color: _kText)),
                   const Spacer(),
-                  Text('${devs.length} registro${devs.length != 1 ? 's' : ''}',
-                      style: GoogleFonts.inter(fontSize: 12, color: _kTextMuted)),
+                  Text(
+                    _busqueda.isNotEmpty
+                        ? '${devs.length} de ${prov.devoluciones.length}'
+                        : '${devs.length} registro${devs.length != 1 ? 's' : ''}',
+                    style: GoogleFonts.inter(fontSize: 12, color: _kTextMuted)),
                 ]),
               ),
               if (prov.cargando)
@@ -442,6 +471,10 @@ class _DevolucionesScreenState extends State<DevolucionesScreen> {
             ),
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: _buildSearchBar(),
+        ),
         if (prov.error != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -476,6 +509,48 @@ class _DevolucionesScreenState extends State<DevolucionesScreen> {
             ),
           ),
       ],
+    );
+  }
+
+  // ─────────────────────────────────────────────────────
+  //  Barra de búsqueda local
+  // ─────────────────────────────────────────────────────
+
+  Widget _buildSearchBar() {
+    return TextField(
+      controller: _searchCtrl,
+      onChanged: (v) => setState(() { _busqueda = v; _selectedDev = null; }),
+      style: GoogleFonts.inter(fontSize: 13),
+      decoration: InputDecoration(
+        hintText: 'Buscar por cliente, producto, DEV, FAC, monto…',
+        hintStyle: GoogleFonts.inter(fontSize: 13, color: _kTextMuted),
+        prefixIcon: const Icon(Icons.search_rounded, size: 18, color: _kTextMuted),
+        suffixIcon: _busqueda.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.close_rounded, size: 16, color: _kTextMuted),
+                onPressed: () {
+                  _searchCtrl.clear();
+                  setState(() { _busqueda = ''; _selectedDev = null; });
+                },
+              )
+            : null,
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+        filled: true,
+        fillColor: const Color(0xFFF7F9FB),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: _kBorder),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: _kBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: _kGreen, width: 1.5),
+        ),
+      ),
     );
   }
 

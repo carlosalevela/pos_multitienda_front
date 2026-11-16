@@ -1570,8 +1570,13 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
   Widget _dropdownResultados({
     required int itemCount,
     required Widget Function(BuildContext, int) itemBuilder,
-  }) =>
-      Container(
+  }) {
+    // Altura máxima: ~5 filas de 56px + separadores; con más resultados aparece scroll
+    const double rowHeight = 58.0;
+    final double maxH      = rowHeight * 5 + 1;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxH),
+      child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(10),
@@ -1579,14 +1584,21 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 8, offset: const Offset(0, 2))],
         ),
-        child: ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: itemCount.clamp(0, 5),
-          separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade100),
-          itemBuilder: itemBuilder,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: ListView.separated(
+            shrinkWrap: itemCount <= 5,
+            physics: itemCount > 5
+                ? const ClampingScrollPhysics()
+                : const NeverScrollableScrollPhysics(),
+            itemCount: itemCount,
+            separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade100),
+            itemBuilder: itemBuilder,
+          ),
         ),
-      );
+      ),
+    );
+  }
 
   InputDecoration _inputDeco(String? hint) => InputDecoration(
     hintText: hint,
