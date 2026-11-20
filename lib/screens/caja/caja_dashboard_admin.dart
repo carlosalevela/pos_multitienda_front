@@ -7,6 +7,7 @@ import '../../models/sesion_historial.dart';
 import '../../services/caja_service.dart';
 import '../../services/tienda_service.dart';
 import '../../theme/app_colors.dart';
+import '../../core/dashboard_cache.dart';
 import 'widgets/pdf/cierre_pdf.dart';
 
 // ── Widget principal ──────────────────────────────────────────────────────────
@@ -19,6 +20,11 @@ class CajaDashboardAdmin extends StatefulWidget {
 class _CajaDashboardAdminState extends State<CajaDashboardAdmin> {
   final _svc       = CajaService();
   final _tiendaSvc = TiendaService();
+
+  // Alias al caché compartido (se limpia en logout desde auth_provider)
+  static List<Map<String, dynamic>>?             get _tiendasCache    => cajaTiendasCache;
+  static set _tiendasCache(List<Map<String, dynamic>>? v)             => cajaTiendasCache = v;
+  static Map<String, Map<String, dynamic>>       get _dashCache       => cajaDashboardCache;
 
   bool    _loadingDash = true;
   String? _error;
@@ -44,31 +50,57 @@ class _CajaDashboardAdminState extends State<CajaDashboardAdmin> {
   }
 
   Future<void> _loadTiendas() async {
+    if (_tiendasCache != null) {
+      setState(() => _tiendas = _tiendasCache!);
+      return;
+    }
     final list = await _tiendaSvc.getTiendasSimple();
+    _tiendasCache = list;
     if (mounted) setState(() => _tiendas = list);
   }
 
-  // ── Stage 1: dashboard KPIs + chart (no historial) ────────────────────────
+  // ── Dashboard KPIs ────────────────────────────────────────────────────────
   Future<void> _cargarDashboard() async {
-    setState(() { _loadingDash = true; _error = null; });
+    final key    = '${_periodo}_${_tiendaId ?? 'all'}';
+    final cached = _dashCache[key];
 
-    final dash = await _svc.getDashboardCaja(periodo: _periodo, tiendaId: _tiendaId);
-
-    if (!mounted) return;
-
-    if (dash['success'] != true) {
-      setState(() {
-        _loadingDash = false;
-        _error       = dash['error']?.toString() ?? 'Error al cargar';
-      });
+    if (cached != null) {
+      // Mostrar datos guardados al instante (sin spinner)
+      _applyDashData(cached);
+      // Refrescar silenciosamente en background
+      _refreshDashBackground(key);
       return;
     }
 
-    final d      = dash['data'] as Map<String, dynamic>;
+    // Primera carga: spinner normal
+    setState(() { _loadingDash = true; _error = null; });
+    await _fetchDashAndStore(key);
+  }
+
+  // ignore: unawaited_futures
+  void _refreshDashBackground(String key) => _fetchDashAndStore(key);
+
+  Future<void> _fetchDashAndStore(String key) async {
+    final dash = await _svc.getDashboardCaja(periodo: _periodo, tiendaId: _tiendaId);
+    if (!mounted) return;
+    if (dash['success'] != true) {
+      if (_dashCache[key] == null) {
+        setState(() {
+          _loadingDash = false;
+          _error       = dash['error']?.toString() ?? 'Error al cargar';
+        });
+      }
+      return;
+    }
+    final d = dash['data'] as Map<String, dynamic>;
+    _dashCache[key] = d;
+    _applyDashData(d);
+  }
+
+  void _applyDashData(Map<String, dynamic> d) {
     final kpis   = d['kpis']   as Map<String, dynamic>;
     final topRaw = kpis['top_store'];
     final top    = (topRaw is Map) ? Map<String, dynamic>.from(topRaw) : <String, dynamic>{};
-
     setState(() {
       _loadingDash           = false;
       _totalCashFlow         = (kpis['total_cash_flow']          as num?)?.toDouble() ?? 0;
@@ -82,6 +114,9 @@ class _CajaDashboardAdminState extends State<CajaDashboardAdmin> {
   }
 
   void _recargar() {
+    // Al recargar manualmente (cambio de filtro): invalidar caché y recargar
+    final key = '${_periodo}_${_tiendaId ?? 'all'}';
+    _dashCache.remove(key);
     _cargarDashboard();
   }
 
@@ -125,7 +160,27 @@ class _CajaDashboardAdminState extends State<CajaDashboardAdmin> {
       ]));
     }
 
-    final isNarrow = MediaQuery.of(context).size.width < 600;
+    final w = MediaQuery.of(context).size.width;
+    if (w < 600) {
+      return _MobileCajaDashboard(
+        periodo:              _periodo,
+        tiendaId:             _tiendaId,
+        tiendas:              _tiendas,
+        totalCashFlow:        _totalCashFlow,
+        totalDiscrepancias:   _totalDiscrepancias,
+        numTiendasConFaltante: _numTiendasConFaltante,
+        netProfit:            _netProfit,
+        topStoreNombre:       _topStoreNombre,
+        topStoreTotalHoy:     _topStoreTotalHoy,
+        topCrecimiento:       _topCrecimiento,
+        onPeriodChange: (v) { setState(() => _periodo = v); _recargar(); },
+        onTiendaChange: (id) { setState(() => _tiendaId = id); _recargar(); },
+        fmt:     _fmt,
+        fmtFull: _fmtFull,
+      );
+    }
+
+    final isNarrow = w < 700;
     return Container(
       color: AppColors.surfaceContainerLow,
       child: SingleChildScrollView(
@@ -958,3 +1013,795 @@ class _HistorialDialogState extends State<_HistorialDialog> {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// MOBILE CAJA — paleta, widgets y pantallas
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _MC {
+  static const bg     = Color(0xFFECFDF5);
+  static const green  = Color(0xFF059669);
+  static const teal   = Color(0xFF0D9488);
+  static const dark   = Color(0xFF064E3B);
+  static const mid    = Color(0xFF047857);
+  static const light  = Color(0xFFD1FAE5);
+  static const border = Color(0xFFA7F3D0);
+  static const dim    = Color(0xFF6EE7B7);
+}
+
+// ── Etiqueta sección ──────────────────────────────────────────────────────────
+class _MSectionLabel extends StatelessWidget {
+  final String text;
+  const _MSectionLabel(this.text);
+  @override
+  Widget build(BuildContext context) => Text(
+    text.toUpperCase(),
+    style: GoogleFonts.inter(
+      color: _MC.green, fontSize: 11,
+      fontWeight: FontWeight.w700, letterSpacing: 0.7),
+  );
+}
+
+// ── Period row (pills) ────────────────────────────────────────────────────────
+class _MPeriodRow extends StatelessWidget {
+  final String value;
+  final void Function(String) onChange;
+  const _MPeriodRow({required this.value, required this.onChange});
+
+  @override
+  Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
+    _MPBtn(label: 'Sem', active: value == 'semanal', onTap: () => onChange('semanal')),
+    const SizedBox(width: 6),
+    _MPBtn(label: 'Mes', active: value == 'mensual', onTap: () => onChange('mensual')),
+  ]);
+}
+
+class _MPBtn extends StatelessWidget {
+  final String label;
+  final bool   active;
+  final VoidCallback onTap;
+  const _MPBtn({required this.label, required this.active, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      decoration: BoxDecoration(
+        gradient: active
+            ? const LinearGradient(colors: [Color(0xFF059669), Color(0xFF0D9488)])
+            : null,
+        color:  active ? null : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: active ? Colors.transparent : _MC.dim, width: 1.5),
+      ),
+      child: Text(label, style: GoogleFonts.inter(
+        color: active ? Colors.white : _MC.mid,
+        fontSize: 12, fontWeight: FontWeight.w700)),
+    ),
+  );
+}
+
+// ── Store chip ────────────────────────────────────────────────────────────────
+class _StoreChip extends StatelessWidget {
+  final int?   tiendaId;
+  final List<Map<String, dynamic>> tiendas;
+  final void Function(int?) onChange;
+  const _StoreChip({required this.tiendaId, required this.tiendas, required this.onChange});
+
+  @override
+  Widget build(BuildContext context) {
+    final label = tiendaId == null
+        ? 'Todas las tiendas'
+        : (tiendas.firstWhere(
+              (t) => t['id'] == tiendaId, orElse: () => {'nombre': '?'})['nombre'] as String);
+    return PopupMenuButton<int?>(
+      onSelected: onChange,
+      offset: const Offset(0, 38),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: Colors.grey.shade200)),
+      color: Colors.white,
+      elevation: 4,
+      itemBuilder: (_) => [
+        PopupMenuItem<int?>(value: null,
+          child: Text('Todas las tiendas', style: GoogleFonts.inter(
+              color: tiendaId == null ? _MC.green : _MC.dark, fontSize: 13,
+              fontWeight: tiendaId == null ? FontWeight.w700 : FontWeight.w400))),
+        ...tiendas.map((t) => PopupMenuItem<int?>(value: t['id'] as int,
+          child: Text(t['nombre'] as String, style: GoogleFonts.inter(
+              color: tiendaId == t['id'] ? _MC.green : _MC.dark, fontSize: 13,
+              fontWeight: tiendaId == t['id'] ? FontWeight.w700 : FontWeight.w400)))),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: .85),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: _MC.dim, width: 1.5),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.location_on_rounded, size: 14, color: _MC.green),
+          const SizedBox(width: 5),
+          Flexible(child: Text(label, overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(color: _MC.mid, fontSize: 12, fontWeight: FontWeight.w600))),
+          const SizedBox(width: 4),
+          const Icon(Icons.expand_more_rounded, size: 15, color: _MC.dim),
+        ]),
+      ),
+    );
+  }
+}
+
+// ── KPI card mobile ───────────────────────────────────────────────────────────
+class _MKpiCard extends StatelessWidget {
+  final IconData icon;
+  final Color    iconBg, iconColor;
+  final String   label, value;
+  final bool     isText, valueRed;
+  final String   badge;
+  final bool     badgeOk;
+  final List<Color> stripe;
+
+  const _MKpiCard({
+    required this.icon,     required this.iconBg,  required this.iconColor,
+    required this.label,    required this.value,    this.isText = false,
+    this.valueRed = false,  required this.badge,    required this.badgeOk,
+    required this.stripe,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _MC.border),
+        boxShadow: [BoxShadow(color: _MC.green.withValues(alpha:.08), blurRadius: 8, offset: const Offset(0,2))],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(children: [
+        // gradient stripe
+        Container(height: 4, decoration: BoxDecoration(
+          gradient: LinearGradient(colors: stripe))),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              width: 28, height: 28,
+              decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(7)),
+              child: Icon(icon, size: 15, color: iconColor),
+            ),
+            const SizedBox(height: 6),
+            Text(label, style: GoogleFonts.inter(
+                color: _MC.mid, fontSize: 10, fontWeight: FontWeight.w500)),
+            const SizedBox(height: 2),
+            Text(value,
+              overflow: TextOverflow.ellipsis,
+              style: isText
+                  ? GoogleFonts.inter(color: _MC.dark, fontSize: 13, fontWeight: FontWeight.w800)
+                  : GoogleFonts.inter(
+                      color: valueRed ? const Color(0xFFB91C1C) : _MC.dark,
+                      fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -.3),
+            ),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: badgeOk ? _MC.light : const Color(0xFFFEE2E2),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(badge, style: GoogleFonts.inter(
+                  color: badgeOk ? const Color(0xFF065F46) : const Color(0xFFB91C1C),
+                  fontSize: 10, fontWeight: FontWeight.w600)),
+            ),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+
+// ── Top tiendas compact ───────────────────────────────────────────────────────
+class _MTopTiendas extends StatelessWidget {
+  final List<Map<String, dynamic>> top;
+  final String Function(double) fmtFull;
+  const _MTopTiendas({required this.top, required this.fmtFull});
+
+  @override
+  Widget build(BuildContext context) {
+    final maxTot = top.isEmpty
+        ? 1.0
+        : top.map((x) => (x['total_actual'] as num).toDouble()).reduce(max);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _MC.border),
+        boxShadow: [BoxShadow(color: _MC.green.withValues(alpha:.08), blurRadius: 8, offset: const Offset(0,2))],
+      ),
+      child: Column(
+        children: top.asMap().entries.map((e) {
+          final idx  = e.key;
+          final t    = e.value;
+          final pct  = (t['crecimiento_pct'] as num).toDouble();
+          final tot  = (t['total_actual']    as num).toDouble();
+          final prog = (tot / maxTot).clamp(0.0, 1.0);
+          final up   = pct >= 0;
+          return Container(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: idx < top.length - 1
+                    ? const BorderSide(color: Color(0xFFF0FDF4))
+                    : BorderSide.none,
+              ),
+            ),
+            child: Row(children: [
+              Container(
+                width: 24, height: 24,
+                decoration: BoxDecoration(
+                  color: idx == 0 ? _MC.light : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Center(child: Text('${idx + 1}',
+                    style: GoogleFonts.inter(
+                      color: idx == 0 ? _MC.green : const Color(0xFF6B7280),
+                      fontSize: 11, fontWeight: FontWeight.w800))),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(t['nombre'] as String,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(color: _MC.dark, fontSize: 11, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    value: prog,
+                    backgroundColor: _MC.light,
+                    color: idx == 0 ? _MC.green : _MC.dim,
+                    minHeight: 4,
+                  ),
+                ),
+              ])),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: up ? _MC.light : const Color(0xFFFEE2E2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text('${up ? '+' : ''}${pct.toStringAsFixed(1)}%',
+                    style: GoogleFonts.inter(
+                      color: up ? _MC.green : const Color(0xFFB91C1C),
+                      fontSize: 10, fontWeight: FontWeight.w700)),
+              ),
+            ]),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+// ── Mobile dashboard principal ────────────────────────────────────────────────
+class _MobileCajaDashboard extends StatelessWidget {
+  final String  periodo;
+  final int?    tiendaId;
+  final List<Map<String, dynamic>> tiendas;
+  final double  totalCashFlow, totalDiscrepancias, netProfit, topStoreTotalHoy;
+  final int     numTiendasConFaltante;
+  final String  topStoreNombre;
+  final List<Map<String, dynamic>> topCrecimiento;
+  final void Function(String)  onPeriodChange;
+  final void Function(int?)    onTiendaChange;
+  final String Function(double) fmt, fmtFull;
+
+  const _MobileCajaDashboard({
+    required this.periodo,            required this.tiendaId,
+    required this.tiendas,            required this.totalCashFlow,
+    required this.totalDiscrepancias, required this.numTiendasConFaltante,
+    required this.netProfit,          required this.topStoreNombre,
+    required this.topStoreTotalHoy,   required this.topCrecimiento,
+    required this.onPeriodChange,     required this.onTiendaChange,
+    required this.fmt,                required this.fmtFull,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasFaltante = totalDiscrepancias < 0;
+
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [Color(0xFFECFDF5), Color(0xFFCCFBF1), Color(0xFFD1FAE5)],
+        ),
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.only(bottom: 24),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+
+          // Filtros
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+            child: Row(children: [
+              Expanded(child: _StoreChip(
+                tiendaId: tiendaId, tiendas: tiendas, onChange: onTiendaChange)),
+              const SizedBox(width: 8),
+              _MPeriodRow(value: periodo, onChange: onPeriodChange),
+            ]),
+          ),
+
+          // KPIs 2×2
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            child: Column(children: [
+              const _MSectionLabel('Métricas clave'),
+              const SizedBox(height: 8),
+              Row(children: [
+                Expanded(child: _MKpiCard(
+                  icon: Icons.payments_rounded, iconBg: _MC.light, iconColor: _MC.green,
+                  label: 'Flujo de Caja', value: fmt(totalCashFlow),
+                  badge: periodo == 'semanal' ? '↗ Semana' : '↗ Mes', badgeOk: true,
+                  stripe: const [Color(0xFF059669), Color(0xFF10B981)],
+                )),
+                const SizedBox(width: 10),
+                Expanded(child: _MKpiCard(
+                  icon: Icons.workspace_premium_rounded,
+                  iconBg: const Color(0xFFCCFBF1), iconColor: _MC.teal,
+                  label: 'Top Tienda', value: topStoreNombre, isText: true,
+                  badge: fmtFull(topStoreTotalHoy), badgeOk: true,
+                  stripe: const [Color(0xFF0D9488), Color(0xFF14B8A6)],
+                )),
+              ]),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(child: _MKpiCard(
+                  icon: hasFaltante ? Icons.warning_amber_rounded : Icons.check_circle_rounded,
+                  iconBg: hasFaltante ? const Color(0xFFFEF2F2) : _MC.light,
+                  iconColor: hasFaltante ? const Color(0xFFB91C1C) : _MC.green,
+                  label: 'Faltantes', value: fmt(totalDiscrepancias),
+                  valueRed: hasFaltante,
+                  badge: hasFaltante ? '$numTiendasConFaltante tienda(s)' : 'Sin faltantes',
+                  badgeOk: !hasFaltante,
+                  stripe: hasFaltante
+                      ? const [Color(0xFFF59E0B), Color(0xFFF97316)]
+                      : const [Color(0xFF059669), Color(0xFF10B981)],
+                )),
+                const SizedBox(width: 10),
+                Expanded(child: _MKpiCard(
+                  icon: Icons.account_balance_wallet_rounded,
+                  iconBg: _MC.light, iconColor: _MC.green,
+                  label: 'Resultado Neto', value: fmt(netProfit), valueRed: netProfit < 0,
+                  badge: netProfit >= 0 ? '✓ Positivo' : '↓ Negativo', badgeOk: netProfit >= 0,
+                  stripe: const [Color(0xFF059669), Color(0xFF10B981)],
+                )),
+              ]),
+            ]),
+          ),
+
+          const SizedBox(height: 14),
+
+          // Top crecimiento
+          if (topCrecimiento.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const _MSectionLabel('Top tiendas'),
+                const SizedBox(height: 8),
+                _MTopTiendas(top: topCrecimiento, fmtFull: fmtFull),
+                const SizedBox(height: 14),
+              ]),
+            ),
+
+          // Faltantes resumen
+          if (hasFaltante)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const _MSectionLabel('Faltantes'),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white, borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: _MC.border),
+                    boxShadow: [BoxShadow(color: _MC.green.withValues(alpha:.08), blurRadius: 8, offset: const Offset(0,2))],
+                  ),
+                  child: Row(children: [
+                    Container(width: 10, height: 10,
+                        decoration: const BoxDecoration(
+                            color: Color(0xFFF87171), shape: BoxShape.circle)),
+                    const SizedBox(width: 10),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Tiendas con faltante', style: GoogleFonts.inter(
+                          fontSize: 11, fontWeight: FontWeight.w700, color: _MC.dark)),
+                      Text('$numTiendasConFaltante tienda(s)', style: GoogleFonts.inter(
+                          fontSize: 10, color: _MC.mid)),
+                    ])),
+                    Text(fmtFull(totalDiscrepancias), style: GoogleFonts.inter(
+                        fontSize: 13, fontWeight: FontWeight.w800,
+                        color: const Color(0xFFB91C1C))),
+                  ]),
+                ),
+                const SizedBox(height: 14),
+              ]),
+            ),
+
+          // Botón historial
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const _MSectionLabel('Historial de cierres'),
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: () => showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => _MobileHistorialSheet(
+                    tiendaId: tiendaId, fmtFull: fmtFull),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white, borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: _MC.border),
+                    boxShadow: [BoxShadow(color: _MC.green.withValues(alpha:.08), blurRadius: 8, offset: const Offset(0,2))],
+                  ),
+                  child: Row(children: [
+                    Container(
+                      width: 44, height: 44,
+                      decoration: BoxDecoration(color: _MC.light, borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.history_rounded, size: 22, color: _MC.green),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Historial de Cierres', style: GoogleFonts.inter(
+                          fontSize: 13, fontWeight: FontWeight.w700, color: _MC.dark)),
+                      Text('Reportes PDF por cierre', style: GoogleFonts.inter(
+                          fontSize: 11, color: _MC.mid)),
+                    ])),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                            colors: [Color(0xFF059669), Color(0xFF0D9488)]),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.visibility_rounded, size: 14, color: Colors.white),
+                        const SizedBox(width: 6),
+                        Text('Ver', style: GoogleFonts.inter(
+                            fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white)),
+                      ]),
+                    ),
+                  ]),
+                ),
+              ),
+            ]),
+          ),
+
+          const SizedBox(height: 20),
+        ]),
+      ),
+    );
+  }
+}
+
+// ── Bottom sheet nivel 1: lista de cierres ────────────────────────────────────
+class _MobileHistorialSheet extends StatefulWidget {
+  final int?                   tiendaId;
+  final String Function(double) fmtFull;
+  const _MobileHistorialSheet({required this.fmtFull, this.tiendaId});
+  @override
+  State<_MobileHistorialSheet> createState() => _MobileHistorialSheetState();
+}
+
+class _MobileHistorialSheetState extends State<_MobileHistorialSheet> {
+  static const _pageSize = 20;
+
+  final _searchCtrl = TextEditingController();
+  final _scrollCtrl = ScrollController();
+  final List<Map<String, dynamic>> _items = [];
+  bool   _loadingInit = true;
+  bool   _loadingMore = false;
+  bool   _hasMore     = true;
+  int    _offset      = 0;
+  String _listError   = '';
+  String _query       = '';
+
+  int?    _loadingId;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchPage();
+    _scrollCtrl.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollCtrl.position.pixels >= _scrollCtrl.position.maxScrollExtent - 60 &&
+        !_loadingMore && _hasMore) {
+      _fetchPage();
+    }
+  }
+
+  Future<void> _fetchPage() async {
+    if (_loadingMore || (!_hasMore && _offset > 0)) return;
+    setState(() { _loadingMore = true; _listError = ''; });
+    final r = await CajaService().getHistorialSesiones(
+      estado: 'cerrada', tiendaId: widget.tiendaId,
+      limit: _pageSize, offset: _offset,
+    );
+    if (!mounted) return;
+    final newItems = r['items'] as List<Map<String, dynamic>>;
+    setState(() {
+      _items.addAll(newItems);
+      _hasMore     = r['hasMore'] as bool;
+      _offset      += newItems.length;
+      _loadingInit  = false;
+      _loadingMore  = false;
+    });
+  }
+
+  Future<void> _abrirCierre(Map<String, dynamic> raw) async {
+    final id = raw['id'] as int;
+    setState(() => _loadingId = id);
+    try {
+      final r = await CajaService().getDetalleSesion(id);
+      if (!mounted) return;
+      if (r['success'] == true && r['data'] != null) {
+        final sesion = SesionHistorial.fromJson(r['data'] as Map<String, dynamic>);
+        if (!mounted) return;
+        // Push pantalla PDF sobre el bottom sheet
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => _MobilePdfScreen(sesion: sesion),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _loadingId = null);
+    }
+  }
+
+  List<Map<String, dynamic>> get _filtered {
+    if (_query.isEmpty) return _items;
+    final q = _query.toLowerCase();
+    return _items.where((s) =>
+        (s['tienda_nombre']   ?? '').toString().toLowerCase().contains(q) ||
+        (s['empleado_nombre'] ?? '').toString().toLowerCase().contains(q)
+    ).toList();
+  }
+
+  String _fmtDate(dynamic raw) {
+    if (raw == null) return '—';
+    final dt = DateTime.tryParse(raw.toString());
+    if (dt == null) return raw.toString().substring(0, min(10, raw.toString().length));
+    final l = dt.toLocal();
+    return '${l.day.toString().padLeft(2,'0')}/${l.month.toString().padLeft(2,'0')}/${l.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sh = MediaQuery.of(context).size.height;
+    return Container(
+      height: sh * 0.92,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(children: [
+
+        // Handle
+        Container(
+          width: 40, height: 4, margin: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(color: _MC.border, borderRadius: BorderRadius.circular(2)),
+        ),
+
+        // Header
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 12, 10),
+          child: Row(children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: _MC.light, borderRadius: BorderRadius.circular(10)),
+              child: const Icon(Icons.history_rounded, size: 18, color: _MC.green),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Historial de Cierres', style: GoogleFonts.inter(
+                  fontWeight: FontWeight.w800, fontSize: 16, color: _MC.dark)),
+              Text(_loadingInit ? 'Cargando…' : '${_items.length} registros${_hasMore ? '+' : ''}',
+                  style: GoogleFonts.inter(fontSize: 11, color: _MC.mid)),
+            ])),
+            GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              child: Container(
+                width: 28, height: 28,
+                decoration: BoxDecoration(color: _MC.light, borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.close_rounded, size: 16, color: _MC.green),
+              ),
+            ),
+          ]),
+        ),
+
+        Divider(height: 1, color: Colors.grey.shade100),
+
+        // Search
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+          child: TextField(
+            controller: _searchCtrl,
+            onChanged: (v) => setState(() => _query = v),
+            style: GoogleFonts.inter(color: _MC.dark, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'Buscar tienda o cajero...',
+              hintStyle: GoogleFonts.inter(color: _MC.dim, fontSize: 13),
+              prefixIcon: const Icon(Icons.search_rounded, size: 18, color: _MC.dim),
+              filled: true,
+              fillColor: const Color(0xFFF0FDF4),
+              contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: _MC.border)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: _MC.border)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: _MC.green, width: 1.5)),
+            ),
+          ),
+        ),
+
+        // List
+        Expanded(
+          child: _loadingInit
+              ? const Center(child: CircularProgressIndicator(
+                    color: _MC.green, strokeWidth: 2))
+              : _filtered.isEmpty
+                  ? Center(child: Text(_query.isNotEmpty ? 'Sin resultados' : 'Sin cierres',
+                      style: GoogleFonts.inter(color: _MC.mid, fontSize: 13)))
+                  : ListView.builder(
+                      controller: _scrollCtrl,
+                      padding: EdgeInsets.zero,
+                      itemCount: _filtered.length + (_hasMore && _query.isEmpty ? 1 : 0),
+                      itemBuilder: (_, i) {
+                        if (i == _filtered.length) {
+                          return Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: _loadingMore
+                                ? const Center(child: SizedBox(width: 20, height: 20,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2, color: _MC.green)))
+                                : TextButton(
+                                    onPressed: _fetchPage,
+                                    child: Text('Cargar más', style: GoogleFonts.inter(
+                                        color: _MC.green, fontSize: 12))),
+                          );
+                        }
+                        return _buildRow(_filtered[i]);
+                      },
+                    ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _buildRow(Map<String, dynamic> s) {
+    final id     = s['id'] as int;
+    final diff   = s['diferencia']   != null ? double.tryParse(s['diferencia'].toString())   ?? 0.0 : 0.0;
+    final ventas = s['ventas_total'] != null ? double.tryParse(s['ventas_total'].toString()) ?? 0.0 : 0.0;
+    final tienda = (s['tienda_nombre']   ?? '—') as String;
+    final cajero = (s['empleado_nombre'] ?? '—') as String;
+    final fecha  = _fmtDate(s['fecha_apertura']);
+    final isLoading = _loadingId == id;
+
+    final Color  dc = diff == 0 ? _MC.green : diff < 0 ? const Color(0xFFB91C1C) : const Color(0xFFD97706);
+    final Color  db = diff == 0 ? _MC.light  : diff < 0 ? const Color(0xFFFEE2E2) : const Color(0xFFFFF7ED);
+    final String dl = diff == 0 ? 'Exacto'
+                   : diff < 0  ? widget.fmtFull(diff)
+                   : '+${widget.fmtFull(diff)}';
+
+    return InkWell(
+      onTap: isLoading ? null : () => _abrirCierre(s),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        decoration: BoxDecoration(
+          border: const Border(bottom: BorderSide(color: Color(0xFFF0FDF4))),
+        ),
+        child: Row(children: [
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(fecha, style: GoogleFonts.inter(
+                fontSize: 10, color: _MC.dim, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 2),
+            Text(tienda, overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                    fontSize: 13, fontWeight: FontWeight.w800, color: _MC.green)),
+            Text(cajero, style: GoogleFonts.inter(fontSize: 11, color: _MC.mid)),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(color: db, borderRadius: BorderRadius.circular(10)),
+              child: Text(dl, style: GoogleFonts.inter(
+                  fontSize: 10, fontWeight: FontWeight.w600, color: dc)),
+            ),
+          ])),
+          const SizedBox(width: 12),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text(widget.fmtFull(ventas), style: GoogleFonts.inter(
+                fontSize: 14, fontWeight: FontWeight.w800, color: _MC.dark)),
+            const SizedBox(height: 8),
+            isLoading
+                ? const SizedBox(width: 18, height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: _MC.green))
+                : const Icon(Icons.chevron_right_rounded,
+                    size: 18, color: _MC.border),
+          ]),
+        ]),
+      ),
+    );
+  }
+}
+
+// ── Pantalla nivel 2: visor PDF ───────────────────────────────────────────────
+class _MobilePdfScreen extends StatelessWidget {
+  final SesionHistorial sesion;
+  const _MobilePdfScreen({required this.sesion});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey.shade700,
+      appBar: AppBar(
+        backgroundColor: _MC.dark,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(sesion.tiendaNombre,
+              style: GoogleFonts.inter(
+                  color: Colors.white, fontSize: 13, fontWeight: FontWeight.w800),
+              overflow: TextOverflow.ellipsis),
+          Text('Cajero: ${sesion.empleadoNombre}',
+              style: GoogleFonts.inter(
+                  color: _MC.border, fontSize: 10)),
+        ]),
+        actions: [
+          Container(
+            margin: const EdgeInsets.only(right: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: .18),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white.withValues(alpha: .3)),
+            ),
+            child: Text('SESIÓN #${sesion.id}',
+                style: GoogleFonts.inter(
+                    color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+      body: PdfPreview(
+        key: ValueKey(sesion.id),
+        build: (_) => generarBytesCierrePDF(sesion),
+        canChangeOrientation: false,
+        canChangePageFormat:  false,
+        canDebug:             false,
+        allowPrinting:        true,
+        allowSharing:         false,
+        pdfFileName: 'cierre_${sesion.id}.pdf',
+        actions: const [],
+      ),
+    );
+  }
+}

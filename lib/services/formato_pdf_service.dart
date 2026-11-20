@@ -186,55 +186,58 @@ Future<List<int>> generarFormatoDiarioPdf(RegistroMovimientoData data) async {
             ),
             child: pw.Column(children: [
               // Fila 1: Almacén | Título
-              pw.Row(
-                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-                children: [
-                  pw.Expanded(
-                    flex: 50,
-                    child: pw.Container(
-                      padding: const pw.EdgeInsets.all(8),
-                      decoration: const pw.BoxDecoration(
-                        border: pw.Border(
-                          right: pw.BorderSide(color: _ink, width: 0.8),
-                          bottom: pw.BorderSide(color: _ink, width: 0.8),
+              pw.SizedBox(
+                height: 48,
+                child: pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                  children: [
+                    pw.Expanded(
+                      flex: 50,
+                      child: pw.Container(
+                        padding: const pw.EdgeInsets.all(8),
+                        decoration: const pw.BoxDecoration(
+                          border: pw.Border(
+                            right: pw.BorderSide(color: _ink, width: 0.8),
+                            bottom: pw.BorderSide(color: _ink, width: 0.8),
+                          ),
                         ),
+                        child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                          pw.Text('NOMBRE DEL ALMACÉN / BODEGA',
+                              style: pw.TextStyle(
+                                  fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                          pw.SizedBox(height: 2),
+                          pw.Text(data.almacen,
+                              style: pw.TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: pw.FontWeight.bold)),
+                        ]),
                       ),
-                      child: pw.Column(
-                          crossAxisAlignment: pw.CrossAxisAlignment.start,
-                          children: [
-                        pw.Text('NOMBRE DEL ALMACÉN / BODEGA',
-                            style: pw.TextStyle(
-                                fontSize: 7, fontWeight: pw.FontWeight.bold)),
-                        pw.SizedBox(height: 2),
-                        pw.Text(data.almacen,
+                    ),
+                    pw.Expanded(
+                      flex: 50,
+                      child: pw.Container(
+                        padding: const pw.EdgeInsets.all(8),
+                        decoration: const pw.BoxDecoration(
+                          border: pw.Border(
+                            bottom: pw.BorderSide(color: _ink, width: 0.8),
+                          ),
+                        ),
+                        child: pw.Center(
+                          child: pw.Text(
+                            'REGISTRO DE MOVIMIENTO DIARIO',
+                            textAlign: pw.TextAlign.center,
                             style: pw.TextStyle(
                                 fontSize: 13,
-                                fontWeight: pw.FontWeight.bold)),
-                      ]),
-                    ),
-                  ),
-                  pw.Expanded(
-                    flex: 50,
-                    child: pw.Container(
-                      padding: const pw.EdgeInsets.all(8),
-                      decoration: const pw.BoxDecoration(
-                        border: pw.Border(
-                          bottom: pw.BorderSide(color: _ink, width: 0.8),
-                        ),
-                      ),
-                      child: pw.Center(
-                        child: pw.Text(
-                          'REGISTRO DE MOVIMIENTO DIARIO',
-                          textAlign: pw.TextAlign.center,
-                          style: pw.TextStyle(
-                              fontSize: 13,
-                              fontWeight: pw.FontWeight.bold,
-                              letterSpacing: 0.8),
+                                fontWeight: pw.FontWeight.bold,
+                                letterSpacing: 0.8),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               // Fila 2: Fecha | Encargado | Nº Ventas
               pw.Row(children: [
@@ -352,7 +355,7 @@ Future<List<int>> generarFormatoDiarioPdf(RegistroMovimientoData data) async {
                         pw.Text('REALIZÓ',
                             style: pw.TextStyle(
                                 fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                        pw.Spacer(),
+                        pw.SizedBox(height: 18),
                         pw.Divider(color: _ink, thickness: 0.8),
                         pw.SizedBox(height: 2),
                         pw.Text(data.realizo,
@@ -374,7 +377,7 @@ Future<List<int>> generarFormatoDiarioPdf(RegistroMovimientoData data) async {
                         pw.Text('FECHA DE RECIBIDO',
                             style: pw.TextStyle(
                                 fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                        pw.Spacer(),
+                        pw.SizedBox(height: 22),
                         pw.Divider(color: _ink, thickness: 0.8),
                       ],
                     ),

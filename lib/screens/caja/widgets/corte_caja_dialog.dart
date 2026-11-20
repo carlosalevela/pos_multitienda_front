@@ -1,4 +1,5 @@
 import 'dart:async' show unawaited;
+import 'dart:typed_data' show Uint8List;
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -1158,22 +1159,18 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
     final trTotal   = r.ventas.transferencia + r.abonos.transferencia + r.abonos.ingresosSepTransferencia - cb.transferencia;
     final nVentas   = r.ventas.numTransacciones - cb.cantidad;
 
+    final efCount   = r.ventasDetalle.where((v) {
+      final m = v['metodo_pago'] as String? ?? '';
+      return m == 'efectivo' || m == 'mixto';
+    }).length;
     final dtCount   = r.ventasDetalle.where((v) => v['metodo_pago'] == 'tarjeta').length - (cb.tarjeta > 0 ? 1 : 0);
     final trCount   = r.ventasDetalle.where((v) => v['metodo_pago'] == 'transferencia').length - (cb.transferencia > 0 ? 1 : 0);
     final bonoCount = r.ventasDetalle.where((v) =>
         (v['metodo_pago'] as String? ?? '').contains('bono')).length;
 
-    final data = RegistroMovimientoData(
-      almacen:      r.tiendaNombre.toUpperCase(),
-      fecha:        fecha,
-      encargado:    r.empleadoNombre.toUpperCase(),
-      numeroVentas: r.ventas.numTransacciones,
-      totalVentas:  r.ventas.total,
-      realizo:      r.empleadoNombre,
-      observaciones: _p4Obs,
-      filas: [
+    final filas = <FilaRegistro>[
         FilaRegistro(signo: '+', concepto: 'VENTAS EN CAJA',
-            cantidad: nVentas,
+            cantidad: efCount,
             montos: efVentas > 0 ? {MedioPago.efectivo: efVentas} : {}),
         FilaRegistro(signo: '+', concepto: 'INGRESOS SEPARADOS',
             cantidad: r.abonos.numIngresosSep,
@@ -1233,7 +1230,21 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
         FilaRegistro(signo: '−', concepto: 'FALTANTE',
             cantidad: faltante > 0 ? 1 : 0,
             montos: faltante > 0 ? {MedioPago.efectivo: faltante} : {}),
-      ],
+    ];
+
+    final data = RegistroMovimientoData(
+      almacen:        r.tiendaNombre.toUpperCase(),
+      fecha:          fecha,
+      encargado:      r.empleadoNombre.toUpperCase(),
+      // Header: todo lo que generó dinero real (excluye bonos redimidos puros)
+      numeroVentas:   (r.ventas.numTransacciones - r.ventas.bonoNum)
+                      + r.abonos.numIngresosSep + r.abonos.cantidad,
+      totalVentas:    (r.ventas.total - r.ventas.bono)
+                      + r.abonos.ingresosSepEfectivo + r.abonos.ingresosSepTarjeta + r.abonos.ingresosSepTransferencia
+                      + r.abonos.efectivo + r.abonos.creditoEfectivo + r.abonos.tarjeta + r.abonos.transferencia,
+      realizo:        r.empleadoNombre,
+      observaciones:  _p4Obs,
+      filas:          filas,
       totalEntregado: FilaRegistro(
         signo: '+',
         concepto: 'TOTAL EFECTIVO ENTREGADO',
@@ -1681,8 +1692,12 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
         almacen:      r.tiendaNombre.toUpperCase(),
         fecha:        fecha,
         encargado:    r.empleadoNombre.toUpperCase(),
-        numeroVentas: r.ventas.numTransacciones,
-        totalVentas:  r.ventas.total,
+        // Header: todo lo que generó dinero real este turno (excluye bonos redimidos puros)
+        numeroVentas: (r.ventas.numTransacciones - r.ventas.bonoNum)
+            + r.abonos.numIngresosSep + r.abonos.cantidad,
+        totalVentas: (r.ventas.total - r.ventas.bono)
+            + r.abonos.ingresosSepEfectivo + r.abonos.ingresosSepTarjeta + r.abonos.ingresosSepTransferencia
+            + r.abonos.efectivo + r.abonos.creditoEfectivo + r.abonos.tarjeta + r.abonos.transferencia,
         realizo:      r.empleadoNombre,
         observaciones: _p4Obs,
         filas: [
@@ -1764,6 +1779,17 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
       final ref = sesionId != null ? '${sesionId}_$ts' : ts;
       await DocumentoService.instance.guardarFormato(
           bytes: bytes, referencia: ref);
+
+      // Enviar por WhatsApp si hay sesionId
+      if (sesionId != null) {
+        final filename = 'REGISTRO_${sesionId}_${ts}_${data.almacen.replaceAll(' ', '_')}.pdf';
+        CajaService().enviarFormatoDiarioWhatsApp(
+          sesionId, Uint8List.fromList(bytes), filename,
+        ).then((res) {
+          final ok = res['success'] == true;
+          debugPrint('FormatoDiarioWA: ${ok ? "enviado" : res['error']}');
+        });
+      }
     } catch (e) {
       debugPrint('FormatoPdf: error al guardar: $e');
     }

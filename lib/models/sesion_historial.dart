@@ -15,6 +15,8 @@ class SesionHistorial {
   final double ventasTransferencia;
   final double ventasMixto;
   final double ventasMixtoEfectivo;
+  final double ventasMixtoTarjeta;
+  final double ventasMixtoTransferencia;
   final double ventasBono;
   final int    ventasBonoNum;
   final double ventasBonoEfectivo;
@@ -89,6 +91,8 @@ class SesionHistorial {
     required this.ventasTransferencia,
     required this.ventasMixto,
     required this.ventasMixtoEfectivo,
+    this.ventasMixtoTarjeta       = 0,
+    this.ventasMixtoTransferencia = 0,
     this.ventasBono = 0,
     this.ventasBonoNum = 0,
     this.ventasBonoEfectivo = 0,
@@ -153,7 +157,9 @@ class SesionHistorial {
     ventasTarjeta:         double.tryParse(j['ventas_tarjeta']?.toString()             ?? '0') ?? 0.0,
     ventasTransferencia:   double.tryParse(j['ventas_transferencia']?.toString()       ?? '0') ?? 0.0,
     ventasMixto:           double.tryParse(j['ventas_mixto']?.toString()               ?? '0') ?? 0.0,
-    ventasMixtoEfectivo:   double.tryParse(j['ventas_mixto_efectivo']?.toString()    ?? '0') ?? 0.0,
+    ventasMixtoEfectivo:     double.tryParse(j['ventas_mixto_efectivo']?.toString()      ?? '0') ?? 0.0,
+    ventasMixtoTarjeta:      double.tryParse(j['ventas_mixto_tarjeta']?.toString()       ?? '0') ?? 0.0,
+    ventasMixtoTransferencia:double.tryParse(j['ventas_mixto_transferencia']?.toString() ?? '0') ?? 0.0,
     ventasBono:               double.tryParse(j['ventas_bono']?.toString()                   ?? '0') ?? 0.0,
     ventasBonoNum:            (j['ventas_bono_num'] as num?)?.toInt() ?? 0,
     ventasBonoEfectivo:       double.tryParse(j['ventas_bono_efectivo']?.toString()          ?? '0') ?? 0.0,

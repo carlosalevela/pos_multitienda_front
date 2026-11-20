@@ -39,6 +39,7 @@ class RegistroMovimientoData {
   final int numeroVentas;
   final double totalVentas;
   final List<FilaRegistro> filas;
+  final FilaRegistro? totalGeneral;
   final FilaRegistro totalEntregado;
   final String observaciones;
   final String realizo;
@@ -50,6 +51,7 @@ class RegistroMovimientoData {
     required this.numeroVentas,
     required this.totalVentas,
     required this.filas,
+    this.totalGeneral,
     required this.totalEntregado,
     this.observaciones = '',
     required this.realizo,
@@ -95,6 +97,8 @@ class RegistroMovimientoDiario extends StatelessWidget {
             _datosGenerales(),
             _cabeceraTabla(),
             for (final f in data.filas) _filaMovimiento(f),
+            if (data.totalGeneral != null)
+              _filaMovimiento(data.totalGeneral!, destacada: true),
             _filaMovimiento(data.totalEntregado, destacada: true),
             _observaciones(),
             _firmas(),

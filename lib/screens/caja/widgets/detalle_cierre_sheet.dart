@@ -145,25 +145,20 @@ class _DetalleCierreSheetState extends State<DetalleCierreSheet> {
     final faltante   = diferencia < 0 ? diferencia.abs() : 0.0;
 
     final efVentas  = s.ventasEfectivo + s.ventasMixtoEfectivo - s.compraBonasEfectivo;
-    final dtTotal   = s.ventasTarjeta  + s.abonosTarjeta + s.ingresosSepTarjeta - s.compraBonaTarjeta;
-    final trTotal   = s.ventasTransferencia + s.abonosTransferencia + s.ingresosSepTransferencia - s.compraBonasTransferencia;
-    final nVentas   = s.numTransacciones - s.numCompraBonos;
+    final dtTotal   = s.ventasTarjeta + s.ventasMixtoTarjeta + s.abonosTarjeta + s.ingresosSepTarjeta - s.compraBonaTarjeta;
+    final trTotal   = s.ventasTransferencia + s.ventasMixtoTransferencia + s.abonosTransferencia + s.ingresosSepTransferencia - s.compraBonasTransferencia;
+    final efCount   = s.ventasDetalle.where((v) {
+      final m = v['metodo_pago'] as String? ?? '';
+      return m == 'efectivo' || m == 'mixto';
+    }).length;
     final dtCount   = s.ventasDetalle.where((v) => v['metodo_pago'] == 'tarjeta').length - (s.compraBonaTarjeta > 0 ? 1 : 0);
     final trCount   = s.ventasDetalle.where((v) => v['metodo_pago'] == 'transferencia').length - (s.compraBonasTransferencia > 0 ? 1 : 0);
     final bonoCount = s.ventasDetalle.where((v) =>
         (v['metodo_pago'] as String? ?? '').contains('bono')).length;
 
-    final data = RegistroMovimientoData(
-      almacen:      s.tiendaNombre.toUpperCase(),
-      fecha:        fecha,
-      encargado:    s.empleadoNombre.toUpperCase(),
-      numeroVentas: s.numTransacciones,
-      totalVentas:  s.ventasTotal,
-      realizo:      s.empleadoNombre,
-      observaciones: s.observaciones,
-      filas: [
+    final filas = <FilaRegistro>[
         FilaRegistro(signo: '+', concepto: 'VENTAS EN FACTURERO FÍSICO',
-            cantidad: nVentas,
+            cantidad: efCount,
             montos: efVentas > 0 ? {MedioPago.efectivo: efVentas} : {}),
         FilaRegistro(signo: '+', concepto: 'INGRESOS SEPARADOS',
             cantidad: s.numIngresosSep,
@@ -223,7 +218,31 @@ class _DetalleCierreSheetState extends State<DetalleCierreSheet> {
           FilaRegistro(signo: '−', concepto: 'FALTANTE',
               cantidad: 1,
               montos: {MedioPago.efectivo: faltante}),
-      ],
+    ];
+
+    final _efTotGen = s.montoFinalSistema + s.gastosTotal;
+    final _bonoTot  = s.ventasBono + s.ventasBonoDifBonoParte;
+    final totalGeneral = FilaRegistro(
+      signo: '+',
+      concepto: 'TOTAL GENERAL',
+      montos: {
+        if (_efTotGen != 0) MedioPago.efectivo:    _efTotGen,
+        if (dtTotal   != 0) MedioPago.datafono:    dtTotal,
+        if (trTotal   != 0) MedioPago.bancolombia: trTotal,
+        if (_bonoTot  != 0) MedioPago.bono:        _bonoTot,
+      },
+    );
+
+    final data = RegistroMovimientoData(
+      almacen:        s.tiendaNombre.toUpperCase(),
+      fecha:          fecha,
+      encargado:      s.empleadoNombre.toUpperCase(),
+      numeroVentas:   s.numTransacciones,
+      totalVentas:    s.ventasTotal,
+      realizo:        s.empleadoNombre,
+      observaciones:  s.observaciones,
+      filas:          filas,
+      totalGeneral:   totalGeneral,
       totalEntregado: FilaRegistro(
         signo: '+',
         concepto: 'TOTAL EFECTIVO ENTREGADO',

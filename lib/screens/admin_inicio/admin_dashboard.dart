@@ -31,6 +31,7 @@ import '../documentos/documentos_screen.dart';
 import '../bonos/bonos_screen.dart';
 import '../formatos/formatos_diarios_screen.dart';
 import '../../services/update_service.dart';
+import '../../core/dashboard_cache.dart';
 
 class _C {
   static const bg = Color(0xFFF5F7F8);
@@ -49,6 +50,18 @@ class _C {
   static const roseLight = Color(0xFFFFF1F2);
   static const sidebar = Color(0xFFFFFFFF);
   static const sidebarHov = Color(0xFFF3F4F6);
+}
+
+// Paleta móvil — análoga a la pantalla de bienvenida/login
+class _MC {
+  static const bg      = Color(0xFFECFDF5);
+  static const green   = Color(0xFF059669);
+  static const teal    = Color(0xFF0D9488);
+  static const dark    = Color(0xFF064E3B);
+  static const mid     = Color(0xFF047857);
+  static const light   = Color(0xFFD1FAE5);
+  static const border  = Color(0xFFA7F3D0);
+  static const dim     = Color(0xFF6EE7B7);
 }
 
 class _KPI {
@@ -243,6 +256,29 @@ class _AdminDashboardState extends State<AdminDashboard> {
       });
     }
 
+    // ── Móvil (< 600 px) ──────────────────────────────────────
+    if (w < 600) {
+      return Scaffold(
+        backgroundColor: _MC.bg,
+        body: SafeArea(
+          child: Column(children: [
+            _MobileTopBar(
+              title:    _mobileScreenTitle(_activeScreen),
+              userName: widget.userName,
+              branch:   widget.branch,
+            ),
+            Expanded(child: _buildScreenByKey(_activeScreen, auth.rol, widget.userName)),
+          ]),
+        ),
+        bottomNavigationBar: _MobileBottomNav(
+          activeScreen: _activeScreen,
+          navItems:     navItems,
+          onNavigate:   _navigate,
+          onMasTap:     () => _showMasSheet(context, navItems),
+        ),
+      );
+    }
+
     final sidebar = _Sidebar(
       activeScreen: _activeScreen,
       onNavigate:   _navigate,
@@ -300,6 +336,47 @@ class _AdminDashboardState extends State<AdminDashboard> {
         child:           sidebar,
       ),
       body: mainContent,
+    );
+  }
+
+  String _mobileScreenTitle(String screen) {
+    switch (screen) {
+      case 'dashboard':    return 'Resumen';
+      case 'pos':          return 'POS · Ventas';
+      case 'cash':         return 'Caja';
+      case 'inventory':    return 'Inventario';
+      case 'compras':      return 'Compras';
+      case 'devoluciones': return 'Devoluciones';
+      case 'clientes':     return 'Clientes';
+      case 'separados':    return 'Separados';
+      case 'contabilidad': return 'Contabilidad';
+      case 'reports':      return 'Reportes';
+      case 'formatos':     return 'Formatos Diarios';
+      case 'bonos':        return 'Bonos';
+      case 'documentos':   return 'Documentos';
+      case 'etiquetas':    return 'Etiquetas';
+      case 'empleados':    return 'Empleados';
+      case 'empresas':     return 'Empresas';
+      case 'configuracion':return 'Configuración';
+      default:             return 'SIS POS';
+    }
+  }
+
+  void _showMasSheet(BuildContext ctx, List<_NavItem> navItems) {
+    const mainTabs = {'dashboard', 'cash', 'inventory', 'clientes'};
+    final masItems = navItems.where((n) => !mainTabs.contains(n.screen)).toList();
+    showModalBottomSheet(
+      context: ctx,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _MasSheet(
+        items:        masItems,
+        activeScreen: _activeScreen,
+        onNavigate:   (screen) {
+          Navigator.pop(ctx);
+          _navigate(screen);
+        },
+      ),
     );
   }
 }
@@ -624,6 +701,9 @@ class _DashboardBodyState extends State<_DashboardBody> {
   final _svc = VentaService();
   Timer? _refreshTimer;
 
+  // Alias al caché compartido (se limpia en logout desde auth_provider)
+  static Map<String, Map<String, dynamic>> get _responseCache => dashboardAdminCache;
+
   bool    _loading = true;
   String? _error;
   String  _periodo = 'mensual';
@@ -656,15 +736,41 @@ class _DashboardBodyState extends State<_DashboardBody> {
   }
 
   Future<void> _cargar() async {
+    final key    = _periodo;
+    final cached = _responseCache[key];
+
+    if (cached != null) {
+      // Mostrar datos guardados al instante (sin spinner)
+      _applyData(cached);
+      // Refrescar silenciosamente en background
+      _refreshBackground(key);
+      return;
+    }
+
+    // Primera carga: spinner normal
     setState(() { _loading = true; _error = null; });
+    await _fetchAndStore(key);
+  }
+
+  // ignore: unawaited_futures
+  void _refreshBackground(String key) => _fetchAndStore(key);
+
+  Future<void> _fetchAndStore(String key) async {
     final res = await _svc.getDashboardAdmin(periodo: _periodo);
     if (!mounted) return;
     if (res['success'] != true) {
-      setState(() { _loading = false; _error = res['error']?.toString() ?? 'Error al cargar'; });
+      if (_responseCache[key] == null) {
+        setState(() { _loading = false; _error = res['error']?.toString() ?? 'Error al cargar'; });
+      }
       return;
     }
-    final d    = res['data'] as Map<String, dynamic>;
-    final kpis = d['kpis']  as Map<String, dynamic>;
+    final d = res['data'] as Map<String, dynamic>;
+    _responseCache[key] = d;
+    _applyData(d);
+  }
+
+  void _applyData(Map<String, dynamic> d) {
+    final kpis = d['kpis'] as Map<String, dynamic>;
     setState(() {
       _loading           = false;
       _ventasHoy         = (kpis['ventas_hoy']               as num).toDouble();
@@ -777,38 +883,77 @@ class _DashboardBodyState extends State<_DashboardBody> {
       padding: EdgeInsets.all(isNarrow ? 16 : 28),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-        // Banner
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(28),
-          decoration: BoxDecoration(color: _C.greenDark, borderRadius: BorderRadius.circular(16)),
-          child: Stack(children: [
-            Positioned(right: -20, top: -20, child: Icon(Icons.point_of_sale_rounded, size: 140, color: Colors.white.withOpacity(0.04))),
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, runSpacing: 8, children: [
-                Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: _C.green, borderRadius: BorderRadius.circular(4)), child: Text('PERSPECTIVA GENERAL DEL NEGOCIO', style: GoogleFonts.inter(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 1.2))),
-                _PeriodToggle(value: _periodo, onChange: (p) { setState(() => _periodo = p); _cargar(); }),
-              ]),
-              const SizedBox(height: 12),
-              Text('¡Bienvenido, ${widget.userName}!', style: GoogleFonts.inter(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800, height: 1.2)),
-              const SizedBox(height: 8),
+        // Banner + KPIs — versión según ancho
+        if (w < 600) ...[
+          // Hero móvil — fondo claro análogo al login
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFFD1FAE5), Color(0xFFCCFBF1), Color(0xFFECFDF5)]),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFF6EE7B7), width: 1.5),
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('PERSPECTIVA GENERAL', style: GoogleFonts.inter(color: _MC.green, fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 1.1)),
+              const SizedBox(height: 4),
+              Text('¡Buenos días, ${widget.userName}!', style: GoogleFonts.inter(color: _MC.dark, fontSize: 20, fontWeight: FontWeight.w800, height: 1.2)),
+              const SizedBox(height: 6),
               Text(
                 totalBajo > 0
                     ? 'Hay $totalBajo SKUs con stock bajo ($_alertasCriticas críticos) y $_comprasPendientes compras pendientes.'
                     : 'Inventario en buen estado. $_comprasPendientes compras pendientes de recibir.',
-                style: GoogleFonts.inter(color: Colors.white.withOpacity(0.65), fontSize: 12.5, height: 1.6),
+                style: GoogleFonts.inter(color: _MC.mid, fontSize: 12.5, height: 1.5),
               ),
+              const SizedBox(height: 10),
+              _MobilePeriodRow(value: _periodo, onChange: (p) { setState(() => _periodo = p); _cargar(); }),
             ]),
-          ]),
-        ),
-        const SizedBox(height: 24),
-
-        // KPIs
-        LayoutBuilder(builder: (_, c) {
-          final cols = c.maxWidth >= 1000 ? 4 : c.maxWidth >= 560 ? 2 : 1;
-          return GridView.count(crossAxisCount: cols, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: c.maxWidth >= 1000 ? 1.7 : 2.1, children: kpis.map((k) => _KPICard(kpi: k)).toList());
-        }),
-        const SizedBox(height: 24),
+          ),
+          const SizedBox(height: 14),
+          // KPIs móvil — 2×2 con gradientes por categoría
+          GridView.count(
+            crossAxisCount: 2, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: 1.08,
+            children: [
+              _MobileKPICard(kpi: kpis[0], stripe: const [Color(0xFF059669), Color(0xFF10B981)], iconBg: const Color(0xFFD1FAE5), iconColor: Color(0xFF059669)),
+              _MobileKPICard(kpi: kpis[1], stripe: const [Color(0xFF0D9488), Color(0xFF14B8A6)], iconBg: const Color(0xFFCCFBF1), iconColor: Color(0xFF0D9488)),
+              _MobileKPICard(kpi: kpis[2], stripe: const [Color(0xFFF59E0B), Color(0xFFF97316)], iconBg: const Color(0xFFFEF3C7), iconColor: Color(0xFFF59E0B)),
+              _MobileKPICard(kpi: kpis[3], stripe: const [Color(0xFF059669), Color(0xFF10B981)], iconBg: const Color(0xFFD1FAE5), iconColor: Color(0xFF059669)),
+            ],
+          ),
+          const SizedBox(height: 14),
+        ] else ...[
+          // Banner desktop — fondo oscuro
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(color: _C.greenDark, borderRadius: BorderRadius.circular(16)),
+            child: Stack(children: [
+              Positioned(right: -20, top: -20, child: Icon(Icons.point_of_sale_rounded, size: 140, color: Colors.white.withOpacity(0.04))),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, runSpacing: 8, children: [
+                  Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: _C.green, borderRadius: BorderRadius.circular(4)), child: Text('PERSPECTIVA GENERAL DEL NEGOCIO', style: GoogleFonts.inter(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 1.2))),
+                  _PeriodToggle(value: _periodo, onChange: (p) { setState(() => _periodo = p); _cargar(); }),
+                ]),
+                const SizedBox(height: 12),
+                Text('¡Bienvenido, ${widget.userName}!', style: GoogleFonts.inter(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800, height: 1.2)),
+                const SizedBox(height: 8),
+                Text(
+                  totalBajo > 0
+                      ? 'Hay $totalBajo SKUs con stock bajo ($_alertasCriticas críticos) y $_comprasPendientes compras pendientes.'
+                      : 'Inventario en buen estado. $_comprasPendientes compras pendientes de recibir.',
+                  style: GoogleFonts.inter(color: Colors.white.withOpacity(0.65), fontSize: 12.5, height: 1.6),
+                ),
+              ]),
+            ]),
+          ),
+          const SizedBox(height: 24),
+          LayoutBuilder(builder: (_, c) {
+            final cols = c.maxWidth >= 1000 ? 4 : c.maxWidth >= 560 ? 2 : 1;
+            return GridView.count(crossAxisCount: cols, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: c.maxWidth >= 1000 ? 1.7 : 2.1, children: kpis.map((k) => _KPICard(kpi: k)).toList());
+          }),
+          const SizedBox(height: 24),
+        ],
 
         // Panel de alertas consolidado
         _AlertasPanel(
@@ -817,45 +962,75 @@ class _DashboardBodyState extends State<_DashboardBody> {
           comprasPendientes: _comprasPendientes,
           onNavigate: widget.onNavigate,
         ),
-        const SizedBox(height: 24),
 
-        // Bitácora + métodos de pago
-        isWide
-            ? IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Expanded(flex: 6, child: _MovementsCard(movements: movements)),
-                const SizedBox(width: 20),
-                Expanded(flex: 5, child: _MetodosPagoCard(metodos: _metodosPago, periodo: _periodo)),
-              ]))
-            : Column(children: [
-                _MovementsCard(movements: movements),
-                const SizedBox(height: 20),
-                _MetodosPagoCard(metodos: _metodosPago, periodo: _periodo),
-              ]),
+        if (w < 600) ...[
+          // ── Layout móvil: orden del mockup ──
+          const SizedBox(height: 14),
 
-        // Ventas por tienda + Estado de sucursales (lado a lado en pantallas anchas)
-        if (_ventasPorTienda.isNotEmpty || _desempeno.isNotEmpty) ...[
+          // Tiendas compactas
+          if (_ventasPorTienda.isNotEmpty || _desempeno.isNotEmpty) ...[
+            _MobileSectionLabel('Ventas por tienda'),
+            const SizedBox(height: 8),
+            _MobileStoresList(ventas: _ventasPorTienda, desempeno: _desempeno),
+            const SizedBox(height: 14),
+          ],
+
+          // Métodos de pago — chips horizontales scrollables
+          if (_metodosPago.isNotEmpty) ...[
+            _MobileSectionLabel('Métodos de pago'),
+            const SizedBox(height: 8),
+            _MobileMetodosChips(metodos: _metodosPago),
+            const SizedBox(height: 14),
+          ],
+
+          // Bitácora — solo 3 entradas
+          _MobileSectionLabel('Bitácora reciente'),
+          const SizedBox(height: 8),
+          _MobileBitacora(movements: movements),
+          const SizedBox(height: 8),
+
+        ] else ...[
+          // ── Layout desktop ──
           const SizedBox(height: 24),
-          if (isWide)
-            IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              if (_ventasPorTienda.isNotEmpty)
-                Expanded(child: _VentasPorTiendaCard(ventas: _ventasPorTienda, periodo: _periodo)),
-              if (_ventasPorTienda.isNotEmpty && _desempeno.isNotEmpty)
-                const SizedBox(width: 20),
-              if (_desempeno.isNotEmpty)
-                Expanded(child: _SucursalesCard(desempeno: _desempeno)),
-            ]))
-          else
-            Column(children: [
-              if (_ventasPorTienda.isNotEmpty)
-                _VentasPorTiendaCard(ventas: _ventasPorTienda, periodo: _periodo),
-              if (_ventasPorTienda.isNotEmpty && _desempeno.isNotEmpty)
-                const SizedBox(height: 20),
-              if (_desempeno.isNotEmpty)
-                _SucursalesCard(desempeno: _desempeno),
-            ]),
-        ],
 
-        const SizedBox(height: 8),
+          // Bitácora + métodos de pago
+          isWide
+              ? IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Expanded(flex: 6, child: _MovementsCard(movements: movements)),
+                  const SizedBox(width: 20),
+                  Expanded(flex: 5, child: _MetodosPagoCard(metodos: _metodosPago, periodo: _periodo)),
+                ]))
+              : Column(children: [
+                  _MovementsCard(movements: movements),
+                  const SizedBox(height: 20),
+                  _MetodosPagoCard(metodos: _metodosPago, periodo: _periodo),
+                ]),
+
+          // Ventas por tienda + Estado de sucursales
+          if (_ventasPorTienda.isNotEmpty || _desempeno.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            if (isWide)
+              IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                if (_ventasPorTienda.isNotEmpty)
+                  Expanded(child: _VentasPorTiendaCard(ventas: _ventasPorTienda, periodo: _periodo)),
+                if (_ventasPorTienda.isNotEmpty && _desempeno.isNotEmpty)
+                  const SizedBox(width: 20),
+                if (_desempeno.isNotEmpty)
+                  Expanded(child: _SucursalesCard(desempeno: _desempeno)),
+              ]))
+            else
+              Column(children: [
+                if (_ventasPorTienda.isNotEmpty)
+                  _VentasPorTiendaCard(ventas: _ventasPorTienda, periodo: _periodo),
+                if (_ventasPorTienda.isNotEmpty && _desempeno.isNotEmpty)
+                  const SizedBox(height: 20),
+                if (_desempeno.isNotEmpty)
+                  _SucursalesCard(desempeno: _desempeno),
+              ]),
+          ],
+
+          const SizedBox(height: 8),
+        ],
       ]),
     );
   }
@@ -967,6 +1142,60 @@ class _KPICard extends StatelessWidget {
             ),
           ]),
         ),
+      ),
+    );
+  }
+}
+
+class _MobileKPICard extends StatelessWidget {
+  final _KPI kpi;
+  final List<Color> stripe;
+  final Color iconBg;
+  final Color iconColor;
+  const _MobileKPICard({required this.kpi, required this.stripe, required this.iconBg, required this.iconColor});
+  @override
+  Widget build(BuildContext context) {
+    final trendColor = kpi.trendUp == null ? _MC.mid : kpi.trendUp! ? _MC.green : const Color(0xFFF97316);
+    final trendIcon  = kpi.trendUp == null ? Icons.remove_rounded : kpi.trendUp! ? Icons.trending_up_rounded : Icons.trending_down_rounded;
+    return GestureDetector(
+      onTap: kpi.onTap,
+      child: Container(
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: _MC.border, width: 1.5)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Stripe de gradiente en la parte superior
+          Container(
+            height: 4,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: stripe),
+              borderRadius: const BorderRadius.only(topLeft: Radius.circular(13), topRight: Radius.circular(13)),
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Expanded(child: Text(kpi.title, style: GoogleFonts.inter(color: _MC.mid, fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 0.2), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  Container(width: 28, height: 28, decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(7)), child: Icon(kpi.icon, size: 14, color: iconColor)),
+                ]),
+                const SizedBox(height: 4),
+                Text(kpi.value, style: GoogleFonts.inter(color: _MC.dark, fontSize: 20, fontWeight: FontWeight.w800, height: 1.1)),
+                const SizedBox(height: 6),
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(color: trendColor.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(trendIcon, size: 9, color: trendColor),
+                      const SizedBox(width: 2),
+                      Text(kpi.trend, style: GoogleFonts.inter(color: trendColor, fontSize: 9, fontWeight: FontWeight.w700)),
+                    ]),
+                  ),
+                ]),
+              ]),
+            ),
+          ),
+        ]),
       ),
     );
   }
@@ -1304,6 +1533,400 @@ class _SucursalRow extends StatelessWidget {
         ]),
       ]),
     );
+  }
+}
+
+// ── Mobile nav ─────────────────────────────────────────────────────────────
+
+const _kMainTabs = <_NavItem>[
+  _NavItem(label: 'Inicio',     screen: 'dashboard', icon: Icons.home_rounded),
+  _NavItem(label: 'Caja',       screen: 'cash',      icon: Icons.account_balance_wallet_rounded),
+  _NavItem(label: 'Inventario', screen: 'inventory', icon: Icons.inventory_2_rounded),
+  _NavItem(label: 'Clientes',   screen: 'clientes',  icon: Icons.people_alt_rounded),
+];
+
+class _MobileTopBar extends StatelessWidget {
+  final String title, userName, branch;
+  const _MobileTopBar({required this.title, required this.userName, required this.branch});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 14, 16, 10),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: _MC.border)),
+      ),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            Text(title, style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w800, color: _MC.dark)),
+            if (branch.isNotEmpty)
+              Text(branch, style: GoogleFonts.inter(fontSize: 11, color: _MC.mid, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
+          ]),
+        ),
+        ValueListenableBuilder<Map<String, dynamic>?>(
+          valueListenable: UpdateService.updateDisponible,
+          builder: (ctx, info, _) {
+            if (info == null) return const SizedBox.shrink();
+            return IconButton(
+              icon: const Icon(Icons.system_update_rounded, size: 20, color: _MC.green),
+              onPressed: () => UpdateService.mostrarDialogo(ctx),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            );
+          },
+        ),
+        const SizedBox(width: 6),
+        Container(
+          width: 36, height: 36,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [_MC.green, _MC.teal]),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Center(child: Text(
+            userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
+          )),
+        ),
+      ]),
+    );
+  }
+}
+
+class _MobileBottomNav extends StatelessWidget {
+  final String activeScreen;
+  final List<_NavItem> navItems;
+  final void Function(String) onNavigate;
+  final VoidCallback onMasTap;
+  const _MobileBottomNav({required this.activeScreen, required this.navItems, required this.onNavigate, required this.onMasTap});
+
+  @override
+  Widget build(BuildContext context) {
+    const mainSet = {'dashboard', 'cash', 'inventory', 'clientes'};
+    final hasMas  = navItems.any((n) => !mainSet.contains(n.screen));
+    final tabs    = _kMainTabs.where((t) => navItems.any((n) => n.screen == t.screen)).toList();
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: _MC.border)),
+        boxShadow: [BoxShadow(color: Color(0x14059669), blurRadius: 12, offset: Offset(0, -2))],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          child: Row(children: [
+            ...tabs.map((t) => _tab(t.screen, t.label, t.icon, activeScreen == t.screen, () => onNavigate(t.screen))),
+            if (hasMas)
+              _tab('mas', 'Más', Icons.apps_rounded, false, onMasTap),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _tab(String screen, String label, IconData icon, bool active, VoidCallback onTap) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: 44, height: 32,
+            decoration: BoxDecoration(
+              color: active ? _MC.light : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 22, color: active ? _MC.green : _MC.dim),
+          ),
+          const SizedBox(height: 2),
+          Text(label, style: TextStyle(
+            fontSize: 10,
+            fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+            color: active ? _MC.green : _MC.dim,
+          )),
+        ]),
+      ),
+    );
+  }
+}
+
+class _MasSheet extends StatelessWidget {
+  final List<_NavItem> items;
+  final String activeScreen;
+  final void Function(String) onNavigate;
+  const _MasSheet({required this.items, required this.activeScreen, required this.onNavigate});
+
+  static const _colors = <String, Color>{
+    'pos':          Color(0xFFD1FAE5),
+    'compras':      Color(0xFFD1FAE5),
+    'devoluciones': Color(0xFFFEE2E2),
+    'contabilidad': Color(0xFFFEF3C7),
+    'reports':      Color(0xFFFEF3C7),
+    'formatos':     Color(0xFFFEF3C7),
+    'bonos':        Color(0xFFEDE9FE),
+    'documentos':   Color(0xFFCCFBF1),
+    'etiquetas':    Color(0xFFFCE7F3),
+    'empleados':    Color(0xFFDBEAFE),
+    'separados':    Color(0xFFD1FAE5),
+    'empresas':     Color(0xFFFEF9C3),
+    'configuracion':Color(0xFFF3F4F6),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border(top: BorderSide(color: _MC.border, width: 1.5)),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 14), decoration: BoxDecoration(color: _MC.border, borderRadius: BorderRadius.circular(2))),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text('Todas las secciones', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .07, color: _MC.green)),
+        ),
+        const SizedBox(height: 16),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3, mainAxisSpacing: 14, crossAxisSpacing: 10, childAspectRatio: 0.88,
+          ),
+          itemCount: items.length,
+          itemBuilder: (_, i) {
+            final item     = items[i];
+            final isActive = item.screen == activeScreen;
+            final bg       = _colors[item.screen] ?? const Color(0xFFF3F4F6);
+            return GestureDetector(
+              onTap: () => onNavigate(item.screen),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: 56, height: 56,
+                  decoration: BoxDecoration(
+                    color: bg,
+                    borderRadius: BorderRadius.circular(16),
+                    border: isActive
+                        ? Border.all(color: _MC.green, width: 2)
+                        : Border.all(color: Colors.black.withOpacity(.06)),
+                    boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 4, offset: Offset(0, 1))],
+                  ),
+                  child: Icon(item.icon, size: 24, color: isActive ? _MC.green : _MC.dark),
+                ),
+                const SizedBox(height: 6),
+                Text(item.label, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: _MC.dark), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
+              ]),
+            );
+          },
+        ),
+      ]),
+    );
+  }
+}
+
+// ── Period row móvil — pills con borde verde y texto oscuro ───────────────
+
+class _MobilePeriodRow extends StatelessWidget {
+  final String value;
+  final void Function(String) onChange;
+  const _MobilePeriodRow({required this.value, required this.onChange});
+  @override
+  Widget build(BuildContext context) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      _MPBtn(label: 'Hoy',  val: 'hoy',      current: value, onChange: onChange),
+      const SizedBox(width: 6),
+      _MPBtn(label: 'Sem',  val: 'semanal',   current: value, onChange: onChange),
+      const SizedBox(width: 6),
+      _MPBtn(label: 'Mes',  val: 'mensual',   current: value, onChange: onChange),
+    ]);
+  }
+}
+
+class _MPBtn extends StatelessWidget {
+  final String label, val, current;
+  final void Function(String) onChange;
+  const _MPBtn({required this.label, required this.val, required this.current, required this.onChange});
+  @override
+  Widget build(BuildContext context) {
+    final active = current == val;
+    return GestureDetector(
+      onTap: () => onChange(val),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+        decoration: BoxDecoration(
+          gradient: active ? const LinearGradient(colors: [Color(0xFF059669), Color(0xFF0D9488)]) : null,
+          color:    active ? null : Colors.white.withOpacity(0.8),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: active ? const Color(0xFF059669) : const Color(0xFF6EE7B7), width: 1.5),
+        ),
+        child: Text(label, style: GoogleFonts.inter(color: active ? Colors.white : const Color(0xFF047857), fontSize: 12, fontWeight: FontWeight.w600)),
+      ),
+    );
+  }
+}
+
+// ── Etiqueta de sección móvil ─────────────────────────────────────────────
+
+class _MobileSectionLabel extends StatelessWidget {
+  final String text;
+  const _MobileSectionLabel(this.text);
+  @override
+  Widget build(BuildContext context) => Text(
+    text.toUpperCase(),
+    style: GoogleFonts.inter(color: _MC.green, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.7),
+  );
+}
+
+// ── Chips horizontales de métodos de pago ────────────────────────────────
+
+class _MobileMetodosChips extends StatelessWidget {
+  final List<Map<String, dynamic>> metodos;
+  const _MobileMetodosChips({required this.metodos});
+
+  static const _info = <String, ({Color bg, Color fg, IconData icon, String label})>{
+    'efectivo':      (bg: Color(0xFFD1FAE5), fg: Color(0xFF059669), icon: Icons.payments_rounded,       label: 'Efectivo'),
+    'tarjeta':       (bg: Color(0xFFEDE9FE), fg: Color(0xFF3730A3), icon: Icons.credit_card_rounded,     label: 'Tarjeta'),
+    'transferencia': (bg: Color(0xFFFEF3C7), fg: Color(0xFFB45309), icon: Icons.account_balance_rounded, label: 'Transferencia'),
+    'mixto':         (bg: Color(0xFFCCFBF1), fg: Color(0xFF0E7490), icon: Icons.swap_horiz_rounded,      label: 'Mixto'),
+    'credito':       (bg: Color(0xFFEDE9FE), fg: Color(0xFF7C3AED), icon: Icons.handshake_rounded,       label: 'Fiado'),
+    'bono':          (bg: Color(0xFFCCFBF1), fg: Color(0xFF059669), icon: Icons.card_giftcard_rounded,   label: 'Bono'),
+    'bono_efectivo': (bg: Color(0xFFD1FAE5), fg: Color(0xFF047857), icon: Icons.card_giftcard_rounded,   label: 'Bono Ef.'),
+  };
+
+  String _fmt(double v) {
+    if (v >= 1000000) return '\$${(v/1000000).toStringAsFixed(1)}M';
+    if (v >= 1000)    return '\$${(v/1000).toStringAsFixed(0)}K';
+    return '\$${v.toStringAsFixed(0)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = metodos.fold(0.0, (s, m) => s + (m['total'] as num).toDouble());
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(children: metodos.map((m) {
+        final monto = (m['total'] as num).toDouble();
+        final count = (m['count'] as num).toInt();
+        final pct   = total > 0 ? (monto / total * 100).round() : 0;
+        final key   = (m['metodo'] as String).toLowerCase();
+        final info  = _info[key] ?? (bg: const Color(0xFFD1FAE5), fg: _MC.green, icon: Icons.circle, label: m['metodo'] as String);
+        return Container(
+          margin: const EdgeInsets.only(right: 8),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: _MC.border, width: 1.5)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Container(width: 32, height: 32, decoration: BoxDecoration(color: info.bg, borderRadius: BorderRadius.circular(8)), child: Icon(info.icon, size: 16, color: info.fg)),
+            const SizedBox(width: 8),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(info.label, style: GoogleFonts.inter(color: _MC.mid, fontSize: 11, fontWeight: FontWeight.w500)),
+              Text(_fmt(monto), style: GoogleFonts.inter(color: _MC.dark, fontSize: 14, fontWeight: FontWeight.w800)),
+              Text('$pct% · $count vtas', style: GoogleFonts.inter(color: _MC.green, fontSize: 10)),
+            ]),
+          ]),
+        );
+      }).toList()),
+    );
+  }
+}
+
+// ── Bitácora móvil — 3 entradas + ver más ────────────────────────────────
+
+class _MobileBitacora extends StatelessWidget {
+  final List<_Movement> movements;
+  const _MobileBitacora({required this.movements});
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = movements.take(3).toList();
+    final extra = movements.length - shown.length;
+    return Column(children: [
+      ...shown.map((m) {
+        const colors = {
+          'in':       (bg: Color(0xFFECFDF5), fg: Color(0xFF065F46), label: 'INGRESO'),
+          'out':      (bg: Color(0xFFFFF1F2), fg: Color(0xFF9F1239), label: 'EGRESO'),
+          'transfer': (bg: Color(0xFFEFF6FF), fg: Color(0xFF1E40AF), label: 'TRASPASO'),
+        };
+        final c = colors[m.type] ?? (bg: Color(0xFFECFDF5), fg: Color(0xFF065F46), label: m.type.toUpperCase());
+        return Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: _MC.border, width: 1.5)),
+          child: Row(children: [
+            Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: c.bg, borderRadius: BorderRadius.circular(4), border: Border.all(color: c.fg.withOpacity(0.2))), child: Text(c.label, style: GoogleFonts.inter(color: c.fg, fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 0.5))),
+            const SizedBox(width: 8),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(m.description, style: GoogleFonts.inter(color: _MC.dark, fontSize: 12, fontWeight: FontWeight.w600)),
+              Text('${m.time} · ${m.user} · ${m.detail}', style: GoogleFonts.inter(color: _MC.mid, fontSize: 10), overflow: TextOverflow.ellipsis),
+            ])),
+            const SizedBox(width: 8),
+            Text(m.id, style: GoogleFonts.inter(color: _MC.dark, fontSize: 12, fontWeight: FontWeight.w700)),
+          ]),
+        );
+      }),
+      if (extra > 0)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Center(child: Text('Ver $extra más →', style: GoogleFonts.inter(color: _MC.green, fontSize: 12, fontWeight: FontWeight.w600))),
+        ),
+    ]);
+  }
+}
+
+// ── Lista compacta de tiendas para móvil ──────────────────────────────────
+
+class _MobileStoresList extends StatelessWidget {
+  final List<Map<String, dynamic>> ventas;
+  final List<Map<String, dynamic>> desempeno;
+  const _MobileStoresList({required this.ventas, required this.desempeno});
+  @override
+  Widget build(BuildContext context) {
+    if (ventas.isEmpty) return const SizedBox.shrink();
+    final maxVal = ventas.map((v) => (v['total'] as num).toDouble()).reduce(max);
+    return Column(children: ventas.map((v) {
+      final total = (v['total'] as num).toDouble();
+      final pct   = maxVal > 0 ? (total / maxVal).clamp(0.0, 1.0) : 0.0;
+      final nombre = v['nombre'] as String;
+      final info   = desempeno.firstWhere((d) => d['nombre'] == nombre, orElse: () => {'cajas_activas': 0});
+      final cajas  = (info['cajas_activas'] as num).toInt();
+      final dotColor = cajas > 0 ? _MC.green : _MC.dim;
+      final barColor = cajas > 0 ? _MC.green : _MC.dim;
+      // Formato compacto del monto
+      final abs = total.abs();
+      final label = abs >= 1000000
+          ? '\$${(abs/1000000).toStringAsFixed(1)}M'
+          : abs >= 1000
+              ? '\$${(abs/1000).toStringAsFixed(0)}K'
+              : '\$${abs.toStringAsFixed(0)}';
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: _MC.border, width: 1.5)),
+          child: Row(children: [
+            Container(width: 10, height: 10, decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle)),
+            const SizedBox(width: 10),
+            Expanded(flex: 3, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(nombre, style: GoogleFonts.inter(color: _MC.dark, fontSize: 12, fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 2),
+              Text('$label · ${cajas > 0 ? "$cajas caja activa" : "cerrada"}', style: GoogleFonts.inter(color: _MC.mid, fontSize: 11)),
+            ])),
+            const SizedBox(width: 10),
+            Expanded(flex: 2, child: ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(value: pct, minHeight: 5, backgroundColor: _MC.light, valueColor: AlwaysStoppedAnimation<Color>(barColor)),
+            )),
+            const SizedBox(width: 8),
+            Text('${(pct * 100).toStringAsFixed(0)}%', style: GoogleFonts.inter(color: _MC.dark, fontSize: 11, fontWeight: FontWeight.w700)),
+          ]),
+        ),
+      );
+    }).toList());
   }
 }
 

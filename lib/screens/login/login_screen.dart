@@ -2,7 +2,6 @@
 // ignore_for_file: deprecated_member_use
 
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -10,7 +9,6 @@ import '../../providers/auth_provider.dart';
 import '../../services/update_service.dart' show UpdateService, currentVersion;
 
 Future<void> _abrirWhatsAppAdmin() async {
-  // Número con código de país Colombia (+57)
   const url = 'https://wa.me/573167525926';
   try {
     if (Platform.isWindows) {
@@ -20,10 +18,10 @@ Future<void> _abrirWhatsAppAdmin() async {
 }
 
 // ─────────────────────────────────────────────────────────────
-// PALETA — consistente con admin_dashboard / cajero_dashboard
+// PALETA
 // ─────────────────────────────────────────────────────────────
 class _C {
-  // Fondo general y paneles
+  // Fondo general y paneles (desktop)
   static const bodyBg      = Color(0xFFF5F7F8);
   static const leftBg      = Color(0xFFF0FDF4);
   static const leftBorder  = Color(0xFFBBF7D0);
@@ -34,9 +32,10 @@ class _C {
   static const textSecond  = Color(0xFF6B7280);
   static const textHint    = Color(0xFF9CA3AF);
 
-  // Verde marca (= _C.green / greenDark del dashboard)
+  // Verde marca
   static const green       = Color(0xFF61DDAA);
   static const greenDark   = Color(0xFF0B7A53);
+  static const greenMid    = Color(0xFF0F9B6A);
   static const greenLight  = Color(0xFFE8FFF4);
   static const greenBorder = Color(0xFF61DDAA);
 
@@ -59,6 +58,7 @@ class _C {
   static const surface     = Color(0xFFF5F7FA);
   static const borderColor = Color(0xFFE2E8F0);
   static const error       = Color(0xFFD32F2F);
+
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -105,8 +105,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth   = context.watch<AuthProvider>();
-    final isWide = MediaQuery.of(context).size.width > 780;
+    final auth     = context.watch<AuthProvider>();
+    final size     = MediaQuery.of(context).size;
+    final isMobile = size.width < 600;
 
     final formPanel = _FormPanel(
       formKey:         _formKey,
@@ -118,6 +119,19 @@ class _LoginScreenState extends State<LoginScreen> {
       onToggleObscure: () => setState(() => _obscure = !_obscure),
       onLogin:         _login,
     );
+
+    if (isMobile) {
+      return _MobileLoginLayout(
+        formKey:         _formKey,
+        userCtrl:        _userCtrl,
+        passCtrl:        _passCtrl,
+        passFocus:       _passFocus,
+        obscure:         _obscure,
+        auth:            auth,
+        onToggleObscure: () => setState(() => _obscure = !_obscure),
+        onLogin:         _login,
+      );
+    }
 
     return Scaffold(
       backgroundColor: _C.bodyBg,
@@ -143,21 +157,924 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(20),
-              child: isWide
-                  ? SizedBox(
-                      height: 660,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(flex: 46, child: const _LeftPanel()),
-                          Expanded(flex: 54, child: formPanel),
-                        ],
-                      ),
-                    )
-                  : formPanel,
+              child: SizedBox(
+                height: 660,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(flex: 46, child: const _LeftPanel()),
+                    Expanded(flex: 54, child: formPanel),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// LOGO MARK
+// ─────────────────────────────────────────────────────────────
+class _LogoMark extends StatelessWidget {
+  final double size;
+  const _LogoMark({this.size = 72});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0F9B6A), Color(0xFF0B7A53)],
+          begin: Alignment.topLeft,
+          end:   Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(size * 0.28),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0B7A53).withOpacity(0.5),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Círculo decorativo interior
+          Positioned(
+            right: -size * 0.08,
+            top: -size * 0.08,
+            child: Container(
+              width: size * 0.55,
+              height: size * 0.55,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withOpacity(0.07),
+              ),
+            ),
+          ),
+          // Icono
+          Icon(Icons.storefront_rounded,
+              size: size * 0.48,
+              color: Colors.white),
+          // Punto "activo" bottom-right
+          Positioned(
+            right: size * 0.12,
+            bottom: size * 0.12,
+            child: Container(
+              width: size * 0.17,
+              height: size * 0.17,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFF61DDAA),
+                border: Border.all(
+                  color: const Color(0xFF0B7A53),
+                  width: 2,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// DECORACIÓN DE FONDO MÓVIL  (círculos — fondo verde claro)
+// ─────────────────────────────────────────────────────────────
+class _LightBgCirclesPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    void circle(double cx, double cy, double r, Color color, double opacity) {
+      canvas.drawCircle(
+        Offset(cx, cy), r,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5
+          ..color = color.withOpacity(opacity),
+      );
+    }
+
+    circle(size.width * 1.05, size.height * -0.05, size.width * 0.59,
+        const Color(0xFF059669), 0.14);
+    circle(size.width * 1.05, size.height * -0.05, size.width * 0.92,
+        const Color(0xFF14B8A6), 0.09);
+    circle(size.width * -0.09, size.height * 0.75, size.width * 0.33,
+        const Color(0xFF84CC16), 0.11);
+    circle(size.width * 0.10, size.height * 0.14, size.width * 0.20,
+        const Color(0xFF059669), 0.08);
+  }
+
+  @override
+  bool shouldRepaint(_) => false;
+}
+
+// ─────────────────────────────────────────────────────────────
+// PILL DE SALUDO
+// ─────────────────────────────────────────────────────────────
+class _GreetingPill extends StatelessWidget {
+  final String text;
+  final IconData icon;
+  const _GreetingPill({
+    required this.text,
+    this.icon = Icons.wb_sunny_rounded,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFECFDF5),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFA7F3D0), width: 1.5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: const Color(0xFF059669)),
+          const SizedBox(width: 5),
+          Text(
+            text,
+            style: GoogleFonts.inter(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF059669),
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// LOGO CON ORBIT RING Y BADGES
+// ─────────────────────────────────────────────────────────────
+class _OrbitLogo extends StatelessWidget {
+  const _OrbitLogo();
+
+  Widget _badge({
+    required String label,
+    required IconData icon,
+    double? top,
+    double? bottom,
+    double? left,
+    double? right,
+  }) {
+    return Positioned(
+      top: top,
+      bottom: bottom,
+      left: left,
+      right: right,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF059669).withOpacity(0.18),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 10, color: const Color(0xFF059669)),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF059669),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 150,
+      height: 150,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          // Orbit ring
+          Container(
+            width: 136,
+            height: 136,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: const Color(0xFF059669).withOpacity(0.25),
+                width: 1.5,
+              ),
+            ),
+          ),
+          // Logo
+          const _LogoMark(size: 92),
+          // Badges
+          _badge(
+            label: 'Ventas',
+            icon: Icons.shopping_cart_rounded,
+            top: 2,
+            right: -18,
+          ),
+          _badge(
+            label: 'Turnos',
+            icon: Icons.access_time_filled_rounded,
+            bottom: 8,
+            right: -12,
+          ),
+          _badge(
+            label: 'Caja',
+            icon: Icons.credit_card_rounded,
+            bottom: 8,
+            left: -12,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// FONDO HERO MÓVIL (compartido por bienvenida y login)
+// ─────────────────────────────────────────────────────────────
+Widget _mobileHeroFondo() {
+  return Stack(
+    children: [
+      Positioned.fill(
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFFECFDF5), Color(0xFFD1FAE5), Color(0xFFCCFBF1)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              stops: [0.0, 0.45, 1.0],
+            ),
+          ),
+        ),
+      ),
+      Positioned.fill(
+        child: CustomPaint(painter: _LightBgCirclesPainter()),
+      ),
+    ],
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// LAYOUT MÓVIL — controlador de dos vistas
+// ─────────────────────────────────────────────────────────────
+class _MobileLoginLayout extends StatefulWidget {
+  final GlobalKey<FormState> formKey;
+  final TextEditingController userCtrl, passCtrl;
+  final FocusNode passFocus;
+  final bool obscure;
+  final AuthProvider auth;
+  final VoidCallback onToggleObscure, onLogin;
+
+  const _MobileLoginLayout({
+    required this.formKey,
+    required this.userCtrl,
+    required this.passCtrl,
+    required this.passFocus,
+    required this.obscure,
+    required this.auth,
+    required this.onToggleObscure,
+    required this.onLogin,
+  });
+
+  @override
+  State<_MobileLoginLayout> createState() => _MobileLoginLayoutState();
+}
+
+class _MobileLoginLayoutState extends State<_MobileLoginLayout> {
+  bool _enForm = false;
+
+  void _irAForm() => setState(() => _enForm = true);
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 420),
+      transitionBuilder: (child, animation) => SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 1),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        )),
+        child: child,
+      ),
+      child: _enForm
+          ? _MobileFormView(
+              key: const ValueKey('form'),
+              formKey:         widget.formKey,
+              userCtrl:        widget.userCtrl,
+              passCtrl:        widget.passCtrl,
+              passFocus:       widget.passFocus,
+              obscure:         widget.obscure,
+              auth:            widget.auth,
+              onToggleObscure: widget.onToggleObscure,
+              onLogin:         widget.onLogin,
+            )
+          : _MobileWelcomeView(
+              key: const ValueKey('welcome'),
+              onIniciar: _irAForm,
+            ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// VISTA BIENVENIDA (primera pantalla móvil)
+// ─────────────────────────────────────────────────────────────
+class _MobileWelcomeView extends StatelessWidget {
+  final VoidCallback onIniciar;
+  const _MobileWelcomeView({super.key, required this.onIniciar});
+
+  static String _saludo() {
+    final h = DateTime.now().hour;
+    if (h >= 5 && h < 12)   return 'Buenos días';
+    if (h >= 12 && h <= 19) return 'Buenas tardes';
+    return 'Buenas noches';
+  }
+
+  static const _msgs = [
+    '¡Que las ventas de hoy superen las de ayer!',
+    'Cada cliente es una oportunidad. ¡Adelante!',
+    '¡Buen turno! El equipo cuenta contigo.',
+    'Un gran día comienza con una gran actitud.',
+    'Hoy es un buen día para cerrar con todo.',
+    '¡Arranca fuerte! El turno es tuyo.',
+    '¡Que fluya la caja hoy! Mucho éxito.',
+  ];
+  static const _dias  = [
+    'Domingo', 'Lunes', 'Martes', 'Miércoles',
+    'Jueves', 'Viernes', 'Sábado',
+  ];
+  static const _meses = [
+    'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+    'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final now    = DateTime.now();
+    final diaTxt = '${_dias[now.weekday % 7]}, ${now.day} de ${_meses[now.month - 1]}';
+    final msgTxt = _msgs[now.weekday % 7];
+
+    return Scaffold(
+      body: Stack(
+        children: [
+          _mobileHeroFondo(),
+          Column(
+            children: [
+              // ── Hero logo
+              Expanded(
+                flex: 50,
+                child: SafeArea(
+                  bottom: false,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const _OrbitLogo(),
+                      const SizedBox(height: 18),
+                      Text(
+                        'POS MULTITIENDA',
+                        style: GoogleFonts.inter(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          color: const Color(0xFF065F46),
+                          letterSpacing: 2.5,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        'Sistema de gestión de ventas',
+                        style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          color: const Color(0xFF0D9488),
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // ── Tarjeta inferior
+              Expanded(
+                flex: 50,
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.95),
+                    borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(28)),
+                    border: Border(
+                      top: BorderSide(
+                        color: const Color(0xFFA7F3D0).withOpacity(0.6),
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(28, 20, 28, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Center(
+                          child: Container(
+                            width: 40, height: 4,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFA7F3D0),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+
+                        _GreetingPill(text: _saludo()),
+                        const SizedBox(height: 10),
+
+                        RichText(
+                          text: TextSpan(
+                            style: GoogleFonts.inter(
+                              fontSize: 36,
+                              fontWeight: FontWeight.w900,
+                              color: const Color(0xFF064E3B),
+                              letterSpacing: -1.5,
+                              height: 1.08,
+                            ),
+                            children: const [
+                              TextSpan(text: '¿Listos\n'),
+                              TextSpan(
+                                text: 'para hoy?',
+                                style: TextStyle(color: Color(0xFF059669)),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Tarjeta del día
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFF0FDF8), Color(0xFFECFDF5)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: const Color(0xFFA7F3D0),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 40, height: 40,
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFF059669),
+                                      Color(0xFF0D9488),
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(
+                                  Icons.access_time_filled_rounded,
+                                  size: 20, color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      diaTxt.toUpperCase(),
+                                      style: GoogleFonts.inter(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: const Color(0xFF0D9488),
+                                        letterSpacing: 0.8,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      msgTxt,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF064E3B),
+                                        height: 1.35,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Botón CTA
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [
+                                  Color(0xFF059669),
+                                  Color(0xFF0D9488),
+                                  Color(0xFF14B8A6),
+                                ],
+                                stops: [0.0, 0.6, 1.0],
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF059669)
+                                      .withOpacity(0.35),
+                                  blurRadius: 18,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: ElevatedButton(
+                              onPressed: onIniciar,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.transparent,
+                                shadowColor: Colors.transparent,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'Iniciar Sesión',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Icon(
+                                      Icons.arrow_forward_rounded, size: 17),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Versión
+                        Center(
+                          child: ValueListenableBuilder<Map<String, dynamic>?>(
+                            valueListenable: UpdateService.updateDisponible,
+                            builder: (ctx, info, _) {
+                              final hayUpdate = info != null;
+                              return Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    hayUpdate
+                                        ? Icons.system_update_rounded
+                                        : Icons.check_circle_rounded,
+                                    size: 11,
+                                    color: hayUpdate
+                                        ? const Color(0xFFDC2626)
+                                        : const Color(0xFF059669),
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    hayUpdate
+                                        ? 'v$currentVersion → v${info!['version']} disponible'
+                                        : 'v$currentVersion — al día',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: hayUpdate
+                                          ? const Color(0xFFDC2626)
+                                          : const Color(0xFF86BFAA),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// VISTA FORMULARIO (segunda pantalla móvil)
+// ─────────────────────────────────────────────────────────────
+class _MobileFormView extends StatelessWidget {
+  final GlobalKey<FormState> formKey;
+  final TextEditingController userCtrl, passCtrl;
+  final FocusNode passFocus;
+  final bool obscure;
+  final AuthProvider auth;
+  final VoidCallback onToggleObscure, onLogin;
+
+  const _MobileFormView({
+    super.key,
+    required this.formKey,
+    required this.userCtrl,
+    required this.passCtrl,
+    required this.passFocus,
+    required this.obscure,
+    required this.auth,
+    required this.onToggleObscure,
+    required this.onLogin,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Stack(
+        children: [
+          _mobileHeroFondo(),
+          Column(
+            children: [
+              // ── Hero logo (42%)
+              Expanded(
+                flex: 42,
+                child: SafeArea(
+                  bottom: false,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const _LogoMark(size: 76),
+                      const SizedBox(height: 16),
+                      Text(
+                        'POS MULTITIENDA',
+                        style: GoogleFonts.inter(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                          color: const Color(0xFF065F46),
+                          letterSpacing: 2.5,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        'Sistema de gestión de ventas',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: const Color(0xFF0D9488),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // ── Tarjeta formulario (58%)
+              Expanded(
+                flex: 58,
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.95),
+                    borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(28)),
+                    border: Border(
+                      top: BorderSide(
+                        color: const Color(0xFFA7F3D0).withOpacity(0.6),
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(28, 20, 28, 24),
+                    child: Form(
+                      key: formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Center(
+                            child: Container(
+                              width: 40, height: 4,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFA7F3D0),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+
+                          const _GreetingPill(
+                            text: 'BIENVENIDO/A',
+                            icon: Icons.waving_hand_rounded,
+                          ),
+                          const SizedBox(height: 10),
+
+                          Text(
+                            'Inicia sesión',
+                            style: GoogleFonts.inter(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w900,
+                              color: const Color(0xFF064E3B),
+                              letterSpacing: -1.0,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Ingresa tus credenciales para continuar',
+                            style: GoogleFonts.inter(
+                              fontSize: 12.5,
+                              color: _C.textSecond,
+                            ),
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          _Label(text: 'CÉDULA O CORREO'),
+                          const SizedBox(height: 8),
+                          _Field(
+                            controller:      userCtrl,
+                            hint:            'Cédula o correo electrónico',
+                            icon:            Icons.badge_outlined,
+                            keyboardType:    TextInputType.text,
+                            textInputAction: TextInputAction.next,
+                            autofocus:       false,
+                            onSubmit:        (_) =>
+                                FocusScope.of(context).requestFocus(passFocus),
+                            validator: (v) {
+                              if (v == null || v.isEmpty)
+                                return 'Ingresa tu cédula o correo';
+                              return null;
+                            },
+                          ),
+
+                          const SizedBox(height: 14),
+
+                          const _Label(text: 'CONTRASEÑA'),
+                          const SizedBox(height: 8),
+                          _Field(
+                            controller:      passCtrl,
+                            hint:            '••••••••',
+                            icon:            Icons.lock_outline_rounded,
+                            obscureText:     obscure,
+                            focusNode:       passFocus,
+                            textInputAction: TextInputAction.done,
+                            onSubmit:        (_) {
+                              if (!auth.isLoading) onLogin();
+                            },
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                obscure
+                                    ? Icons.visibility_off_outlined
+                                    : Icons.visibility_outlined,
+                                size: 18, color: _C.textHint,
+                              ),
+                              onPressed: onToggleObscure,
+                            ),
+                            validator: (v) {
+                              if (v == null || v.isEmpty)
+                                return 'Ingresa tu contraseña';
+                              if (v.length < 6)
+                                return 'Mínimo 6 caracteres';
+                              return null;
+                            },
+                          ),
+
+                          if (auth.errorMsg.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            _ErrorBox(msg: auth.errorMsg),
+                          ],
+
+                          const SizedBox(height: 20),
+
+                          _LoginButton(
+                              loading: auth.isLoading, onPressed: onLogin),
+
+                          const SizedBox(height: 16),
+
+                          Center(
+                            child: Wrap(
+                              alignment: WrapAlignment.center,
+                              children: [
+                                Text(
+                                  '¿Problemas para ingresar? ',
+                                  style: GoogleFonts.inter(
+                                      fontSize: 12, color: _C.textSecond),
+                                ),
+                                GestureDetector(
+                                  onTap: _abrirWhatsAppAdmin,
+                                  child: Text(
+                                    'Contacta al admin',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      color: _C.greenDark,
+                                      fontWeight: FontWeight.w600,
+                                      decoration: TextDecoration.underline,
+                                      decorationColor: _C.greenDark,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 14),
+
+                          Center(
+                            child: ValueListenableBuilder<Map<String, dynamic>?>(
+                              valueListenable: UpdateService.updateDisponible,
+                              builder: (ctx, info, _) {
+                                final hayUpdate = info != null;
+                                return GestureDetector(
+                                  onTap: hayUpdate
+                                      ? () => UpdateService.mostrarDialogo(ctx)
+                                      : null,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        hayUpdate
+                                            ? Icons.system_update_rounded
+                                            : Icons.check_circle_rounded,
+                                        size: 11,
+                                        color: hayUpdate
+                                            ? const Color(0xFFDC2626)
+                                            : const Color(0xFF059669),
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        hayUpdate
+                                            ? 'v$currentVersion → v${info!['version']} disponible'
+                                            : 'v$currentVersion — al día',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          color: hayUpdate
+                                              ? const Color(0xFFDC2626)
+                                              : const Color(0xFF86BFAA),
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

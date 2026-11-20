@@ -11,6 +11,8 @@ class SesionCaja {
   final double ventasTarjeta;
   final double ventasTransferencia;
   final double ventasMixtoEfectivo;
+  final double ventasMixtoTarjeta;
+  final double ventasMixtoTransferencia;
   final double ventasBono;
   final int    numTransacciones;
   final double gastosTotal;
@@ -48,8 +50,10 @@ class SesionCaja {
     this.ventasEfectivo      = 0,
     this.ventasTarjeta       = 0,
     this.ventasTransferencia = 0,
-    this.ventasMixtoEfectivo = 0,
-    this.ventasBono          = 0,
+    this.ventasMixtoEfectivo      = 0,
+    this.ventasMixtoTarjeta       = 0,
+    this.ventasMixtoTransferencia = 0,
+    this.ventasBono               = 0,
     this.numTransacciones    = 0,
     this.gastosTotal         = 0,
     this.numGastos           = 0,
@@ -92,7 +96,9 @@ class SesionCaja {
     ventasEfectivo:      double.tryParse(json['ventas_efectivo']?.toString()      ?? '0') ?? 0,
     ventasTarjeta:       double.tryParse(json['ventas_tarjeta']?.toString()       ?? '0') ?? 0,
     ventasTransferencia: double.tryParse(json['ventas_transferencia']?.toString() ?? '0') ?? 0,
-    ventasMixtoEfectivo: double.tryParse(json['ventas_mixto_efectivo']?.toString() ?? '0') ?? 0,
+    ventasMixtoEfectivo:     double.tryParse(json['ventas_mixto_efectivo']?.toString()     ?? '0') ?? 0,
+    ventasMixtoTarjeta:      double.tryParse(json['ventas_mixto_tarjeta']?.toString()      ?? '0') ?? 0,
+    ventasMixtoTransferencia:double.tryParse(json['ventas_mixto_transferencia']?.toString() ?? '0') ?? 0,
     ventasBono:          double.tryParse(json['ventas_bono']?.toString()          ?? '0') ?? 0,
     numTransacciones:    (json['num_transacciones'] as num?)?.toInt()                      ?? 0,
     gastosTotal:         double.tryParse(json['gastos_total']?.toString()         ?? '0') ?? 0,

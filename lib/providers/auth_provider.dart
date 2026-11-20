@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/documento_service.dart';
+import '../core/dashboard_cache.dart';
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
@@ -74,6 +75,7 @@ class AuthProvider extends ChangeNotifier {
   // ── Logout ─────────────────────────────────────────────
 
   Future<void> logout() async {
+    clearAllDashboardCaches();
     await _authService.logout();
     _isLoading     = false;
     _isLoggedIn    = false;

@@ -1,5 +1,10 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:provider/provider.dart';
 import '../../models/sesion_historial.dart';
 import '../../providers/auth_provider.dart';
@@ -134,8 +139,8 @@ class _FormatosDiariosScreenState extends State<FormatosDiariosScreen> {
       almacen:      full.tiendaNombre.toUpperCase(),
       fecha:        fecha,
       encargado:    full.empleadoNombre.toUpperCase(),
-      numeroVentas: full.numTransacciones,
-      totalVentas:  full.ventasTotal,
+      numeroVentas: (full.numTransacciones - full.ventasBonoNum) + full.numIngresosSep + full.numAbonos,
+      totalVentas:  (full.ventasTotal - full.ventasBono) + full.ingresosSepEfectivo + full.ingresosSepTarjeta + full.ingresosSepTransferencia + full.abonosEfectivo + full.abonosCreditoEfectivo + full.abonosTarjeta + full.abonosTransferencia,
       realizo:      full.empleadoNombre,
       observaciones: full.observaciones,
       filas: [
@@ -210,61 +215,135 @@ class _FormatosDiariosScreenState extends State<FormatosDiariosScreen> {
       ),
     );
 
+    final captureKey = GlobalKey();
+
     showDialog(
       context: ctx,
-      builder: (_) => Dialog(
-        insetPadding: const EdgeInsets.all(16),
-        backgroundColor: const Color(0xFFE9ECEF),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: SizedBox(
-          width: 960,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            // Cabecera
-            Container(
-              padding: const EdgeInsets.fromLTRB(20, 14, 8, 14),
-              decoration: const BoxDecoration(
-                color: _cNavy,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-              ),
-              child: Row(children: [
-                const Icon(Icons.table_chart_outlined,
-                    color: Colors.white70, size: 18),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Registro de Movimiento Diario',
-                          style: GoogleFonts.inter(
-                              color: Colors.white,
-                              fontSize: 14, fontWeight: FontWeight.w700)),
-                      Text('Sesión #${full.id} · ${full.tiendaNombre}',
-                          style: GoogleFonts.inter(
-                              color: Colors.white54, fontSize: 11)),
-                    ],
+      builder: (_) => StatefulBuilder(
+        builder: (ctx2, setState) {
+          bool enviando = false;
+
+          Future<void> enviarWA() async {
+            setState(() => enviando = true);
+            try {
+              // Capturar el widget como imagen y convertir a PDF
+              final boundary = captureKey.currentContext!
+                  .findRenderObject() as RenderRepaintBoundary;
+              final uiImage = await boundary.toImage(pixelRatio: 2.0);
+              final byteData = await uiImage.toByteData(
+                  format: ui.ImageByteFormat.png);
+              final pngBytes = byteData!.buffer.asUint8List();
+
+              final pageW = PdfPageFormat.a4.landscape.width;
+              final pageH = uiImage.height * pageW / uiImage.width;
+              final pdfDoc = pw.Document();
+              pdfDoc.addPage(pw.Page(
+                pageFormat: PdfPageFormat(pageW, pageH),
+                margin: pw.EdgeInsets.zero,
+                build: (_) => pw.Image(pw.MemoryImage(pngBytes)),
+              ));
+              final bytes = Uint8List.fromList(await pdfDoc.save());
+
+              final ts = DateTime.now().millisecondsSinceEpoch;
+              final filename =
+                  'REGISTRO_${full.id}_${ts}_${full.tiendaNombre.replaceAll(' ', '_')}.pdf';
+              final res = await CajaService().enviarFormatoDiarioWhatsApp(
+                full.id, bytes, filename,
+              );
+              if (!ctx2.mounted) return;
+              final ok = res['success'] == true;
+              ScaffoldMessenger.of(ctx2).showSnackBar(SnackBar(
+                content: Text(ok
+                    ? 'Formato enviado por WhatsApp ✓'
+                    : 'Error: ${res['error'] ?? 'No se pudo enviar'}'),
+                backgroundColor: ok ? _cGreen : const Color(0xFFBA1A1A),
+              ));
+            } catch (e) {
+              if (!ctx2.mounted) return;
+              ScaffoldMessenger.of(ctx2).showSnackBar(SnackBar(
+                content: Text('Error al generar PDF: $e'),
+                backgroundColor: const Color(0xFFBA1A1A),
+              ));
+            } finally {
+              if (ctx2.mounted) setState(() => enviando = false);
+            }
+          }
+
+          return Dialog(
+            insetPadding: const EdgeInsets.all(16),
+            backgroundColor: const Color(0xFFE9ECEF),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: SizedBox(
+              width: 960,
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                // Cabecera
+                Container(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 8, 14),
+                  decoration: const BoxDecoration(
+                    color: _cNavy,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                   ),
+                  child: Row(children: [
+                    const Icon(Icons.table_chart_outlined,
+                        color: Colors.white70, size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Registro de Movimiento Diario',
+                              style: GoogleFonts.inter(
+                                  color: Colors.white,
+                                  fontSize: 14, fontWeight: FontWeight.w700)),
+                          Text('Sesión #${full.id} · ${full.tiendaNombre}',
+                              style: GoogleFonts.inter(
+                                  color: Colors.white54, fontSize: 11)),
+                        ],
+                      ),
+                    ),
+                    // Botón WhatsApp
+                    enviando
+                        ? const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 12),
+                            child: SizedBox(
+                              width: 18, height: 18,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white70),
+                            ),
+                          )
+                        : IconButton(
+                            onPressed: enviarWA,
+                            tooltip: 'Enviar a WhatsApp',
+                            icon: const Icon(Icons.send_rounded,
+                                color: Color(0xFF25D366), size: 20),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx2),
+                      icon: const Icon(Icons.close_rounded,
+                          color: Colors.white60, size: 20),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ]),
                 ),
-                IconButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  icon: const Icon(Icons.close_rounded,
-                      color: Colors.white60, size: 20),
-                  visualDensity: VisualDensity.compact,
+                // Cuerpo
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: RepaintBoundary(
+                      key: captureKey,
+                      child: Material(
+                        elevation: 4,
+                        borderRadius: BorderRadius.circular(2),
+                        child: RegistroMovimientoDiario(data: data),
+                      ),
+                    ),
+                  ),
                 ),
               ]),
             ),
-            // Cuerpo
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Material(
-                  elevation: 4,
-                  borderRadius: BorderRadius.circular(2),
-                  child: RegistroMovimientoDiario(data: data),
-                ),
-              ),
-            ),
-          ]),
-        ),
+          );
+        },
       ),
     );
   }

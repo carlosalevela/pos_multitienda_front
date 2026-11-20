@@ -858,14 +858,99 @@ pw.Widget _ventasDetalleTable(SesionHistorial sesion) {
       ));
     }
 
-    rows.add(pw.TableRow(
-      decoration: const pw.BoxDecoration(color: _pSurfLow),
-      children: [
-        _tdLabel('TOTAL  (${detalle.length} ventas)', bold: true),
-        _tdLabel(''), _tdLabel(''), _tdLabel(''), _tdLabel(''),
-        _tdNum(sesion.ventasTotal, bold: true),
-      ],
-    ));
+    // Fila subtotal ventas (solo si hay abonos que mostrar después)
+    final abonos = sesion.abonosDetalle;
+    if (abonos.isNotEmpty) {
+      rows.add(pw.TableRow(
+        decoration: const pw.BoxDecoration(color: _pSurfLow),
+        children: [
+          _tdLabel('SUBTOTAL VENTAS (${detalle.length})', bold: true),
+          _tdLabel(''), _tdLabel(''), _tdLabel(''), _tdLabel(''),
+          _tdNum(sesion.ventasTotal, bold: true),
+        ],
+      ));
+      // Filas de abonos
+      for (int i = 0; i < abonos.length; i++) {
+        final a      = abonos[i];
+        final hora   = a['hora']?.toString() ?? '';
+        final desc   = a['descripcion']?.toString() ?? 'Abono a separado';
+        final metodo = a['metodo_pago']?.toString() ?? '';
+        final cuenta = a['cuenta_nombre']?.toString() ?? '';
+        final mLabel = cuenta.isNotEmpty ? cuenta : (
+          metodo == 'efectivo' ? 'Efectivo' :
+          metodo == 'tarjeta'  ? 'Datáfono' : 'Transf.');
+        final monto  = double.tryParse(a['monto']?.toString() ?? '0') ?? 0.0;
+        rows.add(pw.TableRow(
+          decoration: pw.BoxDecoration(color: i.isOdd ? _pSurfLow : _pWhite),
+          children: [
+            pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: pw.Text('ABONO',
+                  style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold,
+                      color: const PdfColor.fromInt(0xFF5B21B6))),
+            ),
+            pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: pw.Text(hora,
+                  style: pw.TextStyle(fontSize: 8, color: _pOutline)),
+            ),
+            pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: pw.Text(desc,
+                  style: pw.TextStyle(fontSize: 8, color: _pOnVar)),
+            ),
+            pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: pw.Text(mLabel,
+                  textAlign: pw.TextAlign.center,
+                  style: pw.TextStyle(fontSize: 8, color: _pOnVar)),
+            ),
+            pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: pw.Text('Abono a separado',
+                  style: pw.TextStyle(fontSize: 8, color: _pOutline,
+                      fontStyle: pw.FontStyle.italic)),
+            ),
+            pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: pw.Text(_m(monto),
+                  textAlign: pw.TextAlign.right,
+                  style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold,
+                      color: _pOnSurf)),
+            ),
+          ],
+        ));
+      }
+      // Total ingresos (ventas + abonos)
+      rows.add(pw.TableRow(
+        decoration: const pw.BoxDecoration(color: _pNavy),
+        children: [
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: pw.Text('TOTAL INGRESOS  (${detalle.length} ventas + ${abonos.length} abonos)',
+                style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold,
+                    color: _pWhite)),
+          ),
+          _tdLabel(''), _tdLabel(''), _tdLabel(''), _tdLabel(''),
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: pw.Text(_m(sesion.ventasTotal + sesion.abonosTotal),
+                textAlign: pw.TextAlign.right,
+                style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold,
+                    color: _pGreenLight)),
+          ),
+        ],
+      ));
+    } else {
+      rows.add(pw.TableRow(
+        decoration: const pw.BoxDecoration(color: _pSurfLow),
+        children: [
+          _tdLabel('TOTAL  (${detalle.length} ventas)', bold: true),
+          _tdLabel(''), _tdLabel(''), _tdLabel(''), _tdLabel(''),
+          _tdNum(sesion.ventasTotal, bold: true),
+        ],
+      ));
+    }
   }
 
   return pw.Table(
@@ -1211,6 +1296,10 @@ pw.Widget _cuadreCard(
           fila('(+) Ventas en efectivo',             s.ventasEfectivo),
           if (s.ventasMixtoEfectivo > 0)
             fila('(+) Ventas mixto (ef.)',           s.ventasMixtoEfectivo),
+          if (s.ventasBonoEfectivo > 0)
+            fila('(+) Bonos + diferencia (ef.)',     s.ventasBonoEfectivo),
+          if (s.ingresosSepEfectivo > 0)
+            fila('(+) Ingresos separados (ef.)',     s.ingresosSepEfectivo),
           if (s.abonosEfectivo > 0)
             fila('(+) Abonos separados (ef.)',       s.abonosEfectivo),
           if (s.abonosCreditoEfectivo > 0)

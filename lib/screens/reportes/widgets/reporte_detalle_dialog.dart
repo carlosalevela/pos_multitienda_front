@@ -399,6 +399,26 @@ class _ReporteDetalleDialogState extends State<ReporteDetalleDialog> {
                                 color: Colors.blue.shade700),
                           ]);
                         }(),
+                      ] else if (metodo == 'mixto' && pagos.isNotEmpty) ...[
+                        ...pagos.map((p) {
+                          final pMetodo = p['metodo']?.toString() ?? '';
+                          final pMonto  = double.tryParse(p['monto']?.toString() ?? '0') ?? 0;
+                          final label   = switch (pMetodo) {
+                            'efectivo'      => 'Efectivo',
+                            'tarjeta'       => 'Tarjeta',
+                            'transferencia' => 'Transferencia',
+                            _               => pMetodo,
+                          };
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: _filaTotal(label, pMonto),
+                          );
+                        }),
+                        if (vuelto > 0) ...[
+                          const SizedBox(height: 2),
+                          _filaTotal('Cambio / vuelto', vuelto,
+                              color: Colors.green.shade700),
+                        ],
                       ] else ...[
                         _filaTotal('Recibido', recibido),
                         if (vuelto > 0) ...[

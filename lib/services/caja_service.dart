@@ -224,6 +224,29 @@ class CajaService {
     }
   }
 
+  Future<Map<String, dynamic>> enviarFormatoDiarioWhatsApp(
+    int sesionId, Uint8List pdfBytes, String filename,
+  ) async {
+    try {
+      final formData = FormData.fromMap({
+        'pdf': MultipartFile.fromBytes(
+          pdfBytes,
+          filename: filename,
+          contentType: DioMediaType('application', 'pdf'),
+        ),
+      });
+      final r = await ApiClient.instance.post(
+        '/caja/historial/$sesionId/enviar-formato-diario/',
+        data: formData,
+      );
+      return {'success': true, 'data': r.data};
+    } on DioException catch (e) {
+      return {'success': false, 'error': _extractError(e, 'Error enviando formato diario por WhatsApp')};
+    } catch (e) {
+      return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
+
   // ── Historial de sesiones ──────────────────────────────
 
   Future<Map<String, dynamic>> getHistorialSesiones({
