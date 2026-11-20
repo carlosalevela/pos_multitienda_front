@@ -11,6 +11,8 @@ class CajaProvider extends ChangeNotifier {
   SesionCaja?           _sesionActiva;
   SesionCaja?           _ultimaSesionCerrada;
   ResumenCierre?        _resumenCierre;
+  ResumenCierre?        _ultimoResumenCierre;
+  double                _ultimoMontoFinalReal = 0;
   List<SesionHistorial> _historial = [];         // ← CAMBIAR tipo
   bool   _cargando   = false;
   bool   _procesando = false;
@@ -25,6 +27,8 @@ class CajaProvider extends ChangeNotifier {
   SesionCaja?           get sesionActiva          => _sesionActiva;
   SesionCaja?           get ultimaSesionCerrada   => _ultimaSesionCerrada;
   ResumenCierre?        get resumenCierre         => _resumenCierre;
+  ResumenCierre?        get ultimoResumenCierre   => _ultimoResumenCierre;
+  double                get ultimoMontoFinalReal  => _ultimoMontoFinalReal;
   List<SesionHistorial> get historial         => _historial;  // ← CAMBIAR tipo
   bool   get cargando         => _cargando;
   bool   get procesando       => _procesando;
@@ -134,6 +138,8 @@ class CajaProvider extends ChangeNotifier {
 
       if (result['success'] == true) {
         _ultimaSesionCerrada = _sesionActiva;
+        _ultimoResumenCierre = _resumenCierre;
+        _ultimoMontoFinalReal = montoFinalReal;
         _sesionActiva  = null;
         _resumenCierre = null;
         _successMsg    = '✅ Caja cerrada correctamente';

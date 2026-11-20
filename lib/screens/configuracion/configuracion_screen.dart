@@ -376,13 +376,15 @@ class _TiendaPicker extends StatelessWidget {
                       isExpanded: true,
                       isDense: true,
                       style: const TextStyle(fontSize: 13, color: Color(0xFF111827)),
-                      items: tiendas.map((t) => DropdownMenuItem(
-                        value: t,
-                        child: t.empresaNombre.isNotEmpty
-                            ? Text('${t.nombre}  (${t.empresaNombre})',
-                                overflow: TextOverflow.ellipsis)
-                            : Text(t.nombre),
-                      )).toList(),
+                      items: { for (final t in tiendas) t.id: t }
+                          .values
+                          .map((t) => DropdownMenuItem(
+                            value: t,
+                            child: t.empresaNombre.isNotEmpty
+                                ? Text('${t.nombre}  (${t.empresaNombre})',
+                                    overflow: TextOverflow.ellipsis)
+                                : Text(t.nombre),
+                          )).toList(),
                       onChanged: (t) { if (t != null) onSeleccionar(t); },
                     ),
                   ),
@@ -425,9 +427,9 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Colors.white,
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
       decoration: const BoxDecoration(
+        color: Colors.white,
         border: Border(bottom: BorderSide(color: Color(0xFFE0E3E5))),
       ),
       child: Row(children: [

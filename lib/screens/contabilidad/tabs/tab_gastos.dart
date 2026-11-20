@@ -67,7 +67,9 @@ class _TabGastosState extends State<TabGastos> {
   void didUpdateWidget(TabGastos oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.tiendaId != widget.tiendaId) {
-      _aplicarFiltro();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _aplicarFiltro();
+      });
     }
   }
 

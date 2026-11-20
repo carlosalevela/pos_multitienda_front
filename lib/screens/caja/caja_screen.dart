@@ -102,6 +102,8 @@ class _CajaScreenState extends State<CajaScreen>
                                   auth: auth,
                                   saldoCtrl: _saldoCtrl,
                                   onCajaAbierta: () {},
+                                  ultimoResumen: caja.ultimoResumenCierre,
+                                  ultimoMontoFinal: caja.ultimoMontoFinalReal,
                                 ),
                               ),
               ),

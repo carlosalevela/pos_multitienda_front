@@ -112,7 +112,9 @@ class _TabResumenState extends State<TabResumen> {
   void didUpdateWidget(TabResumen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.tiendaId != widget.tiendaId) {
-      _recargarVista(_vista);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _recargarVista(_vista);
+      });
     }
   }
 

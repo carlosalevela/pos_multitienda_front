@@ -52,26 +52,26 @@ class _TiendasScreenState extends State<TiendasScreen> {
           // ── KPIs ────────────────────────────────────────
           Row(
             children: [
-              StatCard(
+              Expanded(child: StatCard(
                 label: 'Total tiendas',
                 value: '${prov.tiendas.length}',
                 icon: Icons.store_rounded,
                 color: Colors.blue,
-              ),
+              )),
               const SizedBox(width: 12),
-              StatCard(
+              Expanded(child: StatCard(
                 label: 'Activas',
                 value: '${prov.totalActivas}',
                 icon: Icons.check_circle_rounded,
                 color: Colors.green,
-              ),
+              )),
               const SizedBox(width: 12),
-              StatCard(
+              Expanded(child: StatCard(
                 label: 'Inactivas',
                 value: '${prov.totalInactivas}',
                 icon: Icons.cancel_rounded,
                 color: Colors.red,
-              ),
+              )),
             ],
           ),
           const SizedBox(height: 16),

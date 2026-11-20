@@ -14,7 +14,12 @@ class ApiClient {
         baseUrl:        Constants.baseUrl,
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 45),
-        headers:        {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept':        'application/json',
+          // Cloudflare bloquea user-agents no-browser (Dart/X.X); usamos uno de Chrome
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
       ),
     );
 
@@ -22,10 +27,16 @@ class ApiClient {
       InterceptorsWrapper(
         // ── Inyectar token ──────────────────────────────
         onRequest: (options, handler) async {
-          final prefs = await SharedPreferences.getInstance();
-          final token = prefs.getString('access_token');
-          if (token != null) {
-            options.headers['Authorization'] = 'Bearer $token';
+          try {
+            final prefs = await SharedPreferences.getInstance()
+                .timeout(const Duration(seconds: 3));
+            final token = prefs.getString('access_token');
+            if (token != null) {
+              options.headers['Authorization'] = 'Bearer $token';
+            }
+          } catch (_) {
+            // Si SharedPreferences falla o tarda, omitir el token
+            // pero SIEMPRE continuar — sin esto el request queda colgado
           }
           return handler.next(options);
         },

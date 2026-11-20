@@ -13,11 +13,14 @@ import '../../../services/thermal_printer_service.dart';
 import '../../../services/windows_printer_service.dart';
 import '../../../models/contabilidad_models.dart';
 import '../../../models/resumen_cierre.dart';
+import 'registro_movimiento_diario.dart';
 import '../../../models/sesion_caja.dart';
 import '../../../models/sesion_historial.dart';
 import '../../../services/caja_service.dart';
 import '../../../services/contabilidad_service.dart';
 import '../../../services/cuenta_bancaria_service.dart';
+import '../../../services/documento_service.dart';
+import '../../../services/formato_pdf_service.dart';
 import 'pdf/cierre_pdf.dart';
 
 // ── Enterprise palette ─────────────────────────────────────────
@@ -60,7 +63,18 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
   late Animation<double>   _fadeAnim;
   late Animation<Offset>   _slideAnim;
 
-  static const _pasoLabels = ['Resumen', 'Conteo', 'Resultado'];
+  static const _pasoLabels = ['Resumen', 'Conteo', 'Resultado', 'Registro'];
+
+  // ── Paso 4: datos del cierre ya completado (guardados al cerrar caja) ──
+  int?    _p4SesionId;
+  double? _p4MontoFinal;
+  String  _p4Obs      = '';
+  dynamic _p4TipoPapel;
+  ResumenCierre? _p4Resumen;
+  String _p4Nit = '', _p4Dir = '', _p4Tel = '';
+  int    _p4TiendaId  = 0;
+  ScaffoldMessengerState? _p4Msgr;
+
 
   @override
   void initState() {
@@ -121,7 +135,8 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
     final cont    = context.watch<CajaProvider>();
     final resumen = cont.resumenCierre;
 
-    if (resumen == null) {
+    // En paso 4 el resumen del provider puede ser null (caja ya cerrada), usar el guardado
+    if (resumen == null && _paso != 4) {
       return Dialog(
         backgroundColor: _cSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -139,6 +154,8 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
         ),
       );
     }
+    // Para paso 4 usamos el resumen guardado antes del cierre
+    final effectiveResumen = resumen ?? _p4Resumen!;
 
     final screenSize   = MediaQuery.of(context).size;
     final dialogWidth  = (screenSize.width  * 0.88).clamp(700.0, 880.0);
@@ -164,17 +181,19 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(children: [
-          _buildHeader(resumen),
+          _buildHeader(effectiveResumen),
           Expanded(
             child: FadeTransition(
               opacity: _fadeAnim,
               child: SlideTransition(
                 position: _slideAnim,
                 child: _paso == 1
-                    ? _buildPaso1(resumen)
+                    ? _buildPaso1(effectiveResumen)
                     : _paso == 2
-                        ? _buildPaso2(resumen)
-                        : _buildPaso3(resumen),
+                        ? _buildPaso2(effectiveResumen)
+                        : _paso == 3
+                            ? _buildPaso3(effectiveResumen)
+                            : _buildPaso4(_p4Resumen ?? effectiveResumen),
               ),
             ),
           ),
@@ -246,7 +265,7 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
         // Stepper
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 0, 24, 18),
-          child: Row(children: List.generate(3, (i) {
+          child: Row(children: List.generate(4, (i) {
             final idx    = i + 1;
             final activo = idx == _paso;
             final pasado = idx < _paso;
@@ -255,7 +274,7 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                 index: idx, label: _pasoLabels[i],
                 activo: activo, pasado: pasado,
               )),
-              if (i < 2)
+              if (i < 3)
                 Expanded(
                   child: Container(
                     height: 1.5,
@@ -297,6 +316,14 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
               _ItemRow('Transferencia', r.ventas.transferencia, _cPurple, Icons.swap_horiz_rounded),
               if (r.ventas.mixto > 0)
                 _ItemRow('Mixto',       r.ventas.mixto,         _cAmber,  Icons.compare_arrows_rounded),
+              if (r.ventas.bono > 0)
+                _ItemRow('Bono (100%)',    r.ventas.bono,              _cAmber, Icons.card_giftcard_rounded),
+              if (r.ventas.bonoEfectivo > 0)
+                _ItemRow('Bono+Ef. (ef.)', r.ventas.bonoEfectivo,     _cGreen, Icons.card_giftcard_rounded),
+              if (r.ventas.bonoTarjeta > 0)
+                _ItemRow('Bono+Tar.',      r.ventas.bonoTarjeta,      _cBlue,  Icons.card_giftcard_rounded),
+              if (r.ventas.bonoTransferencia > 0)
+                _ItemRow('Bono+Tra.',      r.ventas.bonoTransferencia, _cPurple, Icons.card_giftcard_rounded),
               const _CardDiv(),
               _TotalRow('TOTAL VENTAS', _f(r.ventas.total), _cNavy),
               const SizedBox(height: 6),
@@ -572,8 +599,10 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                 _EsperadoChip('Ventas ef.',    _f(r.ventas.efectivo)),
                 if (r.ventas.mixtoEfectivo > 0)
                   _EsperadoChip('Mixto ef.',   _f(r.ventas.mixtoEfectivo)),
-                if (r.abonos.efectivo > 0)
-                  _EsperadoChip('Abonos sep.', _f(r.abonos.efectivo)),
+                if (r.ventas.bonoEfectivo > 0)
+                  _EsperadoChip('Bono ef.',    _f(r.ventas.bonoEfectivo)),
+                if (r.abonos.efectivo + r.abonos.ingresosSepEfectivo > 0)
+                  _EsperadoChip('Abonos sep.', _f(r.abonos.efectivo + r.abonos.ingresosSepEfectivo)),
                 if (r.abonos.creditoEfectivo > 0)
                   _EsperadoChip('Cartera ef.', _f(r.abonos.creditoEfectivo)),
                 if (r.gastos.efectivo > 0)
@@ -845,110 +874,395 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
 
   Widget _buildTicket(ResumenCierre r, String resultado,
       Color color, String hora, double dif) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _cSurface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _cBorder),
+
+    // ── Colores papel térmico ──────────────────────────────────
+    const kPaper   = Color(0xFFFEFDF8);
+    const kInk     = Color(0xFF1A1A1A);
+    const kInkMid  = Color(0xFF555555);
+    const kInkDim  = Color(0xFF999999);
+
+    // ── Helpers internos ──────────────────────────────────────
+    TextStyle ts({bool bold = false, Color? c, double sz = 11}) => TextStyle(
+        fontFamily: 'monospace', fontSize: sz, color: c ?? kInk,
+        fontWeight: bold ? FontWeight.bold : FontWeight.normal, height: 1.35);
+
+    String ml(String m) => switch (m) {
+      'tarjeta'            => 'Tarjeta',
+      'transferencia'      => 'Transf.',
+      'mixto'              => 'Mixto',
+      'credito'            => 'Credito',
+      'bono'               => 'Bono',
+      'bono_efectivo'      => 'Bono+Ef.',
+      'bono_tarjeta'       => 'Bono+Tar.',
+      'bono_transferencia' => 'Bono+Tra.',
+      _                    => 'Efectivo',
+    };
+
+    Widget rdiv() => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Text('─' * 32, style: ts(c: kInkDim)),
+    );
+
+    Widget rsec(String t) => Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 2),
+      child: Text('─── $t ───',
+          style: ts(bold: true), textAlign: TextAlign.center),
+    );
+
+    Widget rrow(String label, String val, {bool bold = false, Color? valC}) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1.5),
+        child: Row(children: [
+          Expanded(child: Text(label, style: ts(bold: bold, c: bold ? kInk : kInkMid))),
+          Text(val, style: ts(bold: bold, c: valC ?? kInk)),
+        ]),
+      );
+
+    return Center(
+      child: Container(
+        width: 300,
+        decoration: BoxDecoration(
+          color: kPaper,
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.20),
+                blurRadius: 24, offset: const Offset(0, 6)),
+            BoxShadow(color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 4, offset: const Offset(0, 1)),
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+
+          // ── Encabezado ──────────────────────────────────────
+          Text(r.tiendaNombre.toUpperCase(),
+              textAlign: TextAlign.center, style: ts(bold: true, sz: 13)),
+          const SizedBox(height: 2),
+          Text('CIERRE DE TURNO',
+              textAlign: TextAlign.center, style: ts(bold: true)),
+          rdiv(),
+          rrow('Turno #:', '#${r.sesionId}'),
+          rrow('Cajero:', r.empleadoNombre),
+          rrow('Apertura:', _formatFecha(r.fechaApertura)),
+          rrow('Cierre:', hora),
+          rdiv(),
+
+          // ── Detalle FAC ──────────────────────────────────────
+          if (r.ventasDetalle.isNotEmpty) ...[
+            Text('[ FACTURAS ]',
+                textAlign: TextAlign.center, style: ts(bold: true)),
+            ...r.ventasDetalle.map((v) {
+              final total = double.tryParse(v['total']?.toString()       ?? '0') ?? 0;
+              final metodo = ml(v['metodo_pago']?.toString()             ?? '');
+              final fac   = v['numero_factura']?.toString()
+                         ?? '#${v['id']}';
+              final prods = (v['productos'] as List? ?? []).cast<Map>();
+              return Column(crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                const SizedBox(height: 5),
+                Row(children: [
+                  Expanded(child: Text('$fac  $metodo', style: ts(bold: true))),
+                  Text(_f(total), style: ts(bold: true)),
+                ]),
+                ...prods.map((p) {
+                  final nombre  = p['producto']?.toString()     ?? '';
+                  final cant    = double.tryParse(
+                      p['cantidad']?.toString()  ?? '1') ?? 1;
+                  final sub     = double.tryParse(
+                      p['subtotal']?.toString()  ?? '0') ?? 0;
+                  final cantStr = cant == cant.roundToDouble()
+                      ? cant.toInt().toString()
+                      : cant.toStringAsFixed(1);
+                  final corto   = nombre.length > 16
+                      ? '${nombre.substring(0, 15)}.' : nombre;
+                  return Row(children: [
+                    Expanded(child: Text(
+                        '  $cantStr x $corto', style: ts(c: kInkMid))),
+                    Text(_f(sub), style: ts(c: kInkMid)),
+                  ]);
+                }),
+              ]);
+            }),
+            rdiv(),
+            rrow('TOTAL FAC:', _f(r.ventas.total), bold: true),
+            rdiv(),
+          ],
+
+          // ── Detalle Abonos / Separados ───────────────────────
+          if (r.abonos.detalle.isNotEmpty) ...[
+            Text('[ ABONOS SEP ]',
+                textAlign: TextAlign.center, style: ts(bold: true)),
+            ...r.abonos.detalle.map((a) {
+              final mon  = double.tryParse(a['monto']?.toString()       ?? '0') ?? 0;
+              final met  = ml(a['metodo_pago']?.toString()              ?? '');
+              final desc = a['descripcion']?.toString()                 ?? '';
+              final h    = a['hora']?.toString()                        ?? '';
+              return Column(crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                const SizedBox(height: 4),
+                Row(children: [
+                  Expanded(child: Text('$h  $met', style: ts(bold: true))),
+                  Text(_f(mon), style: ts(bold: true)),
+                ]),
+                if (desc.isNotEmpty)
+                  Text('  $desc', style: ts(c: kInkMid)),
+              ]);
+            }),
+            rdiv(),
+          ],
+
+          // ── Resumen ventas ───────────────────────────────────
+          rsec('VENTAS'),
+          rrow('Efectivo',         _f(r.ventas.efectivo)),
+          if (r.ventas.tarjeta > 0)
+            rrow('Tarjeta',        _f(r.ventas.tarjeta)),
+          if (r.ventas.transferencia > 0)
+            rrow('Transferencia',  _f(r.ventas.transferencia)),
+          if (r.ventas.mixto > 0) ...[
+            rrow('Mixto',          _f(r.ventas.mixto)),
+            if (r.ventas.mixtoEfectivo > 0)
+              rrow('  Mixto ef.',  _f(r.ventas.mixtoEfectivo)),
+          ],
+          if (r.ventas.bono > 0)
+            rrow('Bonos redimidos', _f(r.ventas.bono)),
+          if (r.ventas.bonoDifBonoParte > 0 ||
+              r.ventas.bonoEfectivo > 0 ||
+              r.ventas.bonoTarjeta > 0 ||
+              r.ventas.bonoTransferencia > 0) ...[
+            rrow('Bonos+dif.', _f(r.ventas.bonoDifBonoParte +
+                r.ventas.bonoEfectivo +
+                r.ventas.bonoTarjeta +
+                r.ventas.bonoTransferencia)),
+            if (r.ventas.bonoEfectivo > 0)
+              rrow('  ef.',    _f(r.ventas.bonoEfectivo),      valC: kInkMid),
+            if (r.ventas.bonoTarjeta > 0)
+              rrow('  tar.',   _f(r.ventas.bonoTarjeta),       valC: kInkMid),
+            if (r.ventas.bonoTransferencia > 0)
+              rrow('  tra.',   _f(r.ventas.bonoTransferencia), valC: kInkMid),
+            if (r.ventas.bonoDifBonoParte > 0)
+              rrow('  bono',   _f(r.ventas.bonoDifBonoParte),  valC: kInkMid),
+          ],
+          rdiv(),
+          rrow('TOTAL',          _f(r.ventas.total), bold: true),
+          rrow('Transacciones',  '${r.ventas.numTransacciones}'),
+
+          // ── Compra de bonos ──────────────────────────────────
+          if (r.compraBonos.total > 0) ...[
+            rsec('COMPRA DE BONOS'),
+            if (r.compraBonos.efectivo > 0)
+              rrow('Efectivo',      _f(r.compraBonos.efectivo)),
+            if (r.compraBonos.tarjeta > 0)
+              rrow('Tarjeta',       _f(r.compraBonos.tarjeta)),
+            if (r.compraBonos.transferencia > 0)
+              rrow('Transferencia', _f(r.compraBonos.transferencia)),
+            rdiv(),
+            rrow('TOTAL',    _f(r.compraBonos.total), bold: true),
+            rrow('Cantidad', '${r.compraBonos.cantidad}'),
+          ],
+
+          // ── Abonos totales ───────────────────────────────────
+          if (r.abonos.total > 0 || r.abonos.ingresosSepEfectivo > 0) ...[
+            rsec('ABONOS / SEPARADOS'),
+            if (r.abonos.ingresosSepEfectivo > 0)
+              rrow('Sep. ini. ef.',  _f(r.abonos.ingresosSepEfectivo)),
+            if (r.abonos.ingresosSepTarjeta > 0)
+              rrow('Sep. ini. tar.', _f(r.abonos.ingresosSepTarjeta)),
+            if (r.abonos.ingresosSepTransferencia > 0)
+              rrow('Sep. ini. tra.', _f(r.abonos.ingresosSepTransferencia)),
+            if (r.abonos.efectivo > 0)
+              rrow('Abonos ef.',     _f(r.abonos.efectivo)),
+            if (r.abonos.tarjeta > 0)
+              rrow('Tarjeta',        _f(r.abonos.tarjeta)),
+            if (r.abonos.transferencia > 0)
+              rrow('Transfer.',      _f(r.abonos.transferencia)),
+            rdiv(),
+            rrow('TOTAL',  _f(r.abonos.total +
+                r.abonos.ingresosSepEfectivo +
+                r.abonos.ingresosSepTarjeta +
+                r.abonos.ingresosSepTransferencia), bold: true),
+            rrow('Abonos', '${r.abonos.cantidad}'),
+          ],
+
+          if (r.abonos.creditoEfectivo > 0) ...[
+            rsec('ABONOS CARTERA'),
+            rrow('Efectivo', _f(r.abonos.creditoEfectivo)),
+          ],
+
+          // ── Gastos ───────────────────────────────────────────
+          rsec('GASTOS'),
+          if (r.gastos.detalle.isEmpty)
+            rrow('Sin gastos', '--')
+          else ...[
+            ...r.gastos.detalle.map((g) => rrow(g.categoria, '-${_f(g.monto)}')),
+            rdiv(),
+            rrow('TOTAL', '-${_f(r.gastos.total)}', bold: true),
+          ],
+
+          // ── Devoluciones ─────────────────────────────────────
+          if (r.devoluciones.cantidad > 0) ...[
+            rsec('DEVOLUCIONES'),
+            if (r.devoluciones.cambiosProducto > 0)
+              rrow('Cambio producto', '${r.devoluciones.cambiosProducto}'),
+            if (r.devoluciones.efectivo > 0)
+              rrow('Dev. efectivo',   '-${_f(r.devoluciones.efectivo)}'),
+            if (r.devoluciones.cambiosDevolver > 0)
+              rrow('Dif. devuelta',   '-${_f(r.devoluciones.cambiosDevolver)}'),
+            if (r.devoluciones.cambiosCobrar > 0)
+              rrow('Dif. cobrada',    '+${_f(r.devoluciones.cambiosCobrar)}'),
+            rdiv(),
+            rrow('NETO EF.',
+                r.devoluciones.netoEfectivo >= 0
+                    ? '-${_f(r.devoluciones.netoEfectivo)}'
+                    : '+${_f(-r.devoluciones.netoEfectivo)}',
+                bold: true),
+          ],
+
+          // ── Resultado ────────────────────────────────────────
+          rsec('RESULTADO'),
+          rrow('Contado',  _f(_montoIngresado)),
+          rrow('Esperado', _f(r.montoEsperadoCaja)),
+          rdiv(),
+          rrow(resultado,
+              '${dif >= 0 ? '+' : '-'}${_f(dif.abs())}',
+              bold: true, valC: color),
+
+          if (_obsCtrl.text.isNotEmpty) ...[
+            rsec('OBSERVACIONES'),
+            Text(_obsCtrl.text, style: ts(c: kInkMid)),
+          ],
+
+          const SizedBox(height: 12),
+          Text('── POS Multitienda ──',
+              textAlign: TextAlign.center, style: ts(c: kInkDim)),
+        ]),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Center(child: Column(children: [
-          Text('─────────────────────', style: _mono(_cBorder)),
-          Text('  CORTE #${r.sesionId}  ', style: _mono(_cText, bold: true)),
-          Text('  ${r.tiendaNombre}  ',     style: _mono(_cTextSec)),
-          Text('  $hora  ',                 style: _mono(_cTextMuted)),
-          Text('─────────────────────', style: _mono(_cBorder)),
-        ])),
-        const SizedBox(height: 10),
-
-        _tSec('RESPONSABLE'),
-        _tFila('Cajero',   r.empleadoNombre),
-        _tFila('Apertura', _formatFecha(r.fechaApertura)),
-        _tFila('Cierre',   hora),
-
-        const SizedBox(height: 2),
-        _tSec('VENTAS'),
-        _tFila('Efectivo',      _f(r.ventas.efectivo)),
-        _tFila('Tarjeta',       _f(r.ventas.tarjeta)),
-        _tFila('Transferencia', _f(r.ventas.transferencia)),
-        if (r.ventas.mixto > 0) ...[
-          _tFila('Mixto (total)',   _f(r.ventas.mixto)),
-          if (r.ventas.mixtoEfectivo > 0)
-            _tFila('  Mixto ef.', _f(r.ventas.mixtoEfectivo)),
-        ],
-        _tDiv(),
-        _tFila('TOTAL',         _f(r.ventas.total), bold: true),
-        _tFila('Transacciones', '${r.ventas.numTransacciones}'),
-
-        if (r.abonos.total > 0) ...[
-          const SizedBox(height: 2),
-          _tSec('ABONOS / SEPARADOS'),
-          if (r.abonos.efectivo > 0)      _tFila('Efectivo',  _f(r.abonos.efectivo)),
-          if (r.abonos.tarjeta > 0)       _tFila('Tarjeta',   _f(r.abonos.tarjeta)),
-          if (r.abonos.transferencia > 0) _tFila('Transfer.', _f(r.abonos.transferencia)),
-          _tDiv(),
-          _tFila('TOTAL',  _f(r.abonos.total),      bold: true),
-          _tFila('Abonos', '${r.abonos.cantidad}'),
-        ],
-
-        if (r.abonos.creditoEfectivo > 0) ...[
-          const SizedBox(height: 2),
-          _tSec('ABONOS CARTERA'),
-          _tFila('Efectivo', _f(r.abonos.creditoEfectivo)),
-        ],
-
-        const SizedBox(height: 2),
-        _tSec('GASTOS'),
-        if (r.gastos.detalle.isEmpty)
-          _tFila('Sin gastos', '--')
-        else ...[
-          ...r.gastos.detalle.map((g) => _tFila(g.categoria, '-${_f(g.monto)}')),
-          _tDiv(),
-          _tFila('TOTAL', '-${_f(r.gastos.total)}', bold: true),
-        ],
-
-        if (r.devoluciones.cantidad > 0) ...[
-          const SizedBox(height: 2),
-          _tSec('DEVOLUCIONES'),
-          if (r.devoluciones.cambiosProducto > 0)
-            _tFila('Cambio producto', '${r.devoluciones.cambiosProducto}'),
-          if (r.devoluciones.efectivo > 0)
-            _tFila('Dev. efectivo',   '-${_f(r.devoluciones.efectivo)}'),
-          if (r.devoluciones.cambiosDevolver > 0)
-            _tFila('Dif. devuelta',   '-${_f(r.devoluciones.cambiosDevolver)}'),
-          if (r.devoluciones.cambiosCobrar > 0)
-            _tFila('Dif. cobrada',    '+${_f(r.devoluciones.cambiosCobrar)}'),
-          _tDiv(),
-          _tFila(
-            'NETO EF.',
-            r.devoluciones.netoEfectivo >= 0
-                ? '-${_f(r.devoluciones.netoEfectivo)}'
-                : '+${_f(-r.devoluciones.netoEfectivo)}',
-            bold: true,
-          ),
-        ],
-
-        const SizedBox(height: 2),
-        _tSec('RESULTADO FINAL'),
-        _tFila('Contado',  _f(_montoIngresado)),
-        _tFila('Esperado', _f(r.montoEsperadoCaja)),
-        _tDiv(),
-        _tFila(resultado,  '${dif >= 0 ? '+' : '-'}${_f(dif.abs())}',
-            bold: true, color: color),
-
-        if (_obsCtrl.text.isNotEmpty) ...[
-          const SizedBox(height: 2),
-          _tSec('OBSERVACIONES'),
-          Text(_obsCtrl.text, style: _mono(Colors.white38)),
-        ],
-
-        const SizedBox(height: 12),
-        Center(child: Text('── POS Multitienda ──', style: _mono(Colors.white12))),
-      ]),
     );
   }
+
+  // ══════════════════════════════════════════════════
+  // PASO 4 — Registro de Movimiento Diario (preview)
+  // ══════════════════════════════════════════════════
+  Widget _buildPaso4(ResumenCierre r) {
+    DateTime fecha;
+    try { fecha = DateTime.parse(r.fechaApertura).toLocal(); }
+    catch (_) { fecha = DateTime.now(); }
+
+    final diferencia = (_p4MontoFinal ?? 0) - r.montoEsperadoCaja;
+    final sobrante   = diferencia > 0 ? diferencia : 0.0;
+    final faltante   = diferencia < 0 ? diferencia.abs() : 0.0;
+
+    final cb        = r.compraBonos;
+    final efVentas  = r.ventas.efectivo + r.ventas.mixtoEfectivo - cb.efectivo;
+    final devEfNeto = r.devoluciones.cambiosCobrar - r.devoluciones.cambiosDevolver - r.devoluciones.efectivo;
+
+    final dtTotal   = r.ventas.tarjeta  + r.abonos.tarjeta + r.abonos.ingresosSepTarjeta - cb.tarjeta;
+    final trTotal   = r.ventas.transferencia + r.abonos.transferencia + r.abonos.ingresosSepTransferencia - cb.transferencia;
+    final nVentas   = r.ventas.numTransacciones - cb.cantidad;
+
+    final dtCount   = r.ventasDetalle.where((v) => v['metodo_pago'] == 'tarjeta').length - (cb.tarjeta > 0 ? 1 : 0);
+    final trCount   = r.ventasDetalle.where((v) => v['metodo_pago'] == 'transferencia').length - (cb.transferencia > 0 ? 1 : 0);
+    final bonoCount = r.ventasDetalle.where((v) =>
+        (v['metodo_pago'] as String? ?? '').contains('bono')).length;
+
+    final data = RegistroMovimientoData(
+      almacen:      r.tiendaNombre.toUpperCase(),
+      fecha:        fecha,
+      encargado:    r.empleadoNombre.toUpperCase(),
+      numeroVentas: r.ventas.numTransacciones,
+      totalVentas:  r.ventas.total,
+      realizo:      r.empleadoNombre,
+      observaciones: _p4Obs,
+      filas: [
+        FilaRegistro(signo: '+', concepto: 'VENTAS EN CAJA',
+            cantidad: nVentas,
+            montos: efVentas > 0 ? {MedioPago.efectivo: efVentas} : {}),
+        FilaRegistro(signo: '+', concepto: 'INGRESOS SEPARADOS',
+            cantidad: r.abonos.numIngresosSep,
+            montos: {
+              if (r.abonos.ingresosSepEfectivo > 0)      MedioPago.efectivo:    r.abonos.ingresosSepEfectivo,
+              if (r.abonos.ingresosSepTarjeta > 0)       MedioPago.datafono:    r.abonos.ingresosSepTarjeta,
+              if (r.abonos.ingresosSepTransferencia > 0) MedioPago.bancolombia: r.abonos.ingresosSepTransferencia,
+            }),
+        FilaRegistro(signo: '+', concepto: 'ABONOS PAGOS CLIENTES',
+            cantidad: r.abonos.cantidad,
+            montos: {
+              if ((r.abonos.efectivo + r.abonos.creditoEfectivo) > 0) MedioPago.efectivo: r.abonos.efectivo + r.abonos.creditoEfectivo,
+              if (r.abonos.tarjeta > 0)       MedioPago.datafono:    r.abonos.tarjeta,
+              if (r.abonos.transferencia > 0) MedioPago.bancolombia: r.abonos.transferencia,
+            }),
+        FilaRegistro(signo: '+', concepto: 'DEVOLUCIONES',
+            cantidad: r.devoluciones.cantidad,
+            montos: {
+              if (devEfNeto != 0)                                MedioPago.efectivo:    devEfNeto,
+              if (r.devoluciones.netoCambiosTarjeta != 0)        MedioPago.datafono:    r.devoluciones.netoCambiosTarjeta,
+              if (r.devoluciones.netoCambiosTransferencia != 0)  MedioPago.bancolombia: r.devoluciones.netoCambiosTransferencia,
+            }),
+        FilaRegistro(signo: '+', concepto: 'COMPRA DE BONOS',
+            cantidad: r.compraBonos.cantidad,
+            montos: {
+              if (r.compraBonos.efectivo > 0)      MedioPago.efectivo:    r.compraBonos.efectivo,
+              if (r.compraBonos.tarjeta > 0)        MedioPago.datafono:    r.compraBonos.tarjeta,
+              if (r.compraBonos.transferencia > 0)  MedioPago.bancolombia: r.compraBonos.transferencia,
+            }),
+        FilaRegistro(signo: '+', concepto: 'DATÁFONO',
+            cantidad: dtCount,
+            montos: dtTotal > 0 ? {MedioPago.datafono: dtTotal} : {}),
+        FilaRegistro(signo: '+', concepto: 'TRANSFERENCIAS',
+            cantidad: trCount,
+            montos: trTotal > 0 ? {MedioPago.bancolombia: trTotal} : {}),
+        FilaRegistro(signo: '+', concepto: 'BONOS REDIMIDOS',
+            cantidad: r.ventas.bonoNum,
+            montos: r.ventas.bono > 0
+                ? {MedioPago.bono: r.ventas.bono} : {}),
+        FilaRegistro(signo: '+', concepto: 'BONOS + DIFERENCIA',
+            cantidad: r.ventas.bonoDifNum,
+            montos: {
+              if (r.ventas.bonoEfectivo > 0)        MedioPago.efectivo:    r.ventas.bonoEfectivo,
+              if (r.ventas.bonoTarjeta > 0)          MedioPago.datafono:    r.ventas.bonoTarjeta,
+              if (r.ventas.bonoTransferencia > 0)    MedioPago.bancolombia: r.ventas.bonoTransferencia,
+              if (r.ventas.bonoDifBonoParte > 0)     MedioPago.bono:        r.ventas.bonoDifBonoParte,
+            }),
+        FilaRegistro(signo: '+', concepto: 'TOTAL EFECTIVO',
+            cantidad: r.ventas.numTransacciones,
+            montos: {MedioPago.efectivo: r.montoEsperadoCaja + r.gastos.efectivo - r.montoInicial}),
+        FilaRegistro(signo: '−', concepto: 'GASTOS',
+            cantidad: r.gastos.cantidad,
+            montos: r.gastos.efectivo > 0 ? {MedioPago.efectivo: r.gastos.efectivo} : {}),
+        FilaRegistro(signo: '+', concepto: 'SOBRANTES',
+            cantidad: sobrante > 0 ? 1 : 0,
+            montos: sobrante > 0 ? {MedioPago.efectivo: sobrante} : {}),
+        FilaRegistro(signo: '−', concepto: 'FALTANTE',
+            cantidad: faltante > 0 ? 1 : 0,
+            montos: faltante > 0 ? {MedioPago.efectivo: faltante} : {}),
+      ],
+      totalEntregado: FilaRegistro(
+        signo: '+',
+        concepto: 'TOTAL EFECTIVO ENTREGADO',
+        cantidad: r.ventas.numTransacciones,
+        montos: {MedioPago.efectivo: (_p4MontoFinal ?? 0) - r.montoInicial},
+      ),
+    );
+
+    return Container(
+      color: const Color(0xFFE9ECEF),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(children: [
+          Material(
+            elevation: 6,
+            child: RegistroMovimientoDiario(data: data),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Una vez copiado al formato físico, presiona "Listo, ya copié".',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF555555),
+                fontStyle: FontStyle.italic),
+          ),
+        ]),
+      ),
+    );
+  }
+
 
   // ══════════════════════════════════════════════════
   // FOOTER
@@ -965,12 +1279,17 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
         )],
       ),
       child: Row(children: [
-        if (_paso > 1)
+        // No hay botón "Atrás" en paso 4 porque el cierre ya fue confirmado
+        if (_paso > 1 && _paso < 4)
           _GhostBtn(
             label: 'Atras',
             icon: Icons.arrow_back_rounded,
             onPressed: () => _irAPaso(_paso - 1),
           ),
+        if (_paso == 4)
+          Text('Cierre #${_p4SesionId ?? '—'} completado',
+              style: GoogleFonts.inter(
+                  fontSize: 11, color: _cTextMuted, fontStyle: FontStyle.italic)),
         const Spacer(),
         if (_paso == 1)
           _GhostBtn(
@@ -1000,15 +1319,14 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
               }
               setState(() => _montoIngresado = monto);
               _irAPaso(3);
-            } else {
-              // Capturar sesionId y datos de respaldo ANTES de cerrar
+            } else if (_paso == 3) {
+              // Capturar datos de respaldo ANTES de cerrar
               final r          = cont.resumenCierre;
               final sesionId   = r?.sesionId;
               final obs        = _obsCtrl.text.trim();
               final montoFinal = _montoIngresado;
               final cfg        = context.read<ConfigProvider>();
               final tipoPapel  = cfg.tipoPapel;
-              // Capturar antes del pop para evitar usar context desmontado
               final nit        = cfg.nit;
               final dir        = cfg.direccion;
               final tel        = cfg.telefono;
@@ -1020,23 +1338,47 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                 observaciones:  obs,
               );
               if (ok && mounted) {
-                Navigator.pop(context);
                 unawaited(_kickCajonCierre());
-                if (sesionId != null) {
-                  unawaited(_imprimirCierreFinalizado(
-                    sesionId:   sesionId,
-                    montoFinal: montoFinal,
-                    obs:        obs,
-                    tipoPapel:  tipoPapel,
-                    fallback:   r,
-                    nit:        nit,
-                    dir:        dir,
-                    tel:        tel,
-                    tiendaId:   tiendaId,
-                    messenger:  messenger,
-                  ));
-                }
-                await Future.delayed(const Duration(milliseconds: 600));
+                // Guardar params para usarlos al confirmar el registro
+                setState(() {
+                  _p4SesionId   = sesionId;
+                  _p4MontoFinal = montoFinal;
+                  _p4Obs        = obs;
+                  _p4TipoPapel  = tipoPapel;
+                  _p4Resumen    = r;
+                  _p4Nit        = nit;
+                  _p4Dir        = dir;
+                  _p4Tel        = tel;
+                  _p4TiendaId   = tiendaId;
+                  _p4Msgr       = messenger;
+                });
+                _irAPaso(4);
+              }
+            } else {
+              // Paso 4: registro completado → cerrar y enviar PDF/WhatsApp
+              // Capturamos el resumen antes de cerrar el widget
+              final resumenParaFormato = _p4Resumen;
+              final montoParaFormato   = _p4MontoFinal ?? 0;
+              final sesionParaFormato  = _p4SesionId;
+              Navigator.pop(context);
+              if (sesionParaFormato != null) {
+                unawaited(_imprimirCierreFinalizado(
+                  sesionId:   sesionParaFormato,
+                  montoFinal: montoParaFormato,
+                  obs:        _p4Obs,
+                  tipoPapel:  _p4TipoPapel,
+                  fallback:   _p4Resumen,
+                  nit:        _p4Nit,
+                  dir:        _p4Dir,
+                  tel:        _p4Tel,
+                  tiendaId:   _p4TiendaId,
+                  messenger:  _p4Msgr,
+                ));
+              }
+              // Auto-guardar PDF del formato diario en la carpeta local
+              if (resumenParaFormato != null) {
+                unawaited(_guardarFormatoPdf(
+                    resumenParaFormato, montoParaFormato, sesionParaFormato));
               }
             }
           },
@@ -1314,6 +1656,117 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
         'detalles': detalles,
       };
     }).toList();
+  }
+
+  Future<void> _guardarFormatoPdf(
+      ResumenCierre r, double montoFinalReal, int? sesionId) async {
+    try {
+      final fecha      = DateTime.now();
+      final diferencia = montoFinalReal - r.montoEsperadoCaja;
+      final sobrante   = diferencia > 0 ? diferencia : 0.0;
+      final faltante   = diferencia < 0 ? -diferencia : 0.0;
+
+      final pdfCb       = r.compraBonos;
+      final efVentas  = r.ventas.efectivo + r.ventas.mixtoEfectivo - pdfCb.efectivo;
+      final devEfNeto = r.devoluciones.cambiosCobrar - r.devoluciones.cambiosDevolver - r.devoluciones.efectivo;
+      final pdfDtTotal  = r.ventas.tarjeta  + r.abonos.tarjeta + r.abonos.ingresosSepTarjeta - pdfCb.tarjeta;
+      final pdfTrTotal  = r.ventas.transferencia + r.abonos.transferencia + r.abonos.ingresosSepTransferencia - pdfCb.transferencia;
+      final pdfNVentas  = r.ventas.numTransacciones - pdfCb.cantidad;
+      final pdfDtCount  = r.ventasDetalle.where((v) => v['metodo_pago'] == 'tarjeta').length - (pdfCb.tarjeta > 0 ? 1 : 0);
+      final pdfTrCount  = r.ventasDetalle.where((v) => v['metodo_pago'] == 'transferencia').length - (pdfCb.transferencia > 0 ? 1 : 0);
+      final pdfBonoCount = r.ventasDetalle.where((v) =>
+          (v['metodo_pago'] as String? ?? '').contains('bono')).length;
+
+      final data = RegistroMovimientoData(
+        almacen:      r.tiendaNombre.toUpperCase(),
+        fecha:        fecha,
+        encargado:    r.empleadoNombre.toUpperCase(),
+        numeroVentas: r.ventas.numTransacciones,
+        totalVentas:  r.ventas.total,
+        realizo:      r.empleadoNombre,
+        observaciones: _p4Obs,
+        filas: [
+          FilaRegistro(signo: '+', concepto: 'VENTAS EN CAJA',
+              cantidad: pdfNVentas,
+              montos: efVentas > 0 ? {MedioPago.efectivo: efVentas} : {}),
+          FilaRegistro(signo: '+', concepto: 'INGRESOS SEPARADOS',
+              cantidad: r.abonos.numIngresosSep,
+              montos: {
+                if (r.abonos.ingresosSepEfectivo > 0)      MedioPago.efectivo:    r.abonos.ingresosSepEfectivo,
+                if (r.abonos.ingresosSepTarjeta > 0)       MedioPago.datafono:    r.abonos.ingresosSepTarjeta,
+                if (r.abonos.ingresosSepTransferencia > 0) MedioPago.bancolombia: r.abonos.ingresosSepTransferencia,
+              }),
+          FilaRegistro(signo: '+', concepto: 'ABONOS PAGOS CLIENTES',
+              cantidad: r.abonos.cantidad,
+              montos: {
+                if ((r.abonos.efectivo + r.abonos.creditoEfectivo) > 0) MedioPago.efectivo: r.abonos.efectivo + r.abonos.creditoEfectivo,
+                if (r.abonos.tarjeta > 0)       MedioPago.datafono:    r.abonos.tarjeta,
+                if (r.abonos.transferencia > 0) MedioPago.bancolombia: r.abonos.transferencia,
+              }),
+          FilaRegistro(signo: '+', concepto: 'DEVOLUCIONES',
+              cantidad: r.devoluciones.cantidad,
+              montos: {
+                if (devEfNeto != 0)                                MedioPago.efectivo:    devEfNeto,
+                if (r.devoluciones.netoCambiosTarjeta != 0)        MedioPago.datafono:    r.devoluciones.netoCambiosTarjeta,
+                if (r.devoluciones.netoCambiosTransferencia != 0)  MedioPago.bancolombia: r.devoluciones.netoCambiosTransferencia,
+              }),
+          FilaRegistro(signo: '+', concepto: 'COMPRA DE BONOS',
+              cantidad: pdfCb.cantidad,
+              montos: {
+                if (pdfCb.efectivo > 0)      MedioPago.efectivo:    pdfCb.efectivo,
+                if (pdfCb.tarjeta > 0)       MedioPago.datafono:    pdfCb.tarjeta,
+                if (pdfCb.transferencia > 0) MedioPago.bancolombia: pdfCb.transferencia,
+              }),
+          FilaRegistro(signo: '+', concepto: 'DATÁFONO',
+              cantidad: pdfDtCount,
+              montos: pdfDtTotal > 0 ? {MedioPago.datafono: pdfDtTotal} : {}),
+          FilaRegistro(signo: '+', concepto: 'TRANSFERENCIAS',
+              cantidad: pdfTrCount,
+              montos: pdfTrTotal > 0 ? {MedioPago.bancolombia: pdfTrTotal} : {}),
+          FilaRegistro(signo: '+', concepto: 'BONOS REDIMIDOS',
+              cantidad: r.ventas.bonoNum,
+              montos: r.ventas.bono > 0 ? {MedioPago.bono: r.ventas.bono} : {}),
+          FilaRegistro(signo: '+', concepto: 'BONOS + DIFERENCIA',
+              cantidad: r.ventas.bonoDifNum,
+              montos: {
+                if (r.ventas.bonoEfectivo > 0)        MedioPago.efectivo:    r.ventas.bonoEfectivo,
+                if (r.ventas.bonoTarjeta > 0)          MedioPago.datafono:    r.ventas.bonoTarjeta,
+                if (r.ventas.bonoTransferencia > 0)    MedioPago.bancolombia: r.ventas.bonoTransferencia,
+                if (r.ventas.bonoDifBonoParte > 0)     MedioPago.bono:        r.ventas.bonoDifBonoParte,
+              }),
+          FilaRegistro(signo: '+', concepto: 'TOTAL EFECTIVO',
+              cantidad: r.ventas.numTransacciones,
+              montos: {MedioPago.efectivo: r.montoEsperadoCaja + r.gastos.efectivo - r.montoInicial}),
+          FilaRegistro(signo: '−', concepto: 'GASTOS',
+              cantidad: r.gastos.cantidad,
+              montos: r.gastos.efectivo > 0
+                  ? {MedioPago.efectivo: r.gastos.efectivo} : {}),
+          if (sobrante > 0)
+            FilaRegistro(signo: '+', concepto: 'SOBRANTES',
+                cantidad: 1,
+                montos: {MedioPago.efectivo: sobrante}),
+          if (faltante > 0)
+            FilaRegistro(signo: '−', concepto: 'FALTANTE',
+                cantidad: 1,
+                montos: {MedioPago.efectivo: faltante}),
+        ],
+        totalEntregado: FilaRegistro(
+          signo: '+',
+          concepto: 'TOTAL EFECTIVO ENTREGADO',
+          cantidad: r.ventas.numTransacciones,
+          montos: {MedioPago.efectivo: montoFinalReal - r.montoInicial},
+        ),
+      );
+
+      final bytes = await generarFormatoDiarioPdf(data);
+      final d  = fecha;
+      final ts = '${d.year}${d.month.toString().padLeft(2,'0')}${d.day.toString().padLeft(2,'0')}';
+      final ref = sesionId != null ? '${sesionId}_$ts' : ts;
+      await DocumentoService.instance.guardarFormato(
+          bytes: bytes, referencia: ref);
+    } catch (e) {
+      debugPrint('FormatoPdf: error al guardar: $e');
+    }
   }
 }
 
@@ -1709,8 +2162,10 @@ class _CajaEsperadaCard extends StatelessWidget {
         _CalcLine('Ventas efectivo',    f(r.ventas.efectivo),             Colors.white,            '+'),
         if (r.ventas.mixtoEfectivo > 0)
           _CalcLine('Ventas mixto (ef.)', f(r.ventas.mixtoEfectivo),     Colors.white,            '+'),
-        if (r.abonos.efectivo > 0)
-          _CalcLine('Abonos separados',   f(r.abonos.efectivo),          const Color(0xFF7DD3FC), '+'),
+        if (r.ventas.bonoEfectivo > 0)
+          _CalcLine('Ventas bono (ef.)',  f(r.ventas.bonoEfectivo),      Colors.white,            '+'),
+        if (r.abonos.efectivo + r.abonos.ingresosSepEfectivo > 0)
+          _CalcLine('Abonos separados',   f(r.abonos.efectivo + r.abonos.ingresosSepEfectivo), const Color(0xFF7DD3FC), '+'),
         if (r.abonos.creditoEfectivo > 0)
           _CalcLine('Abonos cartera',     f(r.abonos.creditoEfectivo),   const Color(0xFF7DD3FC), '+'),
         _CalcLine('Gastos efectivo',    f(r.gastos.efectivo),             const Color(0xFFFFB4AB), '-'),
@@ -1882,16 +2337,21 @@ class _ActionBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final esFinal = paso == 3;
-    final bgColor = esFinal ? _cRed : _cGreen;
+    final esFinal   = paso == 3;
+    final esRegistro = paso == 4;
+    final bgColor = esFinal ? _cRed : esRegistro ? _cGreen : _cGreen;
     final label   = paso == 1 ? 'Continuar'
         : paso == 2 ? 'Ver resultado'
+        : paso == 4 ? 'Listo, ya copié'
         : procesando ? 'Cerrando...' : 'Confirmar cierre';
     final icon = (procesando && esFinal)
         ? const SizedBox(
             width: 14, height: 14,
             child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-        : Icon(esFinal ? Icons.lock_rounded : Icons.arrow_forward_rounded, size: 15);
+        : Icon(esRegistro
+            ? Icons.check_circle_rounded
+            : esFinal ? Icons.lock_rounded : Icons.arrow_forward_rounded,
+            size: 15);
 
     return ElevatedButton.icon(
       icon: icon,
@@ -1907,6 +2367,7 @@ class _ActionBtn extends StatelessWidget {
       ),
     );
   }
+
 }
 
 Future<void> _kickCajonCierre() async {

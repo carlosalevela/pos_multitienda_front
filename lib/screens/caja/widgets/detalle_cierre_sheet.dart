@@ -9,6 +9,7 @@ import '../../../models/sesion_historial.dart';
 import '../../../providers/config_provider.dart';
 import '../../../services/caja_service.dart';
 import 'pdf/cierre_pdf.dart';
+import 'registro_movimiento_diario.dart';
 
 // ── Palette (Enterprise POS – DESIGN.md) ─────────────────
 const _cGreen     = Color(0xFF006C49);
@@ -133,6 +134,164 @@ class _DetalleCierreSheetState extends State<DetalleCierreSheet> {
     });
   }
 
+  void _mostrarRegistro() {
+    final s = sesion;
+    DateTime fecha;
+    try { fecha = DateTime.parse(s.fechaApertura.replaceAll(' ', 'T')).toLocal(); }
+    catch (_) { fecha = DateTime.now(); }
+
+    final diferencia = s.montoFinalReal - s.montoFinalSistema;
+    final sobrante   = diferencia > 0 ? diferencia : 0.0;
+    final faltante   = diferencia < 0 ? diferencia.abs() : 0.0;
+
+    final efVentas  = s.ventasEfectivo + s.ventasMixtoEfectivo - s.compraBonasEfectivo;
+    final dtTotal   = s.ventasTarjeta  + s.abonosTarjeta + s.ingresosSepTarjeta - s.compraBonaTarjeta;
+    final trTotal   = s.ventasTransferencia + s.abonosTransferencia + s.ingresosSepTransferencia - s.compraBonasTransferencia;
+    final nVentas   = s.numTransacciones - s.numCompraBonos;
+    final dtCount   = s.ventasDetalle.where((v) => v['metodo_pago'] == 'tarjeta').length - (s.compraBonaTarjeta > 0 ? 1 : 0);
+    final trCount   = s.ventasDetalle.where((v) => v['metodo_pago'] == 'transferencia').length - (s.compraBonasTransferencia > 0 ? 1 : 0);
+    final bonoCount = s.ventasDetalle.where((v) =>
+        (v['metodo_pago'] as String? ?? '').contains('bono')).length;
+
+    final data = RegistroMovimientoData(
+      almacen:      s.tiendaNombre.toUpperCase(),
+      fecha:        fecha,
+      encargado:    s.empleadoNombre.toUpperCase(),
+      numeroVentas: s.numTransacciones,
+      totalVentas:  s.ventasTotal,
+      realizo:      s.empleadoNombre,
+      observaciones: s.observaciones,
+      filas: [
+        FilaRegistro(signo: '+', concepto: 'VENTAS EN FACTURERO FÍSICO',
+            cantidad: nVentas,
+            montos: efVentas > 0 ? {MedioPago.efectivo: efVentas} : {}),
+        FilaRegistro(signo: '+', concepto: 'INGRESOS SEPARADOS',
+            cantidad: s.numIngresosSep,
+            montos: {
+              if (s.ingresosSepEfectivo > 0)      MedioPago.efectivo:    s.ingresosSepEfectivo,
+              if (s.ingresosSepTarjeta > 0)       MedioPago.datafono:    s.ingresosSepTarjeta,
+              if (s.ingresosSepTransferencia > 0) MedioPago.bancolombia: s.ingresosSepTransferencia,
+            }),
+        FilaRegistro(signo: '+', concepto: 'ABONOS PAGOS CLIENTES',
+            cantidad: s.numAbonos,
+            montos: {
+              if ((s.abonosEfectivo + s.abonosCreditoEfectivo) > 0) MedioPago.efectivo: s.abonosEfectivo + s.abonosCreditoEfectivo,
+              if (s.abonosTarjeta > 0)       MedioPago.datafono:    s.abonosTarjeta,
+              if (s.abonosTransferencia > 0) MedioPago.bancolombia: s.abonosTransferencia,
+            }),
+        FilaRegistro(signo: '+', concepto: 'DEVOLUCIONES',
+            cantidad: s.numDevoluciones,
+            montos: s.devolucionesEfectivo > 0
+                ? {MedioPago.efectivo: s.devolucionesEfectivo} : {}),
+        FilaRegistro(signo: '+', concepto: 'COMPRA DE BONOS',
+            cantidad: s.numCompraBonos,
+            montos: {
+              if (s.compraBonasEfectivo > 0)      MedioPago.efectivo:    s.compraBonasEfectivo,
+              if (s.compraBonaTarjeta > 0)          MedioPago.datafono:    s.compraBonaTarjeta,
+              if (s.compraBonasTransferencia > 0)   MedioPago.bancolombia: s.compraBonasTransferencia,
+            }),
+        FilaRegistro(signo: '+', concepto: 'DATÁFONO',
+            cantidad: dtCount,
+            montos: dtTotal > 0 ? {MedioPago.datafono: dtTotal} : {}),
+        FilaRegistro(signo: '+', concepto: 'TRANSFERENCIAS',
+            cantidad: trCount,
+            montos: trTotal > 0 ? {MedioPago.bancolombia: trTotal} : {}),
+        FilaRegistro(signo: '+', concepto: 'BONOS REDIMIDOS',
+            cantidad: s.ventasBonoNum,
+            montos: s.ventasBono > 0
+                ? {MedioPago.bono: s.ventasBono} : {}),
+        FilaRegistro(signo: '+', concepto: 'BONOS + DIFERENCIA',
+            cantidad: s.ventasBonoDifNum,
+            montos: {
+              if (s.ventasBonoEfectivo > 0)        MedioPago.efectivo:    s.ventasBonoEfectivo,
+              if (s.ventasBonoTarjeta > 0)          MedioPago.datafono:    s.ventasBonoTarjeta,
+              if (s.ventasBonoTransferencia > 0)    MedioPago.bancolombia: s.ventasBonoTransferencia,
+              if (s.ventasBonoDifBonoParte > 0)     MedioPago.bono:        s.ventasBonoDifBonoParte,
+            }),
+        FilaRegistro(signo: '+', concepto: 'TOTAL EFECTIVO',
+            cantidad: s.numTransacciones,
+            montos: {MedioPago.efectivo: s.montoFinalSistema + s.gastosTotal}),
+        FilaRegistro(signo: '−', concepto: 'GASTOS',
+            cantidad: s.numGastos,
+            montos: s.gastosTotal > 0
+                ? {MedioPago.efectivo: s.gastosTotal} : {}),
+        if (sobrante > 0)
+          FilaRegistro(signo: '+', concepto: 'SOBRANTES',
+              cantidad: 1,
+              montos: {MedioPago.efectivo: sobrante}),
+        if (faltante > 0)
+          FilaRegistro(signo: '−', concepto: 'FALTANTE',
+              cantidad: 1,
+              montos: {MedioPago.efectivo: faltante}),
+      ],
+      totalEntregado: FilaRegistro(
+        signo: '+',
+        concepto: 'TOTAL EFECTIVO ENTREGADO',
+        cantidad: s.numTransacciones,
+        montos: {MedioPago.efectivo: s.montoFinalSistema},
+      ),
+    );
+
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        backgroundColor: const Color(0xFFE9ECEF),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: SizedBox(
+          width: 900,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            // Header del diálogo
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 14, 8, 14),
+              decoration: const BoxDecoration(
+                color: Color(0xFF131B2E),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Row(children: [
+                const Icon(Icons.table_chart_outlined,
+                    color: Colors.white70, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text('Registro de Movimiento Diario',
+                      style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 14, fontWeight: FontWeight.w700)),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded,
+                      color: Colors.white60, size: 20),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ]),
+            ),
+            // Cuerpo
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(children: [
+                  Material(
+                    elevation: 4,
+                    borderRadius: BorderRadius.circular(2),
+                    child: RegistroMovimientoDiario(data: data),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Sesión #${s.id} · ${s.tiendaNombre} · ${s.empleadoNombre}',
+                    style: GoogleFonts.inter(
+                        fontSize: 11, color: const Color(0xFF666666),
+                        fontStyle: FontStyle.italic),
+                  ),
+                ]),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
   Future<void> _enviarWhatsApp() async {
     setState(() => _enviandoWa = true);
     try {
@@ -220,6 +379,8 @@ class _DetalleCierreSheetState extends State<DetalleCierreSheet> {
                   enviando: _enviandoWa,
                   onTap: _enviandoWa ? null : _enviarWhatsApp,
                 ),
+                const SizedBox(height: 10),
+                _RegistroFormatoButton(onTap: _mostrarRegistro),
               ],
             ),
           ),
@@ -1023,6 +1184,27 @@ class _WhatsAppButton extends StatelessWidget {
         backgroundColor: const Color(0xFF25D366),
         foregroundColor: Colors.white,
         elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    ),
+  );
+}
+
+class _RegistroFormatoButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _RegistroFormatoButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: double.infinity, height: 52,
+    child: OutlinedButton.icon(
+      icon: const Icon(Icons.table_chart_outlined, size: 18),
+      label: Text('Ver Formato de Movimiento Diario',
+          style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 15)),
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: _cNavy,
+        side: const BorderSide(color: _cOutVar, width: 1.5),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     ),

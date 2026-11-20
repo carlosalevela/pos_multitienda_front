@@ -14,15 +14,21 @@ class SesionCaja {
   final double ventasBono;
   final int    numTransacciones;
   final double gastosTotal;
+  final int    numGastos;
   final double montoEsperado;
   final String tiendaNombre;
   final String empleadoNombre;
-  // Abonos del turno
+  // Abonos posteriores (ABONOS PAGOS CLIENTES)
   final double abonosTotal;
   final double abonosEfectivo;
   final double abonosTarjeta;
   final double abonosTransferencia;
   final int    numAbonos;
+  // Depósitos iniciales (INGRESOS SEPARADOS)
+  final double ingresosSepEfectivo;
+  final double ingresosSepTarjeta;
+  final double ingresosSepTransferencia;
+  final int    numIngresosSep;
   // Devoluciones por método de pago
   final double cambiosCobrarEf;
   final double cambiosCobrarTar;
@@ -46,14 +52,19 @@ class SesionCaja {
     this.ventasBono          = 0,
     this.numTransacciones    = 0,
     this.gastosTotal         = 0,
+    this.numGastos           = 0,
     this.montoEsperado       = 0,
     this.tiendaNombre        = '',
     this.empleadoNombre      = '',
-    this.abonosTotal         = 0,
-    this.abonosEfectivo      = 0,
-    this.abonosTarjeta       = 0,
-    this.abonosTransferencia = 0,
-    this.numAbonos           = 0,
+    this.abonosTotal              = 0,
+    this.abonosEfectivo           = 0,
+    this.abonosTarjeta            = 0,
+    this.abonosTransferencia      = 0,
+    this.numAbonos                = 0,
+    this.ingresosSepEfectivo      = 0,
+    this.ingresosSepTarjeta       = 0,
+    this.ingresosSepTransferencia = 0,
+    this.numIngresosSep           = 0,
     this.cambiosCobrarEf     = 0,
     this.cambiosCobrarTar    = 0,
     this.cambiosDevTar       = 0,
@@ -85,15 +96,20 @@ class SesionCaja {
     ventasBono:          double.tryParse(json['ventas_bono']?.toString()          ?? '0') ?? 0,
     numTransacciones:    (json['num_transacciones'] as num?)?.toInt()                      ?? 0,
     gastosTotal:         double.tryParse(json['gastos_total']?.toString()         ?? '0') ?? 0,
+    numGastos:           (json['num_gastos'] as num?)?.toInt()                           ?? 0,
     montoEsperado:       double.tryParse(json['monto_esperado']?.toString()
                            ?? json['monto_final_sistema']?.toString()             ?? '0') ?? 0,
     tiendaNombre:        json['tienda_nombre']   ?? '',
     empleadoNombre:      json['empleado_nombre'] ?? '',
-    abonosTotal:         double.tryParse(json['abonos_total']?.toString()         ?? '0') ?? 0,
-    abonosEfectivo:      double.tryParse(json['abonos_efectivo']?.toString()      ?? '0') ?? 0,
-    abonosTarjeta:       double.tryParse(json['abonos_tarjeta']?.toString()       ?? '0') ?? 0,
-    abonosTransferencia: double.tryParse(json['abonos_transferencia']?.toString() ?? '0') ?? 0,
-    numAbonos:           (json['num_abonos'] as num?)?.toInt()                             ?? 0,
+    abonosTotal:              double.tryParse(json['abonos_total']?.toString()              ?? '0') ?? 0,
+    abonosEfectivo:           double.tryParse(json['abonos_efectivo']?.toString()           ?? '0') ?? 0,
+    abonosTarjeta:            double.tryParse(json['abonos_tarjeta']?.toString()            ?? '0') ?? 0,
+    abonosTransferencia:      double.tryParse(json['abonos_transferencia']?.toString()      ?? '0') ?? 0,
+    numAbonos:                (json['num_abonos'] as num?)?.toInt()                                  ?? 0,
+    ingresosSepEfectivo:      double.tryParse(json['ingresos_sep_efectivo']?.toString()      ?? '0') ?? 0,
+    ingresosSepTarjeta:       double.tryParse(json['ingresos_sep_tarjeta']?.toString()       ?? '0') ?? 0,
+    ingresosSepTransferencia: double.tryParse(json['ingresos_sep_transferencia']?.toString() ?? '0') ?? 0,
+    numIngresosSep:           (json['num_ingresos_sep'] as num?)?.toInt()                            ?? 0,
     cambiosCobrarEf:     double.tryParse(
                            (json['devoluciones']?['cambios_cobrar']
                             ?? json['cambios_cobrar_ef'])?.toString() ?? '0') ?? 0,

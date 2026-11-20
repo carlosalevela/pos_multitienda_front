@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'providers/auth_provider.dart';
 import 'services/barcode_service.dart';
 import 'services/update_service.dart';
@@ -21,8 +24,27 @@ import 'providers/config_provider.dart';
 import 'providers/notificaciones_provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
-void main() {
+/// Inicializa SharedPreferences con recuperación automática si el archivo
+/// de preferencias está corrupto (FormatException al parsearlo).
+Future<void> _initPrefs() async {
+  try {
+    await SharedPreferences.getInstance();
+  } on FormatException {
+    // Archivo corrupto — eliminar y reinicializar
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('${dir.path}/shared_preferences.json');
+      if (await file.exists()) await file.delete();
+    } catch (_) {}
+    try {
+      await SharedPreferences.getInstance();
+    } catch (_) {}
+  } catch (_) {}
+}
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await _initPrefs();
   // Mantener barra de estado visible con iconos oscuros
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,

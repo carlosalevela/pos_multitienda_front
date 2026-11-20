@@ -1314,16 +1314,22 @@ class _TabResumenDiaState extends State<TabResumenDia> {
 
   String _metodoPagoLabel(String m) {
     switch (m) {
+      case 'efectivo':      return 'Efectivo';
       case 'transferencia': return 'Transfer.';
       case 'tarjeta':       return 'Tarjeta';
-      default:              return 'Efectivo';
+      case 'mixto':         return 'Mixto';
+      case 'bono':          return 'Bono';
+      default:              return m.isNotEmpty ? m : 'Efectivo';
     }
   }
 
   Color _metodoPagoColor(String m) {
     switch (m) {
+      case 'efectivo':      return AppColors.secondary;
       case 'transferencia': return _transferBlue;
       case 'tarjeta':       return AppColors.warning;
+      case 'mixto':         return _purpleColor;
+      case 'bono':          return _amberColor;
       default:              return AppColors.secondary;
     }
   }

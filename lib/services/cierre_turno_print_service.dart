@@ -36,14 +36,17 @@ class CierreTurnoPrintService {
           ? await CuentaBancariaService().resumen(tiendaId, sesionId: sesion.id)
           : <Map<String, dynamic>>[];
 
-      // Fetch detalle devoluciones del turno
+      // Fetch detalle completo de la sesión — necesario porque el historial usa
+      // un serializer ligero que omite saldo_inicial, num_transacciones y monto_esperado.
       List<Map<String, dynamic>> devolucionesDia = const [];
+      SesionCaja sesionRich = sesion;
       try {
         final detRes = await CajaService().getDetalleSesion(sesion.id);
         if (detRes['success'] == true && detRes['data'] != null) {
           final data = detRes['data'] as Map<String, dynamic>;
           devolucionesDia = (data['devoluciones_detalle'] as List?)
                   ?.cast<Map<String, dynamic>>() ?? [];
+          sesionRich = SesionCaja.fromJson(data);
         }
       } catch (_) {}
 
@@ -54,7 +57,7 @@ class CierreTurnoPrintService {
         final device = await ThermalPrinterService.getOrRequestDevice();
         if (device != null) {
           final bytes = await ThermalPrinterService.buildCierreTurno(
-            sesion: sesion, empresaNombre: empresaNombre,
+            sesion: sesionRich, empresaNombre: empresaNombre,
             metodosPago: metodosPago, totalGastos: totalGastos,
             nit: config.nit, direccion: config.direccion, telefono: config.telefono,
             paperSize: paperSize, resumenCuentas: resumenCuentas,
@@ -69,7 +72,7 @@ class CierreTurnoPrintService {
       } else if (!kIsWeb && await WindowsPrinterService.hasSavedPrinter()) {
         // Exe: ESC/POS RAW via WritePrinter
         final bytes = await ThermalPrinterService.buildCierreTurno(
-          sesion: sesion, empresaNombre: empresaNombre,
+          sesion: sesionRich, empresaNombre: empresaNombre,
           metodosPago: metodosPago, totalGastos: totalGastos,
           nit: config.nit, direccion: config.direccion, telefono: config.telefono,
           paperSize: paperSize, resumenCuentas: resumenCuentas,
@@ -84,7 +87,7 @@ class CierreTurnoPrintService {
 
       // Fallback: PDF A4
       await ReportePdfService.generarCierreTurno(
-        sesion: sesion, fecha: fecha, tiendaNombre: tiendaNombre,
+        sesion: sesionRich, fecha: fecha, tiendaNombre: tiendaNombre,
         empresaNombre: empresaNombre, metodosPago: metodosPago,
         gastosSesion: gastosSesion, totalGastos: totalGastos,
         topProductos: topProductos, separadosDia: separadosDia,

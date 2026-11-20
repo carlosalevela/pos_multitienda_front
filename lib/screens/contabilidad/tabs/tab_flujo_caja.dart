@@ -39,7 +39,9 @@ class _TabFlujoCajaState extends State<TabFlujoCaja> {
   void didUpdateWidget(TabFlujoCaja oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.tiendaId != widget.tiendaId) {
-      _cargar();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _cargar();
+      });
     }
   }
 

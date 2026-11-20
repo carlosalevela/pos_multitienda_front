@@ -66,6 +66,7 @@ class ContabilidadProvider extends ChangeNotifier {
   Future<void> cargarResumenDiario({int? tiendaId, DateTime? fecha}) async {
     _cargando = true;
     _errorMsg = '';
+    resumenDiario = null;
     notifyListeners();
 
     final fechaStr = _fechaStr(fecha);

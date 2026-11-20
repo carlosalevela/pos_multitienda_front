@@ -8,7 +8,7 @@ import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import '../core/api_client.dart';
 
-enum TipoDocumento { venta, separado, abono, cierre, devolucion, reporte, inventario, compra, recepcion }
+enum TipoDocumento { venta, separado, abono, cierre, devolucion, reporte, inventario, compra, recepcion, formato }
 
 class DocumentoService {
   DocumentoService._();
@@ -61,6 +61,9 @@ class DocumentoService {
 
   Future<File> guardarRecepcion({required List<int> bytes, required String numeroOrden}) =>
       _guardar(bytes: bytes, tipo: TipoDocumento.recepcion, nombre: 'recepcion_$numeroOrden');
+
+  Future<File> guardarFormato({required List<int> bytes, required String referencia}) =>
+      _guardar(bytes: bytes, tipo: TipoDocumento.formato, nombre: 'formato_$referencia');
 
   // ── Listar local ───────────────────────────────────────────
 
@@ -144,6 +147,7 @@ class DocumentoService {
     TipoDocumento.inventario => 'inventarios',
     TipoDocumento.compra     => 'compras',
     TipoDocumento.recepcion  => 'recepciones',
+    TipoDocumento.formato    => 'formatos',
   };
 
   String _tipoStr(TipoDocumento tipo) => switch (tipo) {
@@ -156,6 +160,7 @@ class DocumentoService {
     TipoDocumento.inventario => 'inventario',
     TipoDocumento.compra     => 'compra',
     TipoDocumento.recepcion  => 'recepcion',
+    TipoDocumento.formato    => 'formato',
   };
 
   String _sanitizar(String s) =>

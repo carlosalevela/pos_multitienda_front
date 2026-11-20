@@ -53,7 +53,13 @@ class Tienda {
         'activo': activo,
       };
 
-  // ── NUEVO: copyWith ──────────────────────────────────
+  @override
+  bool operator ==(Object other) => other is Tienda && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
+
+  // ── copyWith ──────────────────────────────────────────
   Tienda copyWith({
     int? id,
     String? nombre,

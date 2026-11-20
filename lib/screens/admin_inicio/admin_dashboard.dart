@@ -29,6 +29,7 @@ import '../configuracion/configuracion_screen.dart';
 import '../etiquetas/etiquetas_screen.dart';
 import '../documentos/documentos_screen.dart';
 import '../bonos/bonos_screen.dart';
+import '../formatos/formatos_diarios_screen.dart';
 import '../../services/update_service.dart';
 
 class _C {
@@ -86,10 +87,11 @@ const _allNavItems = <_NavItem>[
   _NavItem(label: 'Clientes',     screen: 'clientes',     icon: Icons.people_alt_rounded),
   _NavItem(label: 'Separados',    screen: 'separados',    icon: Icons.bookmark_rounded),
   // ── ANÁLISIS ─────────────────────────────────────────────
-  _NavItem(label: 'Contabilidad', screen: 'contabilidad', icon: Icons.bar_chart_rounded),
-  _NavItem(label: 'Reportes',     screen: 'reports',      icon: Icons.assessment_rounded),
-  _NavItem(label: 'Bonos',        screen: 'bonos',        icon: Icons.card_giftcard_rounded),
-  _NavItem(label: 'Documentos',   screen: 'documentos',   icon: Icons.folder_copy_rounded),
+  _NavItem(label: 'Contabilidad',    screen: 'contabilidad', icon: Icons.bar_chart_rounded),
+  _NavItem(label: 'Reportes',        screen: 'reports',      icon: Icons.assessment_rounded),
+  _NavItem(label: 'Formatos Diarios',screen: 'formatos',     icon: Icons.table_chart_rounded),
+  _NavItem(label: 'Bonos',           screen: 'bonos',        icon: Icons.card_giftcard_rounded),
+  _NavItem(label: 'Documentos',      screen: 'documentos',   icon: Icons.folder_copy_rounded),
   // ── ADMINISTRACIÓN ───────────────────────────────────────
   _NavItem(label: 'Etiquetas',              screen: 'etiquetas',    icon: Icons.label_rounded),
   _NavItem(label: 'Empleados',              screen: 'empleados',    icon: Icons.people_rounded),
@@ -112,6 +114,7 @@ String _sectionFor(String screen) {
       return 'CLIENTES';
     case 'contabilidad':
     case 'reports':
+    case 'formatos':
     case 'bonos':
     case 'documentos':
       return 'ANÁLISIS';
@@ -140,6 +143,7 @@ List<_NavItem> _buildNavItems(String rol) {
       case 'contabilidad': return ['admin', 'supervisor', 'superadmin'].contains(rol);
       // Reportes de turno: cajero + supervisor (supervisor revisa sus cajeros)
       case 'reports':      return ['cajero', 'supervisor'].contains(rol);
+      case 'formatos':     return ['cajero', 'supervisor'].contains(rol);
       case 'bonos':        return true;
       case 'documentos':   return ['admin', 'supervisor', 'superadmin'].contains(rol);
       case 'etiquetas':    return ['admin', 'supervisor', 'superadmin'].contains(rol);
@@ -208,6 +212,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         return const CajaScreen();
       case 'contabilidad': return const ContabilidadScreen();
       case 'reports': return const ReportesScreen();
+      case 'formatos': return const FormatosDiariosScreen();
       case 'clientes':
         return ClientesScreen(esAdminOSupervisor: rol == 'admin' || rol == 'supervisor' || rol == 'superadmin');
       case 'separados': return const SeparadosScreen();

@@ -225,6 +225,158 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
     }
   }
 
+  Future<void> _abrirBuscadorDialog() async {
+    final dlgCtrl = TextEditingController();
+    final fmt     = NumberFormat('#,##0.##', 'es_CO');
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        List<Producto> resultados  = [];
+        bool           buscando    = false;
+
+        return StatefulBuilder(
+          builder: (ctx, setDlg) {
+            Future<void> buscar(String q) async {
+              if (q.trim().isEmpty) { setDlg(() => resultados = []); return; }
+              setDlg(() => buscando = true);
+              final auth     = context.read<AuthProvider>();
+              final tiendaId = auth.tiendaId != 0 ? auth.tiendaId : null;
+              final result   = await _inventarioSvc.getProductos(q: q, tiendaId: tiendaId);
+              if (!ctx.mounted) return;
+              if (result['success'] == true) {
+                setDlg(() { resultados = result['data'] as List<Producto>; buscando = false; });
+              } else {
+                setDlg(() { resultados = []; buscando = false; });
+              }
+            }
+
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 48),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Cabecera
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 16, 8, 0),
+                    child: Row(children: [
+                      Expanded(
+                        child: Text('Seleccionar producto',
+                            style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 15, color: _kText)),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        icon: const Icon(Icons.close_rounded, size: 20, color: _kTextMuted),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ]),
+                  ),
+                  // Buscador
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+                    child: TextField(
+                      controller: dlgCtrl,
+                      autofocus: true,
+                      onChanged: buscar,
+                      decoration: InputDecoration(
+                        hintText: 'Nombre o código de barras...',
+                        hintStyle: GoogleFonts.inter(fontSize: 13, color: _kTextMuted),
+                        prefixIcon: const Icon(Icons.search_rounded, size: 18, color: _kTextMuted),
+                        suffixIcon: buscando
+                            ? const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: SizedBox(width: 16, height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: _kGreen)))
+                            : dlgCtrl.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.close_rounded, size: 18, color: _kTextMuted),
+                                    onPressed: () { dlgCtrl.clear(); setDlg(() => resultados = []); })
+                                : null,
+                        filled: true,
+                        fillColor: _kSurface,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: _kBorder)),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: _kBorder)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: _kGreen, width: 1.5)),
+                      ),
+                      style: GoogleFonts.inter(fontSize: 14),
+                    ),
+                  ),
+                  // Resultados
+                  if (!buscando && dlgCtrl.text.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+                      child: Text('Escribe para buscar un producto',
+                          style: GoogleFonts.inter(fontSize: 13, color: _kTextMuted),
+                          textAlign: TextAlign.center),
+                    )
+                  else if (!buscando && resultados.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+                      child: Text('Sin resultados',
+                          style: GoogleFonts.inter(fontSize: 13, color: _kTextMuted)),
+                    )
+                  else
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: resultados.length,
+                        separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade100),
+                        itemBuilder: (_, i) {
+                          final p       = resultados[i];
+                          final agotado = p.stockActual <= 0;
+                          return ListTile(
+                            dense: true,
+                            onTap: agotado ? null : () {
+                              Navigator.pop(ctx);
+                              _seleccionarProductoNuevo(p);
+                            },
+                            leading: Container(
+                              width: 36, height: 36,
+                              decoration: BoxDecoration(
+                                color: agotado ? Colors.grey.shade100 : Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(Icons.inventory_2_outlined, size: 18,
+                                  color: agotado ? _kTextMuted : Colors.green.shade600),
+                            ),
+                            title: Text(p.nombre,
+                                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600,
+                                    color: agotado ? _kTextMuted : _kText)),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(p.categoria,
+                                    style: GoogleFonts.inter(fontSize: 11,
+                                        color: _kGreen, fontWeight: FontWeight.w500)),
+                                Text('\$${fmt.format(p.precio)}  •  Stock: ${fmt.format(p.stockActual)}',
+                                    style: GoogleFonts.inter(fontSize: 11,
+                                        color: agotado ? Colors.red.shade400 : _kTextMuted)),
+                              ],
+                            ),
+                            trailing: agotado
+                                ? Text('Sin stock', style: GoogleFonts.inter(fontSize: 11,
+                                      fontWeight: FontWeight.w600, color: Colors.red.shade400))
+                                : Icon(Icons.add_circle_rounded, color: _kGreen, size: 22),
+                          );
+                        },
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+    dlgCtrl.dispose();
+  }
+
   void _seleccionarProductoNuevo(Producto p) {
     setState(() {
       // Si ya está en la lista, incrementar cantidad
@@ -1436,91 +1588,31 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
           ]),
         )),
 
-        // Buscador para agregar más productos
-        TextField(
-          controller: _busquedaCtrl,
-          onChanged: _buscarProductos,
-          decoration: InputDecoration(
-            hintText: _productosNuevos.isEmpty
-                ? 'Buscar producto por nombre o código...'
-                : 'Agregar otro producto...',
-            hintStyle: GoogleFonts.inter(fontSize: 13, color: _kTextMuted),
-            prefixIcon: const Icon(Icons.search_rounded, size: 18, color: _kTextMuted),
-            suffixIcon: _buscandoProducto
-                ? Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: SizedBox(width: 16, height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: _kGreen)),
-                  )
-                : _busquedaCtrl.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.close_rounded, size: 18, color: _kTextMuted),
-                        onPressed: () {
-                          _busquedaCtrl.clear();
-                          setState(() => _resultadosProducto = []);
-                        })
-                    : null,
-            filled: true,
-            fillColor: _kSurface,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: _kBorder)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: _kBorder)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: _kGreen, width: 1.5)),
+        // Botón que abre el buscador de productos en un dialog
+        GestureDetector(
+          onTap: _abrirBuscadorDialog,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: _kSurface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _kBorder),
+            ),
+            child: Row(children: [
+              const Icon(Icons.search_rounded, size: 18, color: _kTextMuted),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _productosNuevos.isEmpty
+                      ? 'Buscar producto por nombre o código...'
+                      : 'Agregar otro producto...',
+                  style: GoogleFonts.inter(fontSize: 13, color: _kTextMuted),
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded, size: 13, color: _kTextMuted),
+            ]),
           ),
-          style: GoogleFonts.inter(fontSize: 14),
         ),
-        if (_resultadosProducto.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          _dropdownResultados(
-            itemCount: _resultadosProducto.length,
-            itemBuilder: (_, i) {
-              final p       = _resultadosProducto[i];
-              final agotado = p.stockActual <= 0;
-              return ListTile(
-                dense: true,
-                onTap: agotado ? null : () => _seleccionarProductoNuevo(p),
-                leading: Container(
-                  width: 36, height: 36,
-                  decoration: BoxDecoration(
-                    color: agotado ? Colors.grey.shade100 : Colors.green.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(Icons.inventory_2_outlined, size: 18,
-                      color: agotado ? _kTextMuted : Colors.green.shade600),
-                ),
-                title: Text(p.nombre,
-                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600,
-                        color: agotado ? _kTextMuted : _kText)),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(p.categoria,
-                        style: GoogleFonts.inter(fontSize: 11,
-                            color: _kGreen, fontWeight: FontWeight.w500)),
-                    Text('\$${fmt.format(p.precio)}  •  Stock: ${fmt.format(p.stockActual)}',
-                        style: GoogleFonts.inter(fontSize: 11,
-                            color: agotado ? Colors.red.shade400 : _kTextMuted)),
-                  ],
-                ),
-                trailing: agotado
-                    ? Text('Sin stock', style: GoogleFonts.inter(fontSize: 11,
-                          fontWeight: FontWeight.w600, color: Colors.red.shade400))
-                    : Icon(Icons.add_circle_rounded, color: _kGreen, size: 22),
-              );
-            },
-          ),
-        ],
-        if (_resultadosProducto.isEmpty && _busquedaCtrl.text.isEmpty && _productosNuevos.isEmpty) ...[
-          const SizedBox(height: 10),
-          Center(
-            child: Text('Busca el producto que entregarás al cliente',
-                style: GoogleFonts.inter(fontSize: 12, color: _kTextMuted),
-                textAlign: TextAlign.center),
-          ),
-        ],
       ],
     );
   }

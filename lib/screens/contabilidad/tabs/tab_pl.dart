@@ -41,7 +41,9 @@ class _TabPLState extends State<TabPL> {
   void didUpdateWidget(TabPL oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.tiendaId != widget.tiendaId) {
-      _cargar();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _cargar();
+      });
     }
   }
 

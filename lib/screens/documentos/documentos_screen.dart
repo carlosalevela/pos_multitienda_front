@@ -32,6 +32,7 @@ class _Tipo {
     'inventario': Color(0xFF7C3AED),
     'compra':     Color(0xFF0369A1),
     'recepcion':  Color(0xFF047857),
+    'formato':    Color(0xFF006C49),
   };
   static const _bgs = <String, Color>{
     'venta':      Color(0xFFE8FFF4),
@@ -43,6 +44,7 @@ class _Tipo {
     'inventario': Color(0xFFF5F3FF),
     'compra':     Color(0xFFE0F2FE),
     'recepcion':  Color(0xFFECFDF5),
+    'formato':    Color(0xFFE6F4EE),
   };
   static const _icons = <String, IconData>{
     'venta':      Icons.receipt_rounded,
@@ -54,6 +56,7 @@ class _Tipo {
     'inventario': Icons.inventory_2_rounded,
     'compra':     Icons.shopping_cart_rounded,
     'recepcion':  Icons.local_shipping_rounded,
+    'formato':    Icons.table_chart_rounded,
   };
   static const _labels = <String, String>{
     'venta':      'VENTA',
@@ -65,6 +68,7 @@ class _Tipo {
     'inventario': 'INVENTARIO',
     'compra':     'COMPRA',
     'recepcion':  'RECEPCIÓN',
+    'formato':    'FORMATO',
   };
   static Color    color(String t) => _colors[t] ?? const Color(0xFF374151);
   static Color    bg(String t)    => _bgs[t]    ?? const Color(0xFFF3F4F6);

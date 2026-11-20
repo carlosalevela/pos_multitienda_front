@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/api_client.dart';
@@ -13,9 +14,8 @@ class AuthService {
           sendTimeout:    const Duration(seconds: 15),
           receiveTimeout: const Duration(seconds: 20),
         ),
-      );
+      ).timeout(const Duration(seconds: 25));
 
-      // ✅ FIX: null-safe — evita CastError si el backend cambia la respuesta
       final accessToken  = response.data['access']?.toString()  ?? '';
       final refreshToken = response.data['refresh']?.toString() ?? '';
       final empleado     = response.data['empleado'] as Map<String, dynamic>? ?? {};
@@ -71,6 +71,8 @@ class AuthService {
       }
       return {'success': false, 'error': 'Error del servidor ($status)'};
 
+    } on TimeoutException {
+      return {'success': false, 'error': 'Sin respuesta del servidor (timeout)'};
     } catch (e) {
       return {'success': false, 'error': 'Error inesperado al iniciar sesión'};
     }

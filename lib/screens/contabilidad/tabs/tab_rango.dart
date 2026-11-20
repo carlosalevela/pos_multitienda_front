@@ -50,7 +50,9 @@ class _TabRangoState extends State<TabRango> {
         old.fechaFin != widget.fechaFin) {
       _ini = widget.fechaIni;
       _fin = widget.fechaFin;
-      _cargar();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _cargar();
+      });
     }
   }
 
@@ -1226,16 +1228,22 @@ class _TabRangoState extends State<TabRango> {
 
   String _metodoPagoLabel(String m) {
     switch (m) {
+      case 'efectivo':      return 'Efectivo';
       case 'transferencia': return 'Transfer.';
       case 'tarjeta':       return 'Tarjeta';
-      default:              return 'Efectivo';
+      case 'mixto':         return 'Mixto';
+      case 'bono':          return 'Bono';
+      default:              return m.isNotEmpty ? m : 'Efectivo';
     }
   }
 
   Color _metodoPagoColor(String m) {
     switch (m) {
+      case 'efectivo':      return AppColors.secondary;
       case 'transferencia': return _transferBlue;
       case 'tarjeta':       return AppColors.warning;
+      case 'mixto':         return _purple;
+      case 'bono':          return const Color(0xFFF59E0B);
       default:              return AppColors.secondary;
     }
   }

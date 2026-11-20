@@ -92,14 +92,15 @@ Future<Uint8List> generarBytesCierrePDF(SesionHistorial sesion) async {
     creator: 'POS Master',
   );
 
-  final esExacto   = sesion.diferencia.abs() < 0.01;
-  final esPositivo = sesion.diferencia >= 0;
+  final difValue   = sesion.montoFinalReal - sesion.montoFinalSistema;
+  final esExacto   = difValue.abs() < 0.01;
+  final esPositivo = difValue >= 0;
   final difColor   = (esExacto || esPositivo) ? _pGreen : _pRed;
   final difBg      = (esExacto || esPositivo) ? _pGreenLight : _pRedCont;
   final difLabel   = esExacto ? 'CUADRE EXACTO' : esPositivo ? 'SOBRANTE' : 'FALTANTE';
   final difStr     = esExacto
       ? '\$0.00'
-      : '${esPositivo ? '+' : '-'}${_m(sesion.diferencia)}';
+      : '${esPositivo ? '+' : '-'}${_m(difValue.abs())}';
 
   doc.addPage(pw.MultiPage(
     pageFormat: PdfPageFormat.a4,
@@ -1038,7 +1039,7 @@ pw.Widget _devolucionesDetail(SesionHistorial sesion) {
         final c = (m['cantidad'] as num?)?.toStringAsFixed(0) ?? '1';
         final n = m['nombre']?.toString() ?? '';
         final s = double.tryParse(m['subtotal']?.toString() ?? '0') ?? 0;
-        return '↩ $c× $n  (${_m(s)})';
+        return 'Dev. $c× $n  (${_m(s)})';
       }).toList();
 
       final reemplazosLines = reemplazosRaw.map((r) {
@@ -1046,13 +1047,13 @@ pw.Widget _devolucionesDetail(SesionHistorial sesion) {
         final c = (m['cantidad'] as num?)?.toStringAsFixed(0) ?? '1';
         final n = m['nombre']?.toString() ?? '';
         final s = double.tryParse(m['subtotal']?.toString() ?? '0') ?? 0;
-        return '→ $c× $n  (${_m(s)})';
+        return 'Ent. $c× $n  (${_m(s)})';
       }).toList();
 
       final allLines = <String>[
         ...detallesLines,
         if (esCambio && reemplazosLines.isNotEmpty) ...[
-          '── Entregado ──',
+          '-- Entregado --',
           ...reemplazosLines,
         ],
       ];
@@ -1214,8 +1215,6 @@ pw.Widget _cuadreCard(
             fila('(+) Abonos separados (ef.)',       s.abonosEfectivo),
           if (s.abonosCreditoEfectivo > 0)
             fila('(+) Abonos crédito clientes',      s.abonosCreditoEfectivo),
-          if (s.cambiosCobrarEf > 0)
-            fila('(+) Cambios cobrados (ef.)',        s.cambiosCobrarEf),
           if (s.ingresosManual > 0)
             fila('(+) Ingresos manuales',            s.ingresosManual),
           if (s.devolucionesEfectivo != 0)
