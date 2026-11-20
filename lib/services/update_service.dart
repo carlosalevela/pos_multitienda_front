@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import '../core/api_client.dart';
 
-const _currentVersion = '1.5.6';
+const _currentVersion = '1.5.7';
 
 /// Versión actual expuesta para mostrar en UI.
 const currentVersion = _currentVersion;
