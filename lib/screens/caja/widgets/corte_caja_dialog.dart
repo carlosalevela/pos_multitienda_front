@@ -1,5 +1,9 @@
 import 'dart:async' show unawaited;
 import 'dart:typed_data' show Uint8List;
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -1669,6 +1673,51 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
     }).toList();
   }
 
+  Future<List<int>> _capturarRegistroComoPdf(RegistroMovimientoData data) async {
+    if (!mounted) return generarFormatoDiarioPdf(data);
+    final ctx = context;
+    final key = GlobalKey();
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => Positioned(
+        top: 0,
+        left: -1310.0,
+        child: SizedBox(
+          width: 1240,
+          child: RepaintBoundary(
+            key: key,
+            child: Material(
+              elevation: 0,
+              color: Colors.white,
+              child: RegistroMovimientoDiario(data: data),
+            ),
+          ),
+        ),
+      ),
+    );
+    Overlay.of(ctx).insert(entry);
+    await WidgetsBinding.instance.endOfFrame;
+    try {
+      final boundary =
+          key.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      final img = await boundary.toImage(pixelRatio: 2.0);
+      final byteData =
+          await img.toByteData(format: ui.ImageByteFormat.png);
+      final pngBytes = byteData!.buffer.asUint8List();
+      final pageW = PdfPageFormat.a4.landscape.width;
+      final pageH = img.height * pageW / img.width;
+      final pdf = pw.Document();
+      pdf.addPage(pw.Page(
+        pageFormat: PdfPageFormat(pageW, pageH),
+        margin: pw.EdgeInsets.zero,
+        build: (_) => pw.Image(pw.MemoryImage(pngBytes)),
+      ));
+      return await pdf.save();
+    } finally {
+      entry.remove();
+    }
+  }
+
   Future<void> _guardarFormatoPdf(
       ResumenCierre r, double montoFinalReal, int? sesionId) async {
     try {
@@ -1773,7 +1822,7 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
         ),
       );
 
-      final bytes = await generarFormatoDiarioPdf(data);
+      final bytes = await _capturarRegistroComoPdf(data);
       final d  = fecha;
       final ts = '${d.year}${d.month.toString().padLeft(2,'0')}${d.day.toString().padLeft(2,'0')}';
       final ref = sesionId != null ? '${sesionId}_$ts' : ts;

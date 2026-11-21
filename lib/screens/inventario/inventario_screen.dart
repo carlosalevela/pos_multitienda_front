@@ -1,6 +1,7 @@
 // lib/screens/inventario/inventario_screen.dart
 
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../utils/file_downloader.dart';
@@ -21,6 +22,7 @@ import 'widgets/producto_form_dialog.dart';
 import 'widgets/importar_excel_dialog.dart';
 import 'widgets/averias_dialog.dart';
 import 'widgets/producto_detalle_sheet.dart';
+import 'widgets/camera_scanner_sheet.dart';
 
 class InventarioScreen extends StatefulWidget {
   const InventarioScreen({super.key});
@@ -161,6 +163,16 @@ class _InventarioScreenState extends State<InventarioScreen>
     _scanPulseTimer = Timer(const Duration(milliseconds: 1500), () {
       if (mounted) setState(() => _scanActivo = false);
     });
+  }
+
+  Future<void> _abrirCameraScanner() async {
+    if (!Platform.isAndroid) return;
+    await showModalBottomSheet(
+      context:            context,
+      isScrollControlled: true,
+      backgroundColor:    Colors.transparent,
+      builder:            (_) => CameraScannerSheet(onDetect: _onBarcode),
+    );
   }
 
   // ══════════════════════════════════════════════════════
@@ -582,6 +594,15 @@ class _InventarioScreenState extends State<InventarioScreen>
             iconBox,
             const SizedBox(width: 14),
             titleCol,
+            if (Platform.isAndroid)
+              IconButton(
+                icon: Icon(
+                  Icons.qr_code_scanner_rounded,
+                  color: _scanActivo ? _green : _muted2,
+                ),
+                tooltip: 'Escanear código de barras',
+                onPressed: _abrirCameraScanner,
+              ),
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert_rounded),
               onSelected: (v) {

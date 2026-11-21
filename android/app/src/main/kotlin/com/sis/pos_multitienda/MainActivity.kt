@@ -1,4 +1,4 @@
-package com.example.pos_multitienda_app
+package com.sis.pos_multitienda
 
 import io.flutter.embedding.android.FlutterActivity
 
