@@ -1778,7 +1778,7 @@ class _PosScreenState extends State<PosScreen> {
         // Cobrar
         Expanded(
           child: GestureDetector(
-            onTap: pos.procesando ? null : () async {
+            onTap: (pos.procesando || _faltaCuentaPos(pos)) ? null : () async {
               final clienteAntes     = _clienteSeleccionado;
               final tierNombreAntes  = clienteAntes?.tierInfo?.nombre;
               final metodoPago       = pos.metodoPago;
@@ -1806,7 +1806,9 @@ class _PosScreenState extends State<PosScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 14),
               decoration: BoxDecoration(
-                color: _kGreenDark,
+                color: _faltaCuentaPos(pos)
+                    ? _kGreenDark.withValues(alpha: 0.35)
+                    : _kGreenDark,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -2074,6 +2076,7 @@ class _PosScreenState extends State<PosScreen> {
           child: GestureDetector(
             onTap: disabled ? null : () {
               pos.setMetodoPago(value);
+              _autoCuenta(pos, value);
               if (value != 'efectivo') {
                 _montoCtrl.clear();
                 pos.setMontoRecibido(pos.totalConDescuento);
@@ -2090,6 +2093,33 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   // ── Selector de cuenta destino (Nequi, DaviPlata, Datáfono…) ──
+
+  /// Cuentas que aplican a un método de pago. Mismo criterio que usa el
+  /// selector, para que lo que se valida sea exactamente lo que se muestra.
+  List<dynamic> _cuentasDeMetodo(String metodo) {
+    return context.read<ConfigProvider>().cuentas.where((c) {
+      if (metodo == 'tarjeta')       return c.tipo == 'tarjeta';
+      if (metodo == 'transferencia') return c.tipo != 'tarjeta';
+      return metodo == 'mixto'; // mixto ve todas
+    }).toList();
+  }
+
+  /// Si para ese método hay UNA sola cuenta, se elige sola: el cajero no
+  /// toca nada. Con dos cuentas del mismo tipo no dispara, y entonces la
+  /// validación obliga a elegir.
+  void _autoCuenta(PosProvider pos, String metodo) {
+    final cs = _cuentasDeMetodo(metodo);
+    if (cs.length == 1) pos.setCuentaDestino(cs.first.id);
+  }
+
+  /// Un pago que no es efectivo tiene que decir a qué cuenta entró, o el
+  /// formato diario no puede separarlo (Nequi, DaviPlata, Bancolombia).
+  bool _faltaCuentaPos(PosProvider pos) {
+    final m = pos.metodoPago;
+    if (m == 'efectivo' || m == 'credito' || m == 'bono') return false;
+    if (pos.cuentaDestinoId != null) return false;
+    return _cuentasDeMetodo(m).isNotEmpty;
+  }
 
   Widget _buildCuentaSelector(PosProvider pos) {
     final todasCuentas = context.watch<ConfigProvider>().cuentas;
@@ -2110,8 +2140,15 @@ class _PosScreenState extends State<PosScreen> {
         Row(children: [
           const Icon(Icons.account_balance_wallet_outlined, size: 13, color: _kTextMuted),
           const SizedBox(width: 5),
-          Text('¿A qué cuenta llega el pago?',
-            style: GoogleFonts.inter(fontSize: 11, color: _kTextMuted,
+          Text(
+            pos.cuentaDestinoId == null
+                ? '¿A qué cuenta llega el pago?  ·  Elige una'
+                : '¿A qué cuenta llega el pago?',
+            style: GoogleFonts.inter(
+                fontSize: 11,
+                color: pos.cuentaDestinoId == null
+                    ? const Color(0xFFBA1A1A)
+                    : _kTextMuted,
                 fontWeight: FontWeight.w500)),
         ]),
         const SizedBox(height: 6),

@@ -68,6 +68,8 @@ class SesionHistorial {
   final double compraBonaTarjeta;
   final double compraBonasTransferencia;
   final double compraBonasTotal;
+  /// Cada bono vendido: {monto, metodo_pago, cuenta_tipo}.
+  final List<Map<String, dynamic>> compraBonosDetalle;
   final int    numCompraBonos;
   // Cuadre
   final double montoFinalSistema;
@@ -137,6 +139,7 @@ class SesionHistorial {
     this.compraBonaTarjeta = 0,
     this.compraBonasTransferencia = 0,
     this.compraBonasTotal = 0,
+    this.compraBonosDetalle = const [],
     this.numCompraBonos = 0,
     required this.montoFinalSistema,
     required this.montoFinalReal,
@@ -212,6 +215,9 @@ class SesionHistorial {
     compraBonaTarjeta:        double.tryParse(j['compra_bonos_tarjeta']?.toString()        ?? '0') ?? 0.0,
     compraBonasTransferencia: double.tryParse(j['compra_bonos_transferencia']?.toString()  ?? '0') ?? 0.0,
     compraBonasTotal:         double.tryParse(j['compra_bonos_total']?.toString()          ?? '0') ?? 0.0,
+    compraBonosDetalle:      (j['compra_bonos_detalle'] as List<dynamic>?)
+        ?.map((e) => Map<String, dynamic>.from(e as Map))
+        .toList() ?? const [],
     numCompraBonos:           (j['num_compra_bonos'] as num?)?.toInt() ?? 0,
     montoFinalSistema:     double.tryParse(
                              (j['monto_esperado'] ?? j['monto_final_sistema'])?.toString() ?? '0') ?? 0.0,

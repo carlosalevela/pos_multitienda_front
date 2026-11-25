@@ -2,6 +2,13 @@
 import 'dart:html' as html;
 import 'dart:typed_data';
 
+/// En la web el navegador lo descarga solo.
+bool get excelQuedaDentroDeLaApp => false;
+String get lugarDelExcel => 'en Descargas';
+
+/// El navegador ya lo descargó; no hay nada que abrir desde aquí.
+Future<String?> abrirArchivo(String path) async => null;
+
 Future<String> guardarArchivoExcel(List<int> bytes, String fileName) async {
   // Uint8List is required — a plain List<int> becomes a comma-joined string in JS
   final blob = html.Blob(

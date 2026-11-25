@@ -169,6 +169,8 @@ class CajaService {
         '/contabilidad/gastos/',
         data: {
           'sesion_caja': sesionId,
+          // Registrado desde Caja: la plata sale del cajón y cuenta en el cierre.
+          'de_caja':     true,
           'tienda':      tiendaId,
           'categoria':   categoria,
           'descripcion': descripcion,

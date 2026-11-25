@@ -17,6 +17,8 @@ import '../reportes/reportes_screen.dart';
 import '../caja/caja_screen.dart';
 import '../empleados/empleados_screen.dart';
 import '../contabilidad/contabilidad_screen.dart';
+import '../gastos/gastos_screen.dart';
+import '../nomina/nomina_screen.dart';
 import '../tiendas/tiendas_screen.dart';
 import '../clientes/clientes_screen.dart';
 import '../compras/compras_modulo_screen.dart';
@@ -101,6 +103,8 @@ const _allNavItems = <_NavItem>[
   _NavItem(label: 'Separados',    screen: 'separados',    icon: Icons.bookmark_rounded),
   // ── ANÁLISIS ─────────────────────────────────────────────
   _NavItem(label: 'Contabilidad',    screen: 'contabilidad', icon: Icons.bar_chart_rounded),
+  _NavItem(label: 'Gastos y nómina', screen: 'gastos',       icon: Icons.payments_rounded),
+  _NavItem(label: 'Nómina',          screen: 'nomina',       icon: Icons.badge_rounded),
   _NavItem(label: 'Reportes',        screen: 'reports',      icon: Icons.assessment_rounded),
   _NavItem(label: 'Formatos Diarios',screen: 'formatos',     icon: Icons.table_chart_rounded),
   _NavItem(label: 'Bonos',           screen: 'bonos',        icon: Icons.card_giftcard_rounded),
@@ -126,6 +130,8 @@ String _sectionFor(String screen) {
     case 'separados':
       return 'CLIENTES';
     case 'contabilidad':
+    case 'gastos':
+    case 'nomina':
     case 'reports':
     case 'formatos':
     case 'bonos':
@@ -154,6 +160,8 @@ List<_NavItem> _buildNavItems(String rol) {
       case 'clientes':     return true;
       case 'separados':    return true;
       case 'contabilidad': return ['admin', 'supervisor', 'superadmin'].contains(rol);
+      case 'gastos':       return ['admin', 'superadmin'].contains(rol);
+      case 'nomina':       return ['admin', 'superadmin'].contains(rol);
       // Reportes de turno: cajero + supervisor (supervisor revisa sus cajeros)
       case 'reports':      return ['cajero', 'supervisor'].contains(rol);
       case 'formatos':     return ['cajero', 'supervisor'].contains(rol);
@@ -224,6 +232,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
         if (rol == 'admin' || rol == 'superadmin') return const CajaDashboardAdmin();
         return const CajaScreen();
       case 'contabilidad': return const ContabilidadScreen();
+      case 'gastos':       return GastosScreen(onIrANomina: () => _navigate('nomina'));
+      case 'nomina':       return const NominaScreen();
       case 'reports': return const ReportesScreen();
       case 'formatos': return const FormatosDiariosScreen();
       case 'clientes':
@@ -266,6 +276,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               title:    _mobileScreenTitle(_activeScreen),
               userName: widget.userName,
               branch:   widget.branch,
+              onAvatarTap: () => _showCuentaSheet(context),
             ),
             Expanded(child: _buildScreenByKey(_activeScreen, auth.rol, widget.userName)),
           ]),
@@ -350,6 +361,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
       case 'clientes':     return 'Clientes';
       case 'separados':    return 'Separados';
       case 'contabilidad': return 'Contabilidad';
+      case 'gastos':       return 'Gastos y nómina';
+      case 'nomina':       return 'Nómina';
       case 'reports':      return 'Reportes';
       case 'formatos':     return 'Formatos Diarios';
       case 'bonos':        return 'Bonos';
@@ -360,6 +373,18 @@ class _AdminDashboardState extends State<AdminDashboard> {
       case 'configuracion':return 'Configuración';
       default:             return 'SIS POS';
     }
+  }
+
+  void _showCuentaSheet(BuildContext ctx) {
+    showModalBottomSheet(
+      context: ctx,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _CuentaSheet(
+        userName: widget.userName,
+        userRole: widget.userRole,
+        branch:   widget.branch,
+      ),
+    );
   }
 
   void _showMasSheet(BuildContext ctx, List<_NavItem> navItems) {
@@ -1547,7 +1572,8 @@ const _kMainTabs = <_NavItem>[
 
 class _MobileTopBar extends StatelessWidget {
   final String title, userName, branch;
-  const _MobileTopBar({required this.title, required this.userName, required this.branch});
+  final VoidCallback? onAvatarTap;
+  const _MobileTopBar({required this.title, required this.userName, required this.branch, this.onAvatarTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1578,16 +1604,19 @@ class _MobileTopBar extends StatelessWidget {
           },
         ),
         const SizedBox(width: 6),
-        Container(
-          width: 36, height: 36,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [_MC.green, _MC.teal]),
-            borderRadius: BorderRadius.circular(10),
+        GestureDetector(
+          onTap: onAvatarTap,
+          child: Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [_MC.green, _MC.teal]),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Center(child: Text(
+              userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
+            )),
           ),
-          child: Center(child: Text(
-            userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
-          )),
         ),
       ]),
     );
@@ -1654,17 +1683,150 @@ class _MobileBottomNav extends StatelessWidget {
   }
 }
 
+/// "Mi cuenta": se abre desde el avatar del encabezado móvil.
+/// El menú "Más" queda solo para navegar entre secciones.
+class _CuentaSheet extends StatelessWidget {
+  final String userName, userRole, branch;
+  const _CuentaSheet({required this.userName, required this.userRole, required this.branch});
+
+  /// En el celular no había forma de cerrar sesión: el botón vivía solo en
+  /// la barra lateral de escritorio. Se pide confirmación para que un toque
+  /// sin querer a mitad de turno no saque al cajero.
+  Future<void> _cerrarSesion(BuildContext context) async {
+    final auth = context.read<AuthProvider>();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Text('¿Cerrar sesión?', style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w800, color: _MC.dark)),
+        content: Text('Tendrás que volver a ingresar con tu usuario y contraseña.',
+            style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569))),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dCtx, false),
+            child: Text('Cancelar', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dCtx, true),
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFB91C1C)),
+            child: Text('Cerrar sesión', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    Navigator.pop(context); // cierra el menú
+    await auth.logout();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Widget dato(IconData icono, String label, String valor) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 9),
+          child: Row(children: [
+            Icon(icono, size: 18, color: _MC.mid),
+            const SizedBox(width: 10),
+            Text(label, style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B))),
+            const Spacer(),
+            Flexible(
+              child: Text(valor,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: _MC.dark)),
+            ),
+          ]),
+        );
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border(top: BorderSide(color: _MC.border, width: 1.5)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 18), decoration: BoxDecoration(color: _MC.border, borderRadius: BorderRadius.circular(2))),
+            Container(
+              width: 60, height: 60,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [_MC.green, _MC.teal]),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Center(child: Text(
+                userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 24),
+              )),
+            ),
+            const SizedBox(height: 10),
+            Text(userName.isEmpty ? 'Usuario' : userName,
+                textAlign: TextAlign.center,
+                maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w800, color: _MC.dark)),
+            if (userRole.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(color: _MC.light, borderRadius: BorderRadius.circular(20)),
+                child: Text(userRole, style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: _MC.mid)),
+              ),
+            ],
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              decoration: BoxDecoration(
+                color: _MC.bg,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: _MC.border),
+              ),
+              child: Column(children: [
+                dato(Icons.storefront_rounded, 'Tienda', branch.isEmpty ? '—' : branch),
+                const Divider(height: 1, color: _MC.border),
+                dato(Icons.info_outline_rounded, 'Versión de la app', currentVersion),
+              ]),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton.icon(
+                onPressed: () => _cerrarSesion(context),
+                icon: const Icon(Icons.logout_rounded, size: 19),
+                label: Text('Cerrar sesión', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700)),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFFEF2F2),
+                  foregroundColor: const Color(0xFFB91C1C),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: const BorderSide(color: Color(0xFFFEE2E2)),
+                  ),
+                ),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
 class _MasSheet extends StatelessWidget {
   final List<_NavItem> items;
   final String activeScreen;
   final void Function(String) onNavigate;
   const _MasSheet({required this.items, required this.activeScreen, required this.onNavigate});
 
+
   static const _colors = <String, Color>{
     'pos':          Color(0xFFD1FAE5),
     'compras':      Color(0xFFD1FAE5),
     'devoluciones': Color(0xFFFEE2E2),
     'contabilidad': Color(0xFFFEF3C7),
+    'gastos':       Color(0xFFE0F2FE),
+    'nomina':       Color(0xFFD1FAE5),
     'reports':      Color(0xFFFEF3C7),
     'formatos':     Color(0xFFFEF3C7),
     'bonos':        Color(0xFFEDE9FE),

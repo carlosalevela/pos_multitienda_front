@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../models/pago_abono.dart';
 import '../models/cliente.dart';
 import '../models/separado.dart';
 import '../models/alerta_separado.dart';
@@ -315,14 +316,14 @@ class ClienteProvider extends ChangeNotifier {
   }
 
   Future<bool> abonarSeparado(int id, double monto, String metodoPago,
-      {int? cuentaDestinoId}) async {
+      {int? cuentaDestinoId, List<PagoAbono>? pagos}) async {
     if (_guardando) return false;
     _guardando = true;
     error      = null;
     notifyListeners();
     try {
       final result = await _service.abonarSeparado(id, monto, metodoPago,
-          cuentaDestinoId: cuentaDestinoId);
+          cuentaDestinoId: cuentaDestinoId, pagos: pagos);
 
       if (result['success'] == true) {
         final data = result['data'] as Map<String, dynamic>;

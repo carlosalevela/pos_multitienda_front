@@ -162,6 +162,50 @@ class ReportesProvider extends ChangeNotifier {
     return result;
   }
 
+  /// Cuanto entro a cada cuenta bancaria en el periodo (Nequi, datafono,
+  /// DaviPlata...). El efectivo no tiene cuenta, asi que no aparece aqui.
+  ///
+  /// Existe porque totalPorMetodo junta todas las transferencias en un solo
+  /// balde y no deja ver cuanto entro especificamente a Nequi.
+  List<Map<String, dynamic>> get totalPorCuenta {
+    final acum = <String, Map<String, dynamic>>{};
+
+    // Nombre tal cual viene (sin minusculas, se muestra al usuario).
+    String nombreDe(dynamic v) => v?.toString().trim() ?? '';
+
+    void sumar(String nombre, String tipo, double monto) {
+      if (nombre.isEmpty || monto == 0) return;
+      final e = acum.putIfAbsent(nombre, () => <String, dynamic>{
+            'nombre': nombre,
+            'tipo': tipo,
+            'total': 0.0,
+            'movimientos': 0,
+          });
+      e['total'] = (e['total'] as double) + monto;
+      e['movimientos'] = (e['movimientos'] as int) + 1;
+      if ((e['tipo'] as String).isEmpty && tipo.isNotEmpty) e['tipo'] = tipo;
+    }
+
+    for (final v in _ventas.where((v) => v['estado'] != 'anulada')) {
+      sumar(nombreDe(v['cuenta_destino_nombre']),
+          nombreDe(v['cuenta_destino_tipo']), _toDouble(v['total']));
+    }
+    for (final a in _abonos) {
+      sumar(nombreDe(a['cuenta_nombre']), nombreDe(a['cuenta_tipo']),
+          _toDouble(a['monto']));
+    }
+    for (final d in _devoluciones.where((d) =>
+        _toStr(d['estado']) != 'cancelada' &&
+        _toStr(d['tipo']) == 'cambio' &&
+        _toStr(d['tipo_diferencia']) == 'cobrar')) {
+      sumar(nombreDe(d['cuenta_destino_nombre']), '',
+          _toDouble(d['diferencia']));
+    }
+
+    return acum.values.toList()
+      ..sort((a, b) => (b['total'] as double).compareTo(a['total'] as double));
+  }
+
   Map<String, double> get totalPorTienda {
     final Map<String, double> result = {};
     for (final v in _ventas.where((v) => v['estado'] != 'anulada')) {

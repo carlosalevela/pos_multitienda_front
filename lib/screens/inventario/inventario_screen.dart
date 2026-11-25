@@ -2,10 +2,13 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../utils/file_downloader.dart';
+import '../../utils/numero_excel.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../providers/inventario_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -23,6 +26,7 @@ import 'widgets/importar_excel_dialog.dart';
 import 'widgets/averias_dialog.dart';
 import 'widgets/producto_detalle_sheet.dart';
 import 'widgets/camera_scanner_sheet.dart';
+import 'widgets/inventario_movil.dart';
 
 class InventarioScreen extends StatefulWidget {
   const InventarioScreen({super.key});
@@ -49,6 +53,7 @@ class _InventarioScreenState extends State<InventarioScreen>
   double? _filtPrecioMin;
   double? _filtPrecioMax;
   String? _filtAlerta; // null | 'bajo' | 'agotado' | 'con_averias'
+  String  _filtOrden = 'nombre'; // celular: ordenesInventario
   bool get _hayFiltrosActivos =>
       _filtCategoriaId != null ||
       _filtPrecioMin   != null ||
@@ -74,6 +79,10 @@ class _InventarioScreenState extends State<InventarioScreen>
   StreamSubscription<String>? _barcodeSub;
   bool   _scanActivo    = false;
   Timer? _scanPulseTimer;
+
+  // KPI carrusel (móvil)
+  final PageController _kpiPageCtrl = PageController(viewportFraction: 0.46);
+  int _kpiPage = 0;
 
   // ── Design tokens ──────────────────────────────────────
   static const _bg       = Color(0xFFF7F9FB);
@@ -148,6 +157,7 @@ class _InventarioScreenState extends State<InventarioScreen>
     _scanPulseTimer?.cancel();
     _searchCtrl.dispose();
     _fadeCtrl.dispose();
+    _kpiPageCtrl.dispose();
     super.dispose();
   }
 
@@ -343,7 +353,87 @@ class _InventarioScreenState extends State<InventarioScreen>
     _cargarInsights();
   }
 
+  // ── Hojas del Excel: se recuerda lo último elegido ──────────
+  // Celular: solo Inventario la primera vez (archivo liviano para
+  // compartir). PC: las 4, como siempre fue.
+  static const _prefHojasMovil = 'export_hojas_movil';
+  static const _prefHojasPc    = 'export_hojas_pc';
+
+  static Future<Set<String>> _leerHojas(String clave, Set<String> porDefecto) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final l = p.getStringList(clave);
+      return l == null ? porDefecto : l.where(hojasExtraExport.contains).toSet();
+    } catch (_) {
+      return porDefecto;
+    }
+  }
+
+  static Future<void> _guardarHojas(String clave, Set<String> hojas) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setStringList(clave, hojas.toList());
+    } catch (_) {}
+  }
+
+  /// Diálogo del PC para elegir las hojas. null si cancela.
+  Future<Set<String>?> _elegirHojasPc() async {
+    final sel = await _leerHojas(_prefHojasPc, hojasExtraExport.toSet());
+    if (!mounted) return null;
+    const nombres = {
+      'averias': ('Averías', 'Productos con unidades dañadas y su pérdida'),
+      'danos':   ('Historial de daños', 'Últimos 500 reportes de avería'),
+      'ajustes': ('Ajustes y transferencias', 'Últimos 500 movimientos manuales'),
+    };
+    return showDialog<Set<String>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: const Text('Exportar inventario a Excel'),
+          content: SizedBox(
+            width: 380,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const CheckboxListTile(
+                value: true,
+                onChanged: null,
+                contentPadding: EdgeInsets.zero,
+                title: Text('Inventario'),
+                subtitle: Text('Siempre se incluye'),
+              ),
+              for (final h in hojasExtraExport)
+                CheckboxListTile(
+                  value: sel.contains(h),
+                  activeColor: _green,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(nombres[h]!.$1),
+                  subtitle: Text(nombres[h]!.$2),
+                  onChanged: (v) => setD(() => v == true ? sel.add(h) : sel.remove(h)),
+                ),
+            ]),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(backgroundColor: _green),
+              onPressed: () => Navigator.pop(ctx, Set.of(sel)),
+              icon: const Icon(Icons.download_rounded, size: 18),
+              label: const Text('Exportar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _exportarExcel() async {
+    final hojas = await _elegirHojasPc();
+    if (hojas == null || !mounted) return;
+    await _guardarHojas(_prefHojasPc, hojas);
+    if (!mounted) return;
+
     setState(() => _exportando = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
@@ -351,6 +441,7 @@ class _InventarioScreenState extends State<InventarioScreen>
         tiendaId:  _tiendaActiva,
         empresaId: _empresaActiva,
         activo:    _activoFiltro,
+        hojas:     hojas,
       );
 
       if (result['success'] != true) {
@@ -377,6 +468,113 @@ class _InventarioScreenState extends State<InventarioScreen>
     } finally {
       if (mounted) setState(() => _exportando = false);
     }
+  }
+
+  /// Exportar en el celular: hoja para elegir qué productos van, con el
+  /// conteo del servidor, y al final un botón para abrir el archivo.
+  Future<void> _abrirExportarMovil({required String tienda}) async {
+    final tiendaId  = _tiendaActiva;
+    final empresaId = _empresaActiva;
+
+    final res = await _service.getCategorias(tiendaId: tiendaId);
+    final hojas = await _leerHojas(_prefHojasMovil, const {});
+    if (!mounted) return;
+    final categorias = ((res['data'] as List?) ?? const [])
+        .whereType<Map>()
+        .where((c) => c['id'] is int)
+        .map((c) => CategoriaMovil(
+            c['id'] as int, (c['nombre'] ?? 'Categoría').toString()))
+        .toList()
+      ..sort((a, b) =>
+          a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()));
+
+    await mostrarExportarMovil(context, (cerrar) => ExportarMovil(
+          tienda: tienda,
+          categorias: categorias,
+          estadoInicial: _activoFiltro,
+          lugar: lugarDelExcel,
+          hojasIniciales: hojas,
+          onHojas: (h) => _guardarHojas(_prefHojasMovil, h),
+          onCerrar: cerrar,
+          onContar: (categoriaId, estado) async {
+            final r = await _service.contarExportacion(
+              tiendaId: tiendaId,
+              empresaId: empresaId,
+              categoriaId: categoriaId,
+              activo: estado,
+            );
+            if (r['success'] != true) {
+              throw Exception(r['error'] ?? 'No se pudo contar los productos');
+            }
+            final data = r['data'] as Map<String, dynamic>;
+            int n(Object? v) => (v as num? ?? 0).toInt();
+            final extra = data['hojas'] is Map ? data['hojas'] as Map : const {};
+            return ConteosExportMovil(
+              {
+                for (final k in const ['todos', 'bajo', 'agotado'])
+                  if (data[k] is Map)
+                    k: ConteoExportMovil(
+                      n(data[k]['productos']),
+                      (data[k]['valor'] as num? ?? 0).toDouble(),
+                      averias: n(data[k]['averias']),
+                    ),
+              },
+              danos: n(extra['danos']),
+              ajustes: n(extra['ajustes']),
+            );
+          },
+          onExportar: (f) async {
+            final r = await _service.exportarInventario(
+              tiendaId: tiendaId,
+              empresaId: empresaId,
+              activo: f.estado,
+              alerta: f.alerta == 'todos' ? null : f.alerta,
+              categoriaId: f.categoriaId,
+              hojas: f.hojas,
+            );
+            if (r['success'] != true) {
+              throw Exception(r['error'] ?? 'Error al exportar');
+            }
+            final bytes = r['bytes'] as List<int>;
+            final nombre = _nombreExcel(f);
+            final ruta = await guardarArchivoExcel(bytes, nombre);
+            return ArchivoExportMovil(
+                nombre: nombre, ruta: ruta, bytes: bytes.length);
+          },
+          onAbrir: kIsWeb ? null : (a) => abrirArchivo(a.ruta),
+        ));
+  }
+
+  /// inventario_stock-bajo_bisuteria_20261125.xlsx
+  static String _nombreExcel(FiltroExportMovil f) {
+    String slug(String s) {
+      const con = 'áéíóúüñÁÉÍÓÚÜÑ';
+      const sin = 'aeiouunAEIOUUN';
+      final b = StringBuffer();
+      for (final ch in s.split('')) {
+        final i = con.indexOf(ch);
+        b.write(i >= 0 ? sin[i] : ch);
+      }
+      return b
+          .toString()
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+          .replaceAll(RegExp(r'^-+|-+$'), '');
+    }
+
+    final now = DateTime.now();
+    final fecha = '${now.year}${now.month.toString().padLeft(2, '0')}'
+        '${now.day.toString().padLeft(2, '0')}';
+    final partes = [
+      'inventario',
+      if (f.alerta == 'bajo') 'stock-bajo',
+      if (f.alerta == 'agotado') 'agotados',
+      if (f.categoriaNombre != null && slug(f.categoriaNombre!).isNotEmpty)
+        slug(f.categoriaNombre!),
+      if (f.estado == 'false') 'inactivos',
+      fecha,
+    ];
+    return '${partes.join('_')}.xlsx';
   }
 
   void _abrirFormulario(BuildContext ctx, InventarioProvider inv,
@@ -482,6 +680,19 @@ class _InventarioScreenState extends State<InventarioScreen>
     final esSupervisor = auth.rol == 'supervisor';
     final puedeGestionar = esAdmin || esSupervisor;
 
+    // En celular va un diseño propio (widgets/inventario_movil.dart).
+    // El de escritorio, con tabla y paneles laterales, no cabe en un
+    // teléfono: partía los textos letra por letra.
+    if (MediaQuery.sizeOf(context).width < 600) {
+      return FadeTransition(
+        opacity: _fadeAnim,
+        child: _buildMovil(inv,
+            esCajero: esCajero,
+            esAdmin: esAdmin,
+            puedeGestionar: puedeGestionar),
+      );
+    }
+
     return FadeTransition(
       opacity: _fadeAnim,
       child: Container(
@@ -497,8 +708,14 @@ class _InventarioScreenState extends State<InventarioScreen>
                 _selectorTienda(),
                 const SizedBox(height: 12),
               ],
-              _buildKPIGrid(inv.productos, esCajero: esCajero),
-              const SizedBox(height: 14),
+              LayoutBuilder(
+                builder: (_, c) => c.maxWidth < 580
+                    ? _buildKPICarousel(inv.productos, esCajero: esCajero)
+                    : _buildKPIGrid(inv.productos, esCajero: esCajero),
+              ),
+              const SizedBox(height: 10),
+              _buildAlertaBanner(),
+              const SizedBox(height: 10),
               _buildToolbar(esCajero, inv),
               const SizedBox(height: 12),
               if (inv.successMsg != null)
@@ -520,8 +737,9 @@ class _InventarioScreenState extends State<InventarioScreen>
                             ? _loadingState()
                             : inv.productos.isEmpty
                                 ? _emptyState(esCajero)
-                                : _buildTabla(
-                                    inv.productos, esCajero, esAdmin, inv),
+                                : constraints.maxWidth < 580
+                                    ? _buildListaMobile(inv.productos, esCajero, esAdmin, inv)
+                                    : _buildTabla(inv.productos, esCajero, esAdmin, inv),
                       ),
                       // ── Panel insights (admin/supervisor) ─
                       if (puedeGestionar && mostrarPanel) ...[
@@ -549,6 +767,322 @@ class _InventarioScreenState extends State<InventarioScreen>
         ),
       ),
     );
+  }
+
+  void _seleccionarTienda(int? id) {
+    if (_tiendaFiltro == id) return;
+    setState(() {
+      _tiendaFiltro      = id;
+      _searchCtrl.clear();
+      _filtCategoriaId   = null;
+      _filtCategoriaName = null;
+    });
+    _aplicarFiltros();
+    _cargarInsights();
+    context.read<InventarioProvider>().cargarCategorias(tiendaId: id);
+  }
+
+  // ══════════════════════════════════════════════════════
+  // MÓVIL
+  // ══════════════════════════════════════════════════════
+
+  Widget _buildMovil(
+    InventarioProvider inv, {
+    required bool esCajero,
+    required bool esAdmin,
+    required bool puedeGestionar,
+  }) {
+    final auth = context.read<AuthProvider>();
+
+    // Un rango de precio cuenta como un solo filtro.
+    final filtros = [
+      _filtCategoriaId,
+      _filtPrecioMin ?? _filtPrecioMax,
+      _filtAlerta,
+    ].where((f) => f != null).length;
+
+    final accionesGestion = <AccionMovil>[
+      AccionMovil(
+          etiqueta: 'Nuevo producto',
+          icono: Icons.add_box_rounded,
+          tono: TonoMovil.verde,
+          onTap: () => _abrirFormulario(context, inv)),
+      AccionMovil(
+          etiqueta: 'Gestionar averías',
+          icono: Icons.warning_amber_rounded,
+          tono: TonoMovil.ambar,
+          onTap: _abrirAverias),
+      if (_tiendaActiva != null)
+        AccionMovil(
+            etiqueta: 'Importar Excel',
+            icono: Icons.upload_file_rounded,
+            tono: TonoMovil.turquesa,
+            onTap: () => _abrirImportarExcel(inv)),
+      AccionMovil(
+          etiqueta: 'Exportar Excel',
+          icono: Icons.download_rounded,
+          tono: TonoMovil.lima,
+          onTap: () => _abrirExportarMovil(
+              tienda: esAdmin ? _nombreTiendaActual() : auth.tiendaNombre)),
+    ];
+
+    return InventarioMovil(
+      subtitulo: esAdmin ? _nombreTiendaActual() : auth.tiendaNombre,
+      tiendas: esAdmin && _tiendas.length > 1
+          ? [
+              const TiendaMovil(null, 'Todas'),
+              ..._tiendas.map((t) => TiendaMovil(
+                  t['id'] as int?, t['nombre'] as String? ?? 'Tienda')),
+            ]
+          : const [],
+      tiendaSeleccionada: _tiendaFiltro,
+      onTienda: _seleccionarTienda,
+      kpis: _kpisMovil(inv.productos, esCajero: esCajero),
+      agotados: _alertasAgotado.length,
+      bajos: _alertasBajo.length,
+      onAlerta: () {
+        setState(() => _filtAlerta =
+            _alertasAgotado.isNotEmpty ? 'agotado' : 'bajo');
+        _aplicarFiltros();
+      },
+      buscar: _searchCtrl,
+      onBuscar: (_) => _aplicarFiltros(),
+      filtrosActivos: filtros,
+      onFiltros: () => _abrirFiltros(context),
+      filtrosAplicados: [
+        if (_filtAlerta != null)
+          FiltroActivoMovil(alertasInventario[_filtAlerta] ?? _filtAlerta!, () {
+            setState(() => _filtAlerta = null);
+            _aplicarFiltros();
+          }),
+        if (_filtCategoriaId != null)
+          FiltroActivoMovil(_filtCategoriaName ?? 'Categoría', () {
+            setState(() {
+              _filtCategoriaId = null;
+              _filtCategoriaName = null;
+            });
+            _aplicarFiltros();
+          }),
+        if (_filtPrecioMin != null || _filtPrecioMax != null)
+          FiltroActivoMovil(etiquetaPrecio(_filtPrecioMin, _filtPrecioMax), () {
+            setState(() {
+              _filtPrecioMin = null;
+              _filtPrecioMax = null;
+            });
+            _aplicarFiltros();
+          }),
+        if (_filtOrden != 'nombre')
+          FiltroActivoMovil(ordenesInventario[_filtOrden] ?? _filtOrden,
+              () => setState(() => _filtOrden = 'nombre')),
+      ],
+      onLimpiarFiltros: _limpiarFiltros, // el orden ya se ve en su chip
+      onEscanear: _abrirCameraScanner,
+      estado: _activoFiltro,
+      onEstado: (v) {
+        setState(() => _activoFiltro = v);
+        _aplicarFiltros();
+      },
+      productos: ordenarProductos(inv.productos, _filtOrden),
+      cargando: inv.cargando,
+      onProducto: (p) => _abrirDetalleMovil(p, inv,
+          esCajero: esCajero, esAdmin: esAdmin),
+      onInsights: puedeGestionar
+          ? () => mostrarPanelMovil(context,
+              titulo: 'Análisis',
+              subtitulo: esAdmin
+                  ? _nombreTiendaActual()
+                  : auth.tiendaNombre,
+              panel: _analisisMovil)
+          : esCajero
+              ? () => mostrarPanelMovil(context,
+                  titulo: 'Mi turno',
+                  panel: () => _buildCajeroPanel(inv.productos))
+              : null,
+      iconoInsights:
+          esCajero ? Icons.badge_rounded : Icons.insights_rounded,
+      accionesFab: esCajero ? const [] : accionesGestion,
+      accionesMas: [
+        AccionMovil(
+            etiqueta: 'Escanear código',
+            icono: Icons.qr_code_scanner_rounded,
+            tono: TonoMovil.turquesa,
+            onTap: _abrirCameraScanner),
+        if (!esCajero) ...accionesGestion,
+      ],
+      aviso: inv.successMsg != null
+          ? _banner(inv.successMsg!,
+              isError: false, onClose: inv.limpiarMensajes)
+          : inv.errorMsg != null
+              ? _banner(inv.errorMsg!,
+                  isError: true, onClose: inv.limpiarMensajes)
+              : null,
+      onRefrescar: () async {
+        _aplicarFiltros();
+        await _cargarInsights();
+      },
+    );
+  }
+
+  /// Datos del panel de análisis, en la forma que usa la vista móvil.
+  Widget _analisisMovil() {
+    AlertaStockMovil alerta(Map<String, dynamic> m) => AlertaStockMovil(
+          nombre:    m['producto_nombre']?.toString() ?? '—',
+          categoria: m['categoria_nombre']?.toString() ?? '',
+          stock:     _toDouble(m['stock_actual']),
+          minimo:    _toDouble(m['stock_minimo']),
+        );
+
+    return AnalisisMovil(
+      cargando: _cargandoInsights,
+      agotados: _alertasAgotado.map(alerta).toList(),
+      bajos:    _alertasBajo.map(alerta).toList(),
+      vendidos: _topProductos.map((t) => VendidoMovil(
+            nombre: (t['producto'] ?? t['producto_nombre'])?.toString() ?? '—',
+            categoria: t['categoria']?.toString() ?? '',
+            unidades:  _toDouble(t['total_vendido']),
+            ingresos:  _toDouble(t['total_ingresos']),
+          )).toList(),
+      movimientos: _movimientos.map((m) {
+        final tipo = m['tipo'] as String? ?? '';
+        // Mismos colores que usa el detalle del movimiento en escritorio.
+        final (color, fondo, signo) = switch (tipo) {
+          'entrada'       => (_green, _greenBg, '+'),
+          'salida'        => (_danger, _dangerBg, '-'),
+          'dano'          => (_danger, _dangerBg, '-'),
+          'transferencia' => (const Color(0xFF3F465C),
+              const Color(0xFFDAE2FD), '↔'),
+          _               => (_muted, _surfHigh, '~'),
+        };
+        return MovimientoMovil(
+          producto: m['producto_nombre']?.toString() ?? '—',
+          tipo:     tipo,
+          cantidad: _toDouble(m['cantidad']),
+          fecha: DateTime.tryParse(m['created_at']?.toString() ?? '')
+              ?.toLocal(),
+          empleado: m['empleado_nombre']?.toString() ?? '',
+          detalle:  m['observacion']?.toString() ?? '',
+          onTap: () => _mostrarDetalleMovimiento(m, color, fondo, signo),
+        );
+      }).toList(),
+      onVerAlertas: (tipo) {
+        setState(() => _filtAlerta = tipo);
+        _aplicarFiltros();
+      },
+    );
+  }
+
+  /// Mismos números que las tarjetas de escritorio.
+  List<KpiMovil> _kpisMovil(List<Producto> productos,
+      {required bool esCajero}) {
+    final d = _dashboard;
+    final valorTotal = d != null
+        ? _toDouble(d['total_valor_inventario'])
+        : productos.fold<double>(0, (s, p) => s + p.precio * p.stockActual);
+    final alertasBajo = d != null
+        ? _toInt(d['alertas_stock_bajo'])
+        : productos.where((p) => p.stockActual > 0 && p.stockMinimo > 0 &&
+            p.stockActual <= p.stockMinimo).length; // regla del servidor
+    final alertasCrit = d != null
+        ? _toInt(d['alertas_criticas'])
+        : productos.where((p) => p.stockActual <= 0).length;
+    final ingresosMes = d != null ? _toDouble(d['ingresos_mes_unidades']) : 0.0;
+    final perdidasMes = d != null ? _toDouble(d['perdidas_mes_valor']) : 0.0;
+    final perdidasCantidad = d != null
+        ? (d['perdidas_mes_cantidad'] as num? ?? 0).toInt() : 0;
+
+    return [
+      if (!esCajero)
+        KpiMovil(
+          etiqueta: 'Valor inventario',
+          valor: '${Constants.moneda}${formatoCompacto(valorTotal)}',
+          detalle: '${productos.length} productos',
+          icono: Icons.account_balance_wallet_rounded,
+          tono: TonoMovil.verde,
+        ),
+      KpiMovil(
+        etiqueta: 'Alertas de stock',
+        valor: '${alertasBajo + alertasCrit}',
+        sufijo: 'ítems',
+        detalle: '$alertasCrit críticos (agotados)',
+        icono: Icons.warning_rounded,
+        tono: TonoMovil.rojo,
+        detalleDestacado: alertasCrit > 0,
+      ),
+      KpiMovil(
+        etiqueta: 'Ingresos del mes',
+        valor: _formatNum(ingresosMes),
+        sufijo: 'uds',
+        detalle: 'Unidades recibidas',
+        icono: Icons.move_to_inbox_rounded,
+        tono: TonoMovil.turquesa,
+      ),
+      KpiMovil(
+        etiqueta: 'Daños / pérdidas',
+        valor: perdidasMes > 0
+            ? '${Constants.moneda}${formatoCompacto(perdidasMes)}'
+            : '$perdidasCantidad',
+        sufijo: perdidasMes > 0 ? null : 'unid.',
+        detalle: 'Reportadas este mes',
+        icono: Icons.report_rounded,
+        tono: perdidasCantidad > 0 ? TonoMovil.ambar : TonoMovil.lima,
+      ),
+    ];
+  }
+
+  /// Detalle de un producto con las acciones que el rol permite
+  /// (las mismas reglas que la tabla de escritorio).
+  void _abrirDetalleMovil(
+    Producto p,
+    InventarioProvider inv, {
+    required bool esCajero,
+    required bool esAdmin,
+  }) {
+    final inactivo = !p.activo || _activoFiltro == 'false';
+    mostrarDetalleProductoMovil(context, producto: p, acciones: [
+      if (esAdmin)
+        AccionMovil(
+            etiqueta: 'Editar',
+            icono: Icons.edit_rounded,
+            tono: TonoMovil.verde,
+            onTap: () => _abrirFormulario(context, inv, producto: p)),
+      AccionMovil(
+          etiqueta: 'Kardex',
+          icono: Icons.receipt_long_rounded,
+          tono: TonoMovil.turquesa,
+          onTap: () => _abrirKardex(p)),
+      if (!esCajero)
+        AccionMovil(
+            etiqueta: 'Ajustar stock',
+            icono: Icons.tune_rounded,
+            tono: TonoMovil.lima,
+            onTap: () => _abrirAjuste(p)),
+      if (esAdmin && _tiendas.length >= 2)
+        AccionMovil(
+            etiqueta: 'Transferir',
+            icono: Icons.swap_horiz_rounded,
+            tono: TonoMovil.turquesa,
+            onTap: () => _abrirTransferencia(p)),
+      if (!esCajero)
+        AccionMovil(
+            etiqueta: 'Avería',
+            icono: Icons.report_rounded,
+            tono: TonoMovil.ambar,
+            // Reporta la avería de ESTE producto (antes abría la lista
+            // general, que solo gestiona averías ya reportadas).
+            onTap: () => _abrirAjuste(p, tipo: 'averia')),
+      if (esAdmin)
+        inactivo
+            ? AccionMovil(
+                etiqueta: 'Reactivar',
+                icono: Icons.restart_alt_rounded,
+                tono: TonoMovil.verde,
+                onTap: () => _confirmarReactivar(context, inv, p))
+            : AccionMovil(
+                etiqueta: 'Desactivar',
+                icono: Icons.block_rounded,
+                tono: TonoMovil.rojo,
+                onTap: () => _confirmarEliminar(context, inv, p)),
+    ]);
   }
 
   // ══════════════════════════════════════════════════════
@@ -726,18 +1260,7 @@ class _InventarioScreenState extends State<InventarioScreen>
   }) {
     final sel = _tiendaFiltro == id;
     return GestureDetector(
-      onTap: () {
-        if (_tiendaFiltro == id) return;
-        setState(() {
-          _tiendaFiltro      = id;
-          _searchCtrl.clear();
-          _filtCategoriaId   = null;
-          _filtCategoriaName = null;
-        });
-        _aplicarFiltros();
-        _cargarInsights();
-        context.read<InventarioProvider>().cargarCategorias(tiendaId: id);
-      },
+      onTap: () => _seleccionarTienda(id),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -768,9 +1291,7 @@ class _InventarioScreenState extends State<InventarioScreen>
         ? _toInt(d['alertas_stock_bajo'])
         : productos.where((p) =>
             p.stockActual > 0 &&
-            (p.stockMinimo > 0
-                ? p.stockActual <= p.stockMinimo
-                : p.stockActual <= 10)).length;
+            (p.stockMinimo > 0 && p.stockActual <= p.stockMinimo)).length;
     final alertasCrit = d != null
         ? _toInt(d['alertas_criticas'])
         : productos.where((p) => p.stockActual <= 0).length;
@@ -804,7 +1325,7 @@ class _InventarioScreenState extends State<InventarioScreen>
         iconColor:   _danger,
         label:       'ALERTAS STOCK BAJO',
         value:       '${alertasBajo + alertasCrit}',
-        valueSuffix: ' Items',
+        valueSuffix: ' ítems',
         sub:         '$alertasCrit críticos (agotados)',
         accent:      _danger,
       )),
@@ -921,16 +1442,11 @@ class _InventarioScreenState extends State<InventarioScreen>
   // ══════════════════════════════════════════════════════
   // TOOLBAR
   // ══════════════════════════════════════════════════════
-  Widget _buildToolbar(bool esCajero, InventarioProvider inv) => Container(
-    padding: const EdgeInsets.all(10),
-    decoration: BoxDecoration(
-      color: _surface,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: _border),
-    ),
-    child: Row(children: [
-      Expanded(
-        child: Container(
+  Widget _buildToolbar(bool esCajero, InventarioProvider inv) =>
+      LayoutBuilder(builder: (_, c) {
+        final compact = c.maxWidth < 580;
+
+        final searchField = Container(
           height: 40,
           decoration: BoxDecoration(
             color: _surfLow,
@@ -941,93 +1457,127 @@ class _InventarioScreenState extends State<InventarioScreen>
             controller: _searchCtrl,
             style: _t(size: 14),
             decoration: InputDecoration(
-              hintText:  'Buscar inventarios, SKUs...',
+              hintText: 'Buscar producto o código…',
               hintStyle: _t(size: 14, color: _muted2),
               prefixIcon: const Icon(Icons.search_rounded,
                   color: Color(0xFF76777D), size: 18),
               border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 11),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             ),
-            onChanged: (val) =>
-                context.read<InventarioProvider>().cargarProductos(
-                  q:           val,
-                  tiendaId:    _tiendaActiva,
-                  activo:      _activoFiltro,
+            onChanged: (val) => context.read<InventarioProvider>().cargarProductos(
+                  q: val,
+                  tiendaId: _tiendaActiva,
+                  activo: _activoFiltro,
                   categoriaId: _filtCategoriaId,
-                  precioMin:   _filtPrecioMin,
-                  precioMax:   _filtPrecioMax,
-                  alerta:      _filtAlerta,
+                  precioMin: _filtPrecioMin,
+                  precioMax: _filtPrecioMax,
+                  alerta: _filtAlerta,
                 ),
           ),
-        ),
-      ),
-      const SizedBox(width: 10),
-      // Indicador escáner
-      AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-        decoration: BoxDecoration(
-          color:        _scanActivo ? const Color(0xFFE8FFF4) : _surfLow,
-          borderRadius: BorderRadius.circular(999),
-          border:       Border.all(
-            color: _scanActivo ? _green : _border,
-          ),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.qr_code_scanner_rounded,
-              size: 16,
-              color: _scanActivo ? _green : _muted2),
-          if (_scanActivo) ...[
-            const SizedBox(width: 5),
-            Text('OK', style: _t(size: 11, weight: FontWeight.w700, color: _green)),
-          ],
-        ]),
-      ),
-      const SizedBox(width: 10),
-      // Botón filtros avanzados
-      GestureDetector(
-        onTap: () => _abrirFiltros(context),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-          decoration: BoxDecoration(
-            color:        _hayFiltrosActivos ? _green : _surfLow,
-            borderRadius: BorderRadius.circular(999),
-            border:       Border.all(
-              color: _hayFiltrosActivos ? _green : _border,
-            ),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.tune_rounded, size: 16,
-                color: _hayFiltrosActivos ? Colors.white : _muted2),
-            const SizedBox(width: 5),
-            Text('Filtros',
-                style: _t(size: 12, weight: FontWeight.w600,
-                    color: _hayFiltrosActivos ? Colors.white : _muted2)),
-            if (_hayFiltrosActivos) ...[
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.25),
-                  borderRadius: BorderRadius.circular(99),
-                ),
-                child: Text(
-                  _contarFiltros().toString(),
-                  style: _t(size: 10, weight: FontWeight.w700, color: Colors.white),
-                ),
+        );
+
+        final filtrosBtn = GestureDetector(
+          onTap: () => _abrirFiltros(context),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: _hayFiltrosActivos
+                  ? _green
+                  : (compact ? const Color(0xFF131B2E) : _surfLow),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: _hayFiltrosActivos
+                    ? _green
+                    : (compact ? const Color(0xFF131B2E) : _border),
               ),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.tune_rounded,
+                  size: 16,
+                  color: (_hayFiltrosActivos || compact) ? Colors.white : _muted2),
+              const SizedBox(width: 5),
+              Text('Filtros',
+                  style: _t(
+                      size: 12,
+                      weight: FontWeight.w700,
+                      color: (_hayFiltrosActivos || compact)
+                          ? Colors.white
+                          : _muted2)),
+              if (_hayFiltrosActivos) ...[
+                const SizedBox(width: 4),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Text(_contarFiltros().toString(),
+                      style: _t(
+                          size: 10,
+                          weight: FontWeight.w700,
+                          color: Colors.white)),
+                ),
+              ],
+            ]),
+          ),
+        );
+
+        if (compact) {
+          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(child: searchField),
+              const SizedBox(width: 8),
+              filtrosBtn,
+            ]),
+            if (!esCajero) ...[
+              const SizedBox(height: 8),
+              _filtroEstado(),
+            ],
+          ]);
+        }
+
+        return Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: _surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _border),
+          ),
+          child: Row(children: [
+            Expanded(child: searchField),
+            const SizedBox(width: 10),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+              decoration: BoxDecoration(
+                color: _scanActivo ? const Color(0xFFE8FFF4) : _surfLow,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: _scanActivo ? _green : _border),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.qr_code_scanner_rounded,
+                    size: 16,
+                    color: _scanActivo ? _green : _muted2),
+                if (_scanActivo) ...[
+                  const SizedBox(width: 5),
+                  Text('OK',
+                      style: _t(
+                          size: 11, weight: FontWeight.w700, color: _green)),
+                ],
+              ]),
+            ),
+            const SizedBox(width: 10),
+            filtrosBtn,
+            if (!esCajero) ...[
+              const SizedBox(width: 10),
+              _filtroEstado(),
             ],
           ]),
-        ),
-      ),
-      if (!esCajero) ...[
-        const SizedBox(width: 10),
-        _filtroEstado(),
-      ],
-    ]),
-  );
+        );
+      });
 
   Widget _filtroEstado() {
     final ops = [
@@ -1109,6 +1659,7 @@ class _InventarioScreenState extends State<InventarioScreen>
       _filtPrecioMin     = null;
       _filtPrecioMax     = null;
       _filtAlerta        = null;
+      _filtOrden         = 'nombre';
     });
     _aplicarFiltros();
   }
@@ -1118,6 +1669,38 @@ class _InventarioScreenState extends State<InventarioScreen>
     await inv.cargarCategorias(tiendaId: _tiendaActiva);
     if (!ctx.mounted) return;
     final categorias = inv.categorias; // List<Map<String,dynamic>>
+
+    if (MediaQuery.sizeOf(ctx).width < 600) {
+      await mostrarFiltrosMovil(ctx, (cerrar) => FiltrosMovil(
+            categorias: [
+              for (final c in categorias)
+                if (c['id'] is int)
+                  CategoriaMovil(c['id'] as int, (c['nombre'] ?? '').toString()),
+            ],
+            inicial: FiltrosInventarioMovil(
+              alerta:          _filtAlerta,
+              categoriaId:     _filtCategoriaId,
+              categoriaNombre: _filtCategoriaName,
+              precioMin:       _filtPrecioMin,
+              precioMax:       _filtPrecioMax,
+              orden:           _filtOrden,
+            ),
+            onCerrar: cerrar,
+            onAplicar: (f) {
+              cerrar();
+              setState(() {
+                _filtAlerta        = f.alerta;
+                _filtCategoriaId   = f.categoriaId;
+                _filtCategoriaName = f.categoriaNombre;
+                _filtPrecioMin     = f.precioMin;
+                _filtPrecioMax     = f.precioMax;
+                _filtOrden         = f.orden;
+              });
+              _aplicarFiltros();
+            },
+          ));
+      return;
+    }
 
     // Controladores locales al sheet
     final precioMinCtrl = TextEditingController(
@@ -1233,8 +1816,11 @@ class _InventarioScreenState extends State<InventarioScreen>
                         borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () {
-                    final pMin = double.tryParse(precioMinCtrl.text.replaceAll(',', ''));
-                    final pMax = double.tryParse(precioMaxCtrl.text.replaceAll(',', ''));
+                    // "12.500" son doce mil quinientos (antes quedaba en 12,5).
+                    double? precio(String t) =>
+                        RegExp(r'\d').hasMatch(t) ? leerNumeroExcel(t) : null;
+                    final pMin = precio(precioMinCtrl.text);
+                    final pMax = precio(precioMaxCtrl.text);
                     setState(() {
                       _filtCategoriaId   = tmpCatId;
                       _filtCategoriaName = tmpCatName;
@@ -1305,7 +1891,77 @@ class _InventarioScreenState extends State<InventarioScreen>
   // ══════════════════════════════════════════════════════
   // TABLA PLANA
   // ══════════════════════════════════════════════════════
+  /// Transferir en el celular. Con una tienda elegida, esa es el origen;
+  /// en "Todas" se elige en la hoja. Cada tienda muestra su stock.
+  Future<void> _abrirTransferenciaMovil(Producto p) async {
+    if (_tiendas.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('Se necesitan al menos 2 tiendas para transferir.'),
+        backgroundColor: _warning,
+        behavior: SnackBarBehavior.floating,
+      ));
+      return;
+    }
+    double n(Object? v) => double.tryParse('${v ?? ''}') ?? 0;
+    final r = await _service.getInventario(productoId: p.id, activo: 'all');
+    if (!mounted) return;
+    final stockPorTienda = <int, double>{
+      for (final f in (r['data'] as List? ?? const []).whereType<Map>())
+        if (f['tienda'] is int) f['tienda'] as int: n(f['stock_actual']),
+    };
+    final tiendas = <(TiendaMovil, double)>[
+      for (final t in _tiendas)
+        if (t['id'] is int)
+          (TiendaMovil(t['id'] as int, (t['nombre'] ?? 'Tienda').toString()),
+           stockPorTienda[t['id']] ?? 0),
+    ];
+    final messenger = ScaffoldMessenger.of(context);
+    final inv = context.read<InventarioProvider>();
+    String c(double v) =>
+        v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
+
+    await mostrarTransferirMovil(context, (cerrar) => TransferirMovil(
+          producto:    p.nombre,
+          tiendas:     tiendas,
+          origenFijo:  _tiendaActiva,
+          soloEnteros: p.unidadMedida == 'unidad',
+          onCerrar:    cerrar,
+          onConfirmar: (origen, destino, cantidad, nota) async {
+            final res = await _service.transferirStock(
+              productoId:  p.id,
+              origenId:    origen,
+              destinoId:   destino,
+              cantidad:    cantidad,
+              observacion: nota,
+            );
+            if (res['success'] != true) {
+              return (res['error'] ?? 'No se pudo transferir').toString();
+            }
+            cerrar();
+            inv.cargarProductos(tiendaId: _tiendaFiltro, activo: _activoFiltro);
+            _cargarInsights();
+            final d = res['data'] is Map ? res['data'] as Map : const {};
+            messenger.showSnackBar(SnackBar(
+              content: Text('Listo · ${c(cantidad)} de ${p.nombre} a '
+                  '${d['tienda_destino'] ?? 'la otra tienda'}. '
+                  'Quedan ${c(n(d['stock_origen']))} en '
+                  '${d['tienda_origen'] ?? 'origen'} y '
+                  '${c(n(d['stock_destino']))} en '
+                  '${d['tienda_destino'] ?? 'destino'}.'),
+              backgroundColor: _green,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 5),
+            ));
+            return null;
+          },
+        ));
+  }
+
   void _abrirTransferencia(Producto p) {
+    if (MediaQuery.sizeOf(context).width < 600) {
+      _abrirTransferenciaMovil(p);
+      return;
+    }
     final tiendaId = _tiendaActiva;
     if (tiendaId == null || _tiendas.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -1332,7 +1988,11 @@ class _InventarioScreenState extends State<InventarioScreen>
     );
   }
 
-  void _abrirAjuste(Producto p) {
+  void _abrirAjuste(Producto p, {String tipo = 'entrada'}) {
+    if (MediaQuery.sizeOf(context).width < 600) {
+      _abrirAjusteMovil(p, tipo);
+      return;
+    }
     final tiendaId = _tiendaActiva;
     if (tiendaId == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -1348,6 +2008,7 @@ class _InventarioScreenState extends State<InventarioScreen>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _AjusteStockSheet(
+        tipoInicial: tipo,
         producto:  p,
         tiendaId:  tiendaId,
         onAjustado: () => context
@@ -1357,7 +2018,136 @@ class _InventarioScreenState extends State<InventarioScreen>
     );
   }
 
+  /// Tienda donde ver o hacer algo con [p], con su stock y averías al día.
+  /// - Con una tienda elegida (o si es cajero/supervisor): esa, directo.
+  /// - En "Todas": si el producto está en una sola tienda, esa; si está en
+  ///   varias, pregunta mostrando el stock de cada una.
+  /// null si no hay tienda o el usuario cierra la pregunta.
+  Future<({int id, String nombre, double stock, double? averias})?>
+      _tiendaDelProducto(Producto p, {required String explicacion}) async {
+    double n(Object? v) => double.tryParse('${v ?? ''}') ?? 0;
+    final r = await _service.getInventario(productoId: p.id, activo: 'all');
+    if (!mounted) return null;
+    final filas = (r['data'] as List? ?? const [])
+        .whereType<Map>()
+        .where((f) => f['tienda'] is int)
+        .toList();
+
+    final activa = _tiendaActiva;
+    if (activa != null) {
+      final f = filas.where((f) => f['tienda'] == activa).firstOrNull;
+      final auth = context.read<AuthProvider>();
+      return (
+        id: activa,
+        nombre: auth.rol == 'admin' || auth.rol == 'superadmin'
+            ? _nombreTiendaActual()
+            : auth.tiendaNombre,
+        stock: f != null ? n(f['stock_actual']) : p.stockActual,
+        averias: f != null ? n(f['stock_averias']) : null,
+      );
+    }
+
+    if (filas.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(r['success'] == true
+            ? 'Este producto no está en ninguna tienda.'
+            : (r['error'] ?? 'No se pudo consultar el stock').toString()),
+        backgroundColor: _danger,
+        behavior: SnackBarBehavior.floating,
+      ));
+      return null;
+    }
+
+    ({int id, String nombre, double stock, double? averias}) de(Map f) => (
+          id: f['tienda'] as int,
+          nombre: (f['tienda_nombre'] ?? 'Tienda').toString(),
+          stock: n(f['stock_actual']),
+          averias: n(f['stock_averias']),
+        );
+
+    if (filas.length == 1) return de(filas.first);
+
+    final elegida = await mostrarElegirTiendaMovil(context,
+        titulo: '¿De qué tienda?',
+        subtitulo: '$explicacion ${p.nombre} está en:',
+        tiendas: [
+          for (final f in filas)
+            (TiendaMovil(f['tienda'] as int,
+                    (f['tienda_nombre'] ?? 'Tienda').toString()),
+                n(f['stock_actual'])),
+        ]);
+    if (elegida == null || !mounted) return null;
+    return de(filas.firstWhere((f) => f['tienda'] == elegida));
+  }
+
+  /// Kardex en el celular.
+  Future<void> _abrirKardexMovil(Producto p) async {
+    final t = await _tiendaDelProducto(p,
+        explicacion: 'El kardex es por tienda.');
+    if (t == null || !mounted) return;
+    await mostrarKardexMovil(context, (_) => _KardexMovilCarga(
+          producto: p,
+          tiendaId: t.id,
+          tienda:   t.nombre,
+          stock:    t.stock,
+          service:  _service,
+        ));
+  }
+
+  /// Ajustar stock en el celular: entrada, salida, conteo o avería.
+  Future<void> _abrirAjusteMovil(Producto p, String tipo) async {
+    final t = await _tiendaDelProducto(p,
+        explicacion: 'El ajuste se hace en una sola tienda.');
+    if (t == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final inv = context.read<InventarioProvider>();
+
+    await mostrarAjusteStockMovil(context, (cerrar) => AjusteStockMovil(
+          producto:    p.nombre,
+          tienda:      t.nombre,
+          stock:       t.stock,
+          averias:     t.averias,
+          tipoInicial: tipo,
+          soloEnteros: p.unidadMedida == 'unidad',
+          onCerrar:    cerrar,
+          onConfirmar: (tipo, cantidad, obs) async {
+            final r = await _service.ajustarStock(
+              productoId:  p.id,
+              tiendaId:    t.id,
+              cantidad:    cantidad,
+              tipo:        tipo,
+              observacion: obs,
+            );
+            if (r['success'] != true) {
+              return (r['error'] ?? 'No se pudo ajustar el stock').toString();
+            }
+            cerrar();
+            inv.cargarProductos(tiendaId: _tiendaFiltro, activo: _activoFiltro);
+            _cargarInsights();
+            double n(Object? v) => double.tryParse('${v ?? ''}') ?? 0;
+            String c(double v) => v == v.roundToDouble()
+                ? v.toInt().toString()
+                : v.toStringAsFixed(1);
+            final data = r['data'] is Map ? r['data'] as Map : const {};
+            final stock = c(n(data['stock_actual']));
+            messenger.showSnackBar(SnackBar(
+              content: Text(tipo == 'averia'
+                  ? 'Avería registrada · ${p.nombre}: quedan $stock en stock '
+                      'y ${c(n(data['stock_averias']))} en averías'
+                  : 'Listo · ${p.nombre} quedó con $stock en stock'),
+              backgroundColor: tipo == 'averia' ? _warning : _green,
+              behavior: SnackBarBehavior.floating,
+            ));
+            return null;
+          },
+        ));
+  }
+
   void _abrirKardex(Producto p) {
+    if (MediaQuery.sizeOf(context).width < 600) {
+      _abrirKardexMovil(p);
+      return;
+    }
     final tiendaId = _tiendaActiva;
     if (tiendaId == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -1416,7 +2206,7 @@ class _InventarioScreenState extends State<InventarioScreen>
     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
     color: _surfLow,
     child: Row(children: [
-      Expanded(flex: 3, child: _th('Producto & SKU')),
+      Expanded(flex: 3, child: _th('Producto y código')),
       Expanded(flex: 2, child: _th('Categoría')),
       if (esAdmin) ...[
         Expanded(flex: 2, child: _th('Costo', right: true)),
@@ -1447,9 +2237,7 @@ class _InventarioScreenState extends State<InventarioScreen>
       bool esAdmin, InventarioProvider inv) {
     final esInactivo = _activoFiltro == 'false';
     final agotado    = p.stockActual <= 0;
-    final bajo       = !agotado && (p.stockMinimo > 0
-        ? p.stockActual <= p.stockMinimo
-        : p.stockActual <= 10);
+    final bajo       = !agotado && (p.stockMinimo > 0 && p.stockActual <= p.stockMinimo);
     final isHovered  = _hoveredRow == idx;
 
     final (estadoText, estadoColor) = esInactivo
@@ -1722,6 +2510,355 @@ class _InventarioScreenState extends State<InventarioScreen>
   }
 
   // ══════════════════════════════════════════════════════
+  // HELPERS CATEGORÍA
+  // ══════════════════════════════════════════════════════
+  static const _chipPaletteBg = [
+    Color(0xFFD1FAE5), Color(0xFFFEF3C7), Color(0xFFFFE4E6),
+    Color(0xFFE0E7FF), Color(0xFFFCE7F3), Color(0xFFD1D5DB),
+  ];
+  static const _chipPaletteFg = [
+    Color(0xFF065F46), Color(0xFF92400E), Color(0xFF9F1239),
+    Color(0xFF3730A3), Color(0xFF831843), Color(0xFF374151),
+  ];
+
+  Color _categoriaChipBg(String cat) {
+    if (cat.isEmpty) return _chipPaletteBg[0];
+    return _chipPaletteBg[cat.codeUnitAt(0) % _chipPaletteBg.length];
+  }
+
+  Color _categoriaChipFg(String cat) {
+    if (cat.isEmpty) return _chipPaletteFg[0];
+    return _chipPaletteFg[cat.codeUnitAt(0) % _chipPaletteFg.length];
+  }
+
+  // ══════════════════════════════════════════════════════
+  // KPI CARRUSEL (MÓVIL)
+  // ══════════════════════════════════════════════════════
+  Widget _buildKPICarousel(List<Producto> productos, {bool esCajero = false}) {
+    final d = _dashboard;
+    final valorTotal = d != null
+        ? _toDouble(d['total_valor_inventario'])
+        : productos.fold<double>(0, (s, p) => s + p.precio * p.stockActual);
+    final alertasBajo = d != null
+        ? _toInt(d['alertas_stock_bajo'])
+        : productos.where((p) => p.stockActual > 0 && p.stockMinimo > 0 &&
+            p.stockActual <= p.stockMinimo).length; // regla del servidor
+    final alertasCrit = d != null
+        ? _toInt(d['alertas_criticas'])
+        : productos.where((p) => p.stockActual <= 0).length;
+    final ingresosMes = d != null ? _toDouble(d['ingresos_mes_unidades']) : 0.0;
+    final perdidasMes = d != null ? _toDouble(d['perdidas_mes_valor']) : 0.0;
+    final perdidasCantidad = d != null
+        ? (d['perdidas_mes_cantidad'] as num? ?? 0).toInt() : 0;
+
+    final cards = <Widget>[
+      if (!esCajero)
+        _kpiCarouselCard(
+          icon: Icons.payments_rounded,
+          iconBg: const Color(0xFFDAE2FD),
+          iconColor: const Color(0xFF3F465C),
+          accent: const Color(0xFF3F465C),
+          label: 'VALOR INVENTARIO',
+          value: '${Constants.moneda}${_formatNum(valorTotal)}',
+          sub: '${productos.length} productos',
+        ),
+      _kpiCarouselCard(
+        icon: Icons.warning_rounded,
+        iconBg: _dangerBg,
+        iconColor: _danger,
+        accent: _danger,
+        label: 'ALERTAS STOCK',
+        value: '${alertasBajo + alertasCrit}',
+        suffix: ' ítems',
+        sub: '$alertasCrit críticos',
+      ),
+      _kpiCarouselCard(
+        icon: Icons.input_rounded,
+        iconBg: const Color(0xFFD1FAE5),
+        iconColor: _green,
+        accent: _green,
+        label: 'INGRESOS MES',
+        value: _formatNum(ingresosMes),
+        suffix: ' uds',
+        sub: 'Recibidas este mes',
+      ),
+      _kpiCarouselCard(
+        icon: Icons.inventory_2_rounded,
+        iconBg: perdidasCantidad > 0 ? _dangerBg : _surfHigh,
+        iconColor: perdidasCantidad > 0 ? _danger : _muted2,
+        accent: perdidasCantidad > 0 ? _danger : _muted2,
+        label: 'DAÑOS / PÉRDIDAS',
+        value: perdidasMes > 0
+            ? '${Constants.moneda}${_formatNum(perdidasMes)}'
+            : '$perdidasCantidad',
+        suffix: perdidasMes > 0 ? null : ' unid.',
+        sub: 'Reportadas este mes',
+      ),
+    ];
+
+    return Column(children: [
+      SizedBox(
+        height: 136,
+        child: PageView.builder(
+          controller: _kpiPageCtrl,
+          padEnds: false,
+          itemCount: cards.length,
+          onPageChanged: (i) => setState(() => _kpiPage = i),
+          itemBuilder: (_, i) => Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: cards[i],
+          ),
+        ),
+      ),
+      const SizedBox(height: 10),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: List.generate(cards.length, (i) {
+          final active = _kpiPage == i;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            width: active ? 18 : 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: active ? _green : _border,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          );
+        }),
+      ),
+    ]);
+  }
+
+  Widget _kpiCarouselCard({
+    required IconData icon,
+    required Color iconBg,
+    required Color iconColor,
+    required Color accent,
+    required String label,
+    required String value,
+    String? suffix,
+    required String sub,
+  }) =>
+      Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: _surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _border),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(height: 4, color: accent),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 34, height: 34,
+                    decoration: BoxDecoration(
+                        color: iconBg, borderRadius: BorderRadius.circular(9)),
+                    child: Icon(icon, color: iconColor, size: 16),
+                  ),
+                  const Spacer(),
+                  Text(label,
+                      style: _t(size: 9, weight: FontWeight.w700,
+                          color: _muted2, letterSpacing: 0.05),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 3),
+                  Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    Flexible(child: Text(value,
+                        style: _t(size: 21, weight: FontWeight.w700,
+                            letterSpacing: -0.4, height: 1.1),
+                        maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    if (suffix != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 1, left: 2),
+                        child: Text(suffix,
+                            style: _t(size: 11, weight: FontWeight.w600,
+                                color: _muted)),
+                      ),
+                  ]),
+                  const SizedBox(height: 3),
+                  Text(sub, style: _t(size: 10, color: _muted2),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          ),
+        ]),
+      );
+
+  // ══════════════════════════════════════════════════════
+  // ALERTA BANNER
+  // ══════════════════════════════════════════════════════
+  Widget _buildAlertaBanner() {
+    final agotados = _alertasAgotado.length;
+    final bajos    = _alertasBajo.length;
+    if (agotados == 0 && bajos == 0) return const SizedBox.shrink();
+    return GestureDetector(
+      onTap: () {
+        setState(() => _filtAlerta = agotados > 0 ? 'agotado' : 'bajo');
+        _aplicarFiltros();
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: agotados > 0 ? _dangerBg : const Color(0xFFFEF9EC),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: agotados > 0
+                ? _danger.withValues(alpha: 0.3)
+                : _warning.withValues(alpha: 0.4),
+          ),
+        ),
+        child: Row(children: [
+          Icon(Icons.notifications_active_rounded, size: 16,
+              color: agotados > 0 ? _danger : _warning),
+          const SizedBox(width: 10),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (agotados > 0)
+                Text(
+                  '$agotados producto${agotados != 1 ? 's' : ''} agotado${agotados != 1 ? 's' : ''}',
+                  style: _t(size: 12, weight: FontWeight.w700, color: _danger),
+                ),
+              if (bajos > 0)
+                Text(
+                  '$bajos más con stock bajo · Toca para ver',
+                  style: _t(size: 11, color: agotados > 0 ? _muted : _warning),
+                ),
+            ],
+          )),
+          Icon(Icons.chevron_right_rounded, size: 16,
+              color: agotados > 0 ? _danger : _warning),
+        ]),
+      ),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════
+  // LISTA MÓVIL (cards)
+  // ══════════════════════════════════════════════════════
+  Widget _buildListaMobile(List<Producto> productos, bool esCajero,
+      bool esAdmin, InventarioProvider inv) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(children: [
+          Text('PRODUCTOS',
+              style: _t(size: 11, weight: FontWeight.w700, color: _muted2,
+                  letterSpacing: 0.08)),
+          const Spacer(),
+          Text('${productos.length} resultado${productos.length != 1 ? 's' : ''}',
+              style: _t(size: 11, color: _muted2)),
+        ]),
+      ),
+      Expanded(
+        child: ListView.separated(
+          padding: EdgeInsets.zero,
+          itemCount: productos.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          itemBuilder: (_, i) =>
+              _buildProductoCardMobile(productos[i], esCajero, esAdmin, inv),
+        ),
+      ),
+    ]);
+  }
+
+  Widget _buildProductoCardMobile(Producto p, bool esCajero,
+      bool esAdmin, InventarioProvider inv) {
+    final agotado = p.stockActual <= 0;
+    final bajo = !agotado && (p.stockMinimo > 0 && p.stockActual <= p.stockMinimo);
+    final estadoText  = agotado ? 'Agotado' : bajo ? 'Stock bajo' : 'Óptimo';
+    final estadoColor = agotado ? _danger : bajo ? _warning : _green;
+    final stockIcon   = agotado
+        ? Icons.close_rounded
+        : bajo ? Icons.warning_rounded : Icons.trending_up_rounded;
+    final avatarColor = _avatarColor(p.nombre);
+    final inicial     = p.nombre.isNotEmpty ? p.nombre[0].toUpperCase() : '?';
+
+    return GestureDetector(
+      onTap: () => ProductoDetalleSheet.show(
+        context,
+        producto:     p,
+        esAdmin:      esAdmin,
+        onEditar:     esAdmin ? () => _abrirFormulario(context, inv, producto: p) : null,
+        onKardex:     () => _abrirKardex(p),
+        onAjuste:     !esCajero ? () => _abrirAjuste(p) : null,
+        onTransferir: (esAdmin && _tiendas.length >= 2)
+            ? () => _abrirTransferencia(p) : null,
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: _surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _border),
+        ),
+        child: Row(children: [
+          Container(
+            width: 42, height: 42,
+            decoration: BoxDecoration(
+              color: avatarColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Center(child: Text(inicial,
+                style: _t(size: 17, weight: FontWeight.w700,
+                    color: avatarColor))),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(p.nombre,
+                  style: _t(size: 13, weight: FontWeight.w700),
+                  overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 2),
+              if (p.referencia.isNotEmpty)
+                Text('SKU: ${p.referencia}',
+                    style: _t(size: 11, color: _muted2)),
+              if (p.categoria.isNotEmpty && p.categoria != 'Sin categoría') ...[
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: _categoriaChipBg(p.categoria),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(p.categoria,
+                      style: _t(size: 10, weight: FontWeight.w600,
+                          color: _categoriaChipFg(p.categoria))),
+                ),
+              ],
+            ],
+          )),
+          const SizedBox(width: 10),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text('${Constants.moneda}${p.precio.toStringAsFixed(0)}',
+                style: _t(size: 13, weight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(stockIcon, size: 11, color: estadoColor),
+              const SizedBox(width: 3),
+              Text('${p.stockActual.toInt()} uds',
+                  style: _t(size: 11, weight: FontWeight.w600,
+                      color: estadoColor)),
+            ]),
+            const SizedBox(height: 2),
+            Text(estadoText,
+                style: _t(size: 10, weight: FontWeight.w600,
+                    color: estadoColor)),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════
   // PANEL INSIGHTS (Top Sellers + Movimientos)
   // ══════════════════════════════════════════════════════
   Widget _buildInsightsPanel() {
@@ -1841,9 +2978,7 @@ class _InventarioScreenState extends State<InventarioScreen>
     // Si stockMinimo está configurado úsalo; si no, considera crítico ≤ 10 uds
     final criticos = productos.where((p) =>
         p.stockActual > 0 &&
-        (p.stockMinimo > 0
-            ? p.stockActual <= p.stockMinimo
-            : p.stockActual <= 10)).toList();
+        (p.stockMinimo > 0 && p.stockActual <= p.stockMinimo)).toList();
     final fmtMoney  = NumberFormat.currency(
         locale: 'es_CO', symbol: '\$', decimalDigits: 0);
     final fmtDate   = DateFormat('d MMM', 'es');
@@ -2208,7 +3343,7 @@ class _InventarioScreenState extends State<InventarioScreen>
     ),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
-        Expanded(child: Text('Top Sellers',
+        Expanded(child: Text('Más vendidos',
             style: _t(size: 15, weight: FontWeight.w700))),
         Text('Ver reporte',
             style: _t(size: 12, weight: FontWeight.w600, color: _green)),
@@ -2225,11 +3360,21 @@ class _InventarioScreenState extends State<InventarioScreen>
             style: _t(size: 13, color: _muted2))
       else
         ...List.generate(_topProductos.length, (i) {
-          final item    = _topProductos[i];
-          final nombre  = item['producto_nombre'] as String? ?? '—';
-          final vendido = _toDouble(item['total_vendido']);
-          final maxVend = _toDouble(_topProductos.first['total_vendido']);
-          final pct     = maxVend > 0 ? vendido / maxVend : 0.0;
+          final item     = _topProductos[i];
+          // El backend manda la clave 'producto' (no 'producto_nombre'):
+          // por eso todos los puestos salían con "—".
+          final nombre   = (item['producto'] ?? item['producto_nombre'])
+                  ?.toString() ?? '—';
+          final vendido  = _toDouble(item['total_vendido']);
+          final ingresos = _toDouble(item['total_ingresos']);
+          // La lista viene ordenada por plata vendida, así que la barra
+          // también se mide en plata, contra el mayor de la lista. Antes se
+          // medía en unidades contra el primero, y cualquiera que vendiera
+          // más unidades que el #1 salía con la barra llena.
+          final maxIng   = _topProductos.fold<double>(
+              0, (m, e) => _toDouble(e['total_ingresos']) > m
+                  ? _toDouble(e['total_ingresos']) : m);
+          final pct      = maxIng > 0 ? ingresos / maxIng : 0.0;
 
           return Padding(
             padding: const EdgeInsets.only(bottom: 14),
@@ -2250,9 +3395,16 @@ class _InventarioScreenState extends State<InventarioScreen>
               Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(nombre,
-                      overflow: TextOverflow.ellipsis,
-                      style: _t(size: 13, weight: FontWeight.w600)),
+                  Row(children: [
+                    Expanded(
+                      child: Text(nombre,
+                          overflow: TextOverflow.ellipsis,
+                          style: _t(size: 13, weight: FontWeight.w600)),
+                    ),
+                    const SizedBox(width: 6),
+                    Text('${_formatNum(vendido)} uds',
+                        style: _t(size: 11, color: _muted2)),
+                  ]),
                   const SizedBox(height: 4),
                   Row(children: [
                     Expanded(
@@ -2268,7 +3420,7 @@ class _InventarioScreenState extends State<InventarioScreen>
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Text(_formatNum(vendido),
+                    Text('${Constants.moneda}${_formatNum(ingresos)}',
                         style: _t(size: 11, weight: FontWeight.w700,
                             color: _muted)),
                   ]),
@@ -2726,6 +3878,73 @@ class _InventarioScreenState extends State<InventarioScreen>
 }
 
 // ═══════════════════════════════════════════════════════════════
+// KARDEX MÓVIL (carga los movimientos y los muestra con KardexMovil)
+// ═══════════════════════════════════════════════════════════════
+class _KardexMovilCarga extends StatefulWidget {
+  final Producto          producto;
+  final int               tiendaId;
+  final String            tienda;
+  final double?           stock;
+  final InventarioService service;
+
+  const _KardexMovilCarga({
+    required this.producto,
+    required this.tiendaId,
+    required this.tienda,
+    required this.stock,
+    required this.service,
+  });
+
+  @override
+  State<_KardexMovilCarga> createState() => _KardexMovilCargaState();
+}
+
+class _KardexMovilCargaState extends State<_KardexMovilCarga> {
+  List<MovimientoKardexMovil> _movs = const [];
+  bool    _cargando = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  Future<void> _cargar() async {
+    setState(() {
+      _cargando = true;
+      _error = null;
+    });
+    final r = await widget.service.getMovimientosProducto(
+      productoId: widget.producto.id,
+      tiendaId:   widget.tiendaId,
+    );
+    if (!mounted) return;
+    setState(() {
+      _cargando = false;
+      if (r['success'] == true) {
+        _movs = (r['data'] as List)
+            .whereType<Map<String, dynamic>>()
+            .map(MovimientoKardexMovil.fromJson)
+            .toList();
+      } else {
+        _error = (r['error'] ?? 'No se pudo cargar el kardex').toString();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => KardexMovil(
+        producto:     widget.producto.nombre,
+        tienda:       widget.tienda,
+        stockActual:  widget.stock,
+        movimientos:  _movs,
+        cargando:     _cargando,
+        error:        _error,
+        onReintentar: _cargar,
+      );
+}
+
 // KARDEX SHEET
 // ═══════════════════════════════════════════════════════════════
 class _KardexSheet extends StatefulWidget {
@@ -3100,9 +4319,15 @@ class _TransferenciaSheetState extends State<_TransferenciaSheet> {
           orElse: () => {'nombre': 'Tienda $id'})['nombre'] as String;
 
   Future<void> _enviar() async {
-    final cant = double.tryParse(_cantCtrl.text) ?? 0;
+    final txt  = _cantCtrl.text.trim();
+    final cant = RegExp(r'\d').hasMatch(txt) ? leerNumeroExcel(txt) : 0.0;
     if (cant <= 0) {
       setState(() => _error = 'Ingresa una cantidad mayor a cero.');
+      return;
+    }
+    if (widget.producto.unidadMedida == 'unidad' &&
+        cant != cant.roundToDouble()) {
+      setState(() => _error = 'Solo unidades enteras.');
       return;
     }
     if (_tiendaDestinoId == null) {
@@ -3322,11 +4547,13 @@ class _AjusteStockSheet extends StatefulWidget {
   final Producto     producto;
   final int          tiendaId;
   final VoidCallback onAjustado;
+  final String       tipoInicial; // 'entrada' | 'salida' | 'ajuste' | 'averia'
 
   const _AjusteStockSheet({
     required this.producto,
     required this.tiendaId,
     required this.onAjustado,
+    this.tipoInicial = 'entrada',
   });
 
   @override
@@ -3338,7 +4565,7 @@ class _AjusteStockSheetState extends State<_AjusteStockSheet> {
   final _obsCtrl  = TextEditingController();
   final _service  = InventarioService();
 
-  String _tipo     = 'entrada'; // 'entrada' | 'salida' | 'ajuste' | 'averia'
+  late String _tipo = widget.tipoInicial; // 'entrada' | 'salida' | 'ajuste' | 'averia'
   bool   _enviando = false;
   String _error    = '';
 
@@ -3368,9 +4595,19 @@ class _AjusteStockSheetState extends State<_AjusteStockSheet> {
   };
 
   Future<void> _enviar() async {
-    final cant = double.tryParse(_cantCtrl.text.trim()) ?? 0;
-    if (cant <= 0) {
-      setState(() => _error = 'Ingresa una cantidad mayor a cero.');
+    // Acepta "12,5" y "12.5". El conteo ("ajuste") puede dejar el stock en 0.
+    final txt  = _cantCtrl.text.trim();
+    final cant = RegExp(r'\d').hasMatch(txt) ? leerNumeroExcel(txt) : -1.0;
+    if (cant < 0 || (_tipo != 'ajuste' && cant == 0)) {
+      setState(() => _error = _tipo == 'ajuste'
+          ? 'Escribe cuántas unidades hay (puede ser 0).'
+          : 'Ingresa una cantidad mayor a cero.');
+      return;
+    }
+    // Por unidad no se parte: 2,5 aretes no existen.
+    if (widget.producto.unidadMedida == 'unidad' &&
+        cant != cant.roundToDouble()) {
+      setState(() => _error = 'Solo unidades enteras.');
       return;
     }
     setState(() { _enviando = true; _error = ''; });

@@ -413,7 +413,15 @@ pw.Widget _topMetrics4(
   PdfColor difColor, PdfColor difBg,
   String difLabel, String difStr,
 ) {
-  final totalIngresos = s.ventasTotal + s.abonosTotal + s.cambiosCobrarEf;
+  // Los depósitos iniciales de separados (ingresos separados) también son
+  // plata que entró al turno. Antes quedaban fuera de este total, así que
+  // un día de puros separados nuevos mostraba TOTAL INGRESOS = TOTAL VENTAS.
+  final ingresosSep = s.ingresosSepEfectivo +
+      s.ingresosSepTarjeta +
+      s.ingresosSepTransferencia;
+  final totalIngresos =
+      s.ventasTotal + s.abonosTotal + ingresosSep + s.cambiosCobrarEf;
+  final numPagosSep = s.numAbonos + s.numIngresosSep;
   return pw.Row(children: [
     // Base inicial
     _metricCard('BASE INICIAL', _m(s.saldoInicial),
@@ -427,7 +435,7 @@ pw.Widget _topMetrics4(
     pw.SizedBox(width: 8),
     // Total ingresos (ventas + abonos + cambios cobrados)
     _metricCard('TOTAL INGRESOS', _m(totalIngresos),
-        sub: '+ ${s.numAbonos} abonos sep.',
+        sub: '+ $numPagosSep pagos de separados',
         dark: true, color: _pWhite),
     pw.SizedBox(width: 8),
     // Cuadre (coloreado según resultado)
@@ -934,7 +942,14 @@ pw.Widget _ventasDetalleTable(SesionHistorial sesion) {
           _tdLabel(''), _tdLabel(''), _tdLabel(''), _tdLabel(''),
           pw.Padding(
             padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: pw.Text(_m(sesion.ventasTotal + sesion.abonosTotal),
+            // La tabla lista TODOS los abonos (iniciales incluidos), así que
+            // el total debe sumarlos o no cuadra con sus propias filas.
+            child: pw.Text(
+                _m(sesion.ventasTotal +
+                    sesion.abonosTotal +
+                    sesion.ingresosSepEfectivo +
+                    sesion.ingresosSepTarjeta +
+                    sesion.ingresosSepTransferencia),
                 textAlign: pw.TextAlign.right,
                 style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold,
                     color: _pGreenLight)),

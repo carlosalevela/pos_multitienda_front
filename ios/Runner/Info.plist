@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Para tomar la foto de los documentos firmados (memorandos, renuncias, autorizaciones).</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Para elegir la foto de un documento firmado.</string>
 </dict>
 </plist>

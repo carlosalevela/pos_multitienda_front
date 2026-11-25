@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../models/cliente.dart';
 import '../models/separado.dart';
+import '../models/pago_abono.dart';
 import '../core/api_client.dart';
 
 class ClienteService {
@@ -213,16 +214,23 @@ class ClienteService {
     }
   }
 
+  /// Registra un abono. Si [pagos] trae lineas, se envia como pago mixto
+  /// y el backend crea un MovimientoCaja por metodo; si no, se manda el
+  /// formato de un solo pago de siempre.
   Future<Map<String, dynamic>> abonarSeparado(
-      int id, double monto, String metodoPago, {int? cuentaDestinoId}) async {
+      int id, double monto, String metodoPago,
+      {int? cuentaDestinoId, List<PagoAbono>? pagos}) async {
     try {
+      final esMixto = pagos != null && pagos.isNotEmpty;
       final r = await ApiClient.instance.post(
         '/clientes/separados/$id/abonar/',
-        data: {
-          'monto':       monto.toStringAsFixed(2),
-          'metodo_pago': metodoPago,
-          if (cuentaDestinoId != null) 'cuenta_destino': cuentaDestinoId,
-        },
+        data: esMixto
+            ? {'pagos': pagos.map((p) => p.toJson()).toList()}
+            : {
+                'monto':       monto.toStringAsFixed(2),
+                'metodo_pago': metodoPago,
+                if (cuentaDestinoId != null) 'cuenta_destino': cuentaDestinoId,
+              },
       );
       return {'success': true, 'data': r.data};
     } on DioException catch (e) {

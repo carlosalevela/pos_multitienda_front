@@ -115,6 +115,9 @@ class AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<AuthGate> {
+  /// Tienda para la que ya se pidió la config en esta sesión.
+  int? _configPedidaPara;
+
   @override
   void initState() {
     super.initState();
@@ -127,7 +130,29 @@ class _AuthGateState extends State<AuthGate> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-    return auth.isLoggedIn ? const HomeScreen() : const LoginScreen();
+
+    if (!auth.isLoggedIn) {
+      // Al cerrar sesión se permite volver a pedirla en el próximo login.
+      _configPedidaPara = null;
+      return const LoginScreen();
+    }
+
+    // La config de la tienda —y con ella las cuentas bancarias— se carga aquí,
+    // al entrar, y no solo al abrir el POS. Antes, cualquier pantalla que
+    // necesitara cuentas (abonar, bonos, caja) las veía vacías hasta que el
+    // usuario pasara por el POS.
+    final tiendaId = auth.tiendaId;
+    if (tiendaId > 0 && _configPedidaPara != tiendaId) {
+      _configPedidaPara = tiendaId;
+      final empresaId = int.tryParse(auth.empresaId);
+      final config = context.read<ConfigProvider>();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        config.asegurarCargada(tiendaId, empresaId: empresaId);
+      });
+    }
+
+    return const HomeScreen();
   }
 }
 

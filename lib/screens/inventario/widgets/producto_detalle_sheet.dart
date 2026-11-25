@@ -64,9 +64,7 @@ class ProductoDetalleSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final p          = producto;
     final agotado    = p.stockActual <= 0;
-    final bajo       = !agotado && (p.stockMinimo > 0
-        ? p.stockActual <= p.stockMinimo
-        : p.stockActual <= 10);
+    final bajo       = !agotado && (p.stockMinimo > 0 && p.stockActual <= p.stockMinimo);
     final margen     = p.precioCompra > 0
         ? (p.precio - p.precioCompra) / p.precioCompra * 100
         : 0.0;
@@ -164,7 +162,7 @@ class ProductoDetalleSheet extends StatelessWidget {
                 // ── Código de barras ──────────────────────────
                 if (p.referencia.isNotEmpty) ...[
                   _seccion('Identificación'),
-                  _fila('Código / SKU', p.referencia,
+                  _fila('Código', p.referencia,
                       icon: Icons.qr_code_rounded),
                   const SizedBox(height: 16),
                 ],

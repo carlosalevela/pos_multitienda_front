@@ -4,7 +4,7 @@
 ; ─────────────────────────────────────────────────────────────────────────────
 
 #define AppName      "SIS POS"
-#define AppVersion   "1.5.8"
+#define AppVersion   "1.5.9"
 #define AppPublisher "SIS"
 #define AppExeName   "pos_multitienda_app.exe"
 #define BuildDir     "..\build\windows\x64\runner\Release"

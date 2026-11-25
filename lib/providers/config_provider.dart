@@ -110,6 +110,17 @@ class ConfigProvider extends ChangeNotifier {
 
   // ── Carga ─────────────────────────────────────────────────
 
+  /// Carga la config de la tienda solo si todavia no esta cargada para ella.
+  /// Es segura de llamar desde cualquier pantalla: no repite trabajo.
+  ///
+  /// Existe porque antes la config (y con ella las cuentas bancarias) solo se
+  /// cargaba al abrir el POS, asi que abonar, bonos o caja veian la lista de
+  /// cuentas vacia si el usuario no habia pasado por el POS primero.
+  Future<void> asegurarCargada(int tiendaId, {int? empresaId}) async {
+    if (_cargando || _tiendaIdCargada == tiendaId) return;
+    await cargar(tiendaId, empresaId: empresaId);
+  }
+
   Future<void> cargar(int tiendaId, {int? empresaId}) async {
     if (_cargando) return;
     _cargando = true;

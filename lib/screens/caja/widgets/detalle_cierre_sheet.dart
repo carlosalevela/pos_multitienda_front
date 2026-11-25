@@ -637,7 +637,12 @@ class _MetricsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ingresoTotal = sesion.ventasTotal + sesion.abonosTotal;
+    // Incluye los depósitos iniciales de separados, que también entraron hoy.
+    final ingresoTotal = sesion.ventasTotal +
+        sesion.abonosTotal +
+        sesion.ingresosSepEfectivo +
+        sesion.ingresosSepTarjeta +
+        sesion.ingresosSepTransferencia;
     return Column(children: [
       Row(children: [
         Expanded(child: _MetricCard(

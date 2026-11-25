@@ -35,21 +35,33 @@ class InventarioService {
     String? alerta,
   }) async {
     try {
-      final response = await ApiClient.instance.get(
-        '/productos/',
-        queryParameters: {
-          if (q != null && q.isNotEmpty) 'q': q,
-          if (tiendaId    != null) 'tienda_id':  tiendaId.toString(),
-          if (categoriaId != null) 'categoria':  categoriaId.toString(),
-          if (precioMin   != null) 'precio_min': precioMin.toStringAsFixed(0),
-          if (precioMax   != null) 'precio_max': precioMax.toStringAsFixed(0),
-          if (alerta      != null) 'alerta':     alerta,
-          'activo': activo,
-        },
-      );
-      final List data = response.data is List
-          ? response.data
-          : response.data['results'] ?? [];
+      // El servidor entrega por páginas (100 por defecto). Antes se leía
+      // solo la primera y, con más de 100 productos, el resto no aparecía
+      // ni buscando. Se piden de a 500 y se siguen las páginas.
+      final data = <dynamic>[];
+      for (var pagina = 1; pagina <= 40; pagina++) {
+        final response = await ApiClient.instance.get(
+          '/productos/',
+          queryParameters: {
+            if (q != null && q.isNotEmpty) 'q': q,
+            if (tiendaId    != null) 'tienda_id':  tiendaId.toString(),
+            if (categoriaId != null) 'categoria':  categoriaId.toString(),
+            if (precioMin   != null) 'precio_min': precioMin.toStringAsFixed(0),
+            if (precioMax   != null) 'precio_max': precioMax.toStringAsFixed(0),
+            if (alerta      != null) 'alerta':     alerta,
+            'activo':    activo,
+            'page_size': '500',
+            'page':      pagina.toString(),
+          },
+        );
+        final r = response.data;
+        if (r is List) {
+          data.addAll(r);
+          break;
+        }
+        data.addAll((r['results'] as List?) ?? const []);
+        if (r['next'] == null) break;
+      }
       final productos = data.map((e) => Producto.fromJson(e)).toList();
       return {'success': true, 'data': productos};
     } on DioException catch (e) {
@@ -133,12 +145,14 @@ class InventarioService {
     int?    categoriaId,
     double? precioMin,
     double? precioMax,
+    int?    productoId, // el stock de un producto en cada tienda
   }) async {
     try {
       final response = await ApiClient.instance.get(
         '/productos/inventario/',
         queryParameters: {
           if (tiendaId     != null) 'tienda_id':  tiendaId.toString(),
+          if (productoId   != null) 'producto':   productoId.toString(),
           if (alerta       != null) 'alerta':      alerta,
           if (q != null && q.isNotEmpty) 'q':      q,
           if (categoriaId  != null) 'categoria':   categoriaId.toString(),
@@ -227,6 +241,33 @@ class InventarioService {
       return {'success': false, 'error': _extractError(e, 'Error al ajustar stock')};
     } catch (e) {
       return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
+
+  /// Mueve unidades de una tienda a otra (solo admin).
+  Future<Map<String, dynamic>> transferirStock({
+    required int    productoId,
+    required int    origenId,
+    required int    destinoId,
+    required double cantidad,
+    String          observacion = '',
+  }) async {
+    try {
+      final r = await ApiClient.instance.post(
+        '/productos/transferencias/',
+        data: {
+          'producto_id':       productoId,
+          'tienda_origen_id':  origenId,
+          'tienda_destino_id': destinoId,
+          'cantidad':          cantidad,
+          'observacion':       observacion,
+        },
+      );
+      return {'success': true, 'data': r.data};
+    } on DioException catch (e) {
+      return {'success': false, 'error': _extractError(e, 'No se pudo transferir')};
+    } catch (e) {
+      return {'success': false, 'error': 'No se pudo transferir'};
     }
   }
 
@@ -380,17 +421,57 @@ class InventarioService {
 
   // ── Exportar inventario a Excel ───────────────────────
 
-  Future<Map<String, dynamic>> exportarInventario({
+  /// Cuántos productos entrarían en el Excel con cada opción
+  /// (`todos`, `bajo`, `agotado`), con los mismos filtros que la descarga.
+  /// Cada opción trae `{productos, valor, averias}`, y `hojas` trae
+  /// `{danos, ajustes}`: los movimientos de esas hojas.
+  Future<Map<String, dynamic>> contarExportacion({
     int?   tiendaId,
     String activo = 'true',
     int?   empresaId,
+    int?   categoriaId,
   }) async {
     try {
       final r = await ApiClient.instance.get(
         '/productos/inventario/exportar/',
         queryParameters: {
-          if (tiendaId  != null) 'tienda_id': tiendaId.toString(),
-          if (empresaId != null) 'empresa':   empresaId.toString(),
+          if (tiendaId    != null) 'tienda_id': tiendaId.toString(),
+          if (empresaId   != null) 'empresa':   empresaId.toString(),
+          if (categoriaId != null) 'categoria': categoriaId.toString(),
+          'activo': activo,
+          'conteo': '1',
+        },
+      );
+      return {'success': true, 'data': Map<String, dynamic>.from(r.data as Map)};
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'error': _extractError(e, 'No se pudo contar los productos'),
+      };
+    } catch (e) {
+      return {'success': false, 'error': 'No se pudo contar los productos'};
+    }
+  }
+
+  Future<Map<String, dynamic>> exportarInventario({
+    int?    tiendaId,
+    String  activo = 'true',
+    int?    empresaId,
+    String? alerta,      // null | 'bajo' | 'agotado'
+    int?    categoriaId,
+    /// Hojas extra además de Inventario: 'averias', 'danos', 'ajustes'.
+    /// null = todas (como siempre).
+    Set<String>? hojas,
+  }) async {
+    try {
+      final r = await ApiClient.instance.get(
+        '/productos/inventario/exportar/',
+        queryParameters: {
+          if (tiendaId    != null) 'tienda_id': tiendaId.toString(),
+          if (empresaId   != null) 'empresa':   empresaId.toString(),
+          if (alerta      != null) 'alerta':    alerta,
+          if (categoriaId != null) 'categoria': categoriaId.toString(),
+          if (hojas       != null) 'hojas':     hojas.join(','),
           'activo': activo,
         },
         options: Options(

@@ -999,6 +999,11 @@ class ReciboPdfService {
   //  RECIBO DE ABONO (compacto)
   // ─────────────────────────────────────────────────────────────────────
 
+  /// Genera el recibo del abono en PDF, lo guarda (local + servidor) y,
+  /// si [abrir] es true, lo muestra o lo manda a imprimir.
+  ///
+  /// Con [abrir] en false sirve para dejar el respaldo cuando ya se imprimio
+  /// el ticket termico: antes, en ese caso, el PDF no se generaba nunca.
   static Future<void> imprimirReciboAbono({
     required Separado separado,
     required double   monto,
@@ -1007,6 +1012,7 @@ class ReciboPdfService {
     String            nit       = '',
     String            direccion = '',
     String            telefono  = '',
+    bool              abrir     = true,
   }) async {
     final fontReg  = await PdfGoogleFonts.interRegular();
     final fontBold = await PdfGoogleFonts.interBold();
@@ -1138,10 +1144,13 @@ class ReciboPdfService {
     ));
 
     final bytes = await doc.save();
-    unawaited(DocumentoService.instance.guardarAbono(
-      bytes: bytes, referencia: '${sepId}_${DateTime.now().millisecondsSinceEpoch}',
-    ));
-    await _abrirPdf(bytes, 'Abono_$sepId.pdf');
+    // La referencia usa el id numerico porque asi lo busca el detalle del
+    // abono en Reportes ("abono_<id>_"). Con "SEP-18" nunca coincidia.
+    await DocumentoService.instance.guardarAbono(
+      bytes: bytes,
+      referencia: '${separado.id}_${DateTime.now().millisecondsSinceEpoch}',
+    );
+    if (abrir) await _abrirPdf(bytes, 'Abono_$sepId.pdf');
   }
 
 

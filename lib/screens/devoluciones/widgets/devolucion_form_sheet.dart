@@ -86,6 +86,35 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
   String _metodoPagoDiferencia  = 'efectivo';
   String _motivoCambio          = 'gusto'; // 'gusto' | 'averia'
   int?   _cuentaSeleccionadaId;
+
+  // ── Cuenta destino ────────────────────────────────────
+
+  /// Cuentas que aplican a un método. Mismo criterio que el selector.
+  List<dynamic> _cuentasDe(String metodo) {
+    if (metodo != 'transferencia' && metodo != 'tarjeta') return const [];
+    return context
+        .read<ConfigProvider>()
+        .cuentas
+        .where((c) =>
+            metodo == 'tarjeta' ? c.tipo == 'tarjeta' : c.tipo != 'tarjeta')
+        .toList();
+  }
+
+  /// Si hay UNA sola cuenta para ese método, se elige sola. Con dos del
+  /// mismo tipo no dispara y la validación obliga a elegir.
+  int? _cuentaPorDefecto(String metodo) {
+    final cs = _cuentasDe(metodo);
+    return cs.length == 1 ? cs.first.id : null;
+  }
+
+  /// Método que realmente mueve la plata en este formulario.
+  String get _metodoEfectivoActual =>
+      _metodoPagoDiferencia.isNotEmpty ? _metodoPagoDiferencia : _metodoPago;
+
+  /// Falta decir a qué cuenta entró o salió el dinero.
+  bool get _faltaCuenta =>
+      _cuentaSeleccionadaId == null &&
+      _cuentasDe(_metodoEfectivoActual).isNotEmpty;
   bool   _guardando             = false;
   bool   _cargandoVenta         = false;
 
@@ -946,7 +975,7 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
                 return GestureDetector(
                   onTap: () => setState(() {
                     _metodoPagoDiferencia = m.$1;
-                    _cuentaSeleccionadaId = null;
+                    _cuentaSeleccionadaId = _cuentaPorDefecto(m.$1);
                   }),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 120),
@@ -1151,7 +1180,7 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
                 } else {
                   _metodoPago = m.$1;
                 }
-                _cuentaSeleccionadaId = null;
+                _cuentaSeleccionadaId = _cuentaPorDefecto(m.$1);
               }),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
@@ -1354,7 +1383,7 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
         SizedBox(
           height: 52,
           child: ElevatedButton.icon(
-            onPressed: _guardando ? null : _guardar,
+            onPressed: (_guardando || _faltaCuenta) ? null : _guardar,
             icon: _guardando
                 ? const SizedBox(
                     width: 18, height: 18,

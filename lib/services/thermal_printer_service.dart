@@ -1032,6 +1032,10 @@ class ThermalPrinterService {
     List<Map<String, dynamic>>           abonosDia        = const [],
     List<Map<String, dynamic>>           devolucionesDia  = const [],
   }) async {
+    // Plata realmente recibida por los separados abiertos en el turno.
+    final ingresosSepTotal = sesion.ingresosSepEfectivo +
+        sesion.ingresosSepTarjeta +
+        sesion.ingresosSepTransferencia;
     final profile = await CapabilityProfile.load();
     final gen     = Generator(paperSize, profile);
     final fmt     = NumberFormat('#,##0', 'es_CO');
@@ -1398,11 +1402,16 @@ class ThermalPrinterService {
           PosColumn(text: '\$${fmt.format(sesion.netoCambiosTransferencia)}', width: 5,
             styles: PosStyles(align: PosAlign.right)),
         ]),
-      if (separadosDia.isNotEmpty)
+      // Cuota inicial de los separados abiertos hoy. Antes esta linea
+      // mostraba el VALOR TOTAL del separado, que no es plata que entro a
+      // la caja: un separado de 450.000 con cuota de 50.000 imprimia
+      // 450.000 dentro de una columna de sumas, y las lineas no cuadraban
+      // con el TOTAL NETO de abajo.
+      if (ingresosSepTotal > 0)
         ...gen.row([
-          PosColumn(text: '+ Separados SEP:', width: 7, styles: const PosStyles()),
-          PosColumn(text: '\$${fmt.format(separadosDia.fold<double>(0, (s, v) =>
-            s + (double.tryParse(v['total']?.toString() ?? '0') ?? 0)))}',
+          PosColumn(text: '+ Cuota inicial SEP:', width: 7,
+            styles: const PosStyles()),
+          PosColumn(text: '\$${fmt.format(ingresosSepTotal)}',
             width: 5, styles: PosStyles(align: PosAlign.right)),
         ]),
       if (totalGastos > 0)
@@ -1414,7 +1423,7 @@ class ThermalPrinterService {
       ...gen.row([
         PosColumn(text: 'TOTAL NETO:', width: 7, styles: PosStyles(bold: true)),
         PosColumn(
-          text: '\$${fmt.format(sesion.ventasTotal + sesion.abonosTotal + sesion.cambiosCobrarEf + sesion.netoCambiosTarjeta + sesion.netoCambiosTransferencia - totalGastos)}',
+          text: '\$${fmt.format(sesion.ventasTotal + sesion.abonosTotal + sesion.ingresosSepEfectivo + sesion.ingresosSepTarjeta + sesion.ingresosSepTransferencia + sesion.cambiosCobrarEf + sesion.netoCambiosTarjeta + sesion.netoCambiosTransferencia - totalGastos)}',
           width: 5, styles: PosStyles(bold: true, align: PosAlign.right)),
       ]),
       ...gen.hr(),

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../services/inventario_service.dart';
+import 'inventario_movil.dart';
 
 class AveriasDialog extends StatefulWidget {
   final int?   tiendaId;
@@ -91,42 +92,82 @@ class _AveriasDialogState extends State<AveriasDialog> {
 
   Future<void> _confirmar(Map<String, dynamic> item) async {
     final cantRaw = double.tryParse(_cantCtrl.text.trim().replaceAll(',', '.'));
-    if (cantRaw == null || cantRaw <= 0) {
-      setState(() => _errAccion = 'Ingresa una cantidad válida.');
-      return;
+    setState(() { _procesando = true; _errAccion = null; });
+    final err = await _ejecutarAccion(item, _accionSeleccionada, cantRaw);
+    if (!mounted) return;
+    if (err == null) {
+      _cerrarAccion();
+    } else {
+      setState(() {
+        _errAccion  = err;
+        _procesando = false;
+      });
+    }
+  }
+
+  /// Recupera o descarta unidades. Devuelve null si salió bien o el mensaje
+  /// de error. La usan la vista de escritorio y la de celular.
+  Future<String?> _ejecutarAccion(
+    Map<String, dynamic> item,
+    String accion,
+    double? cantidad, {
+    bool avisar = true,
+  }) async {
+    if (cantidad == null || cantidad <= 0) {
+      return 'Ingresa una cantidad válida.';
     }
     final stockAverias = _toDouble(item['stock_averias']);
-    if (cantRaw > stockAverias) {
-      setState(() => _errAccion = 'No hay suficiente stock en averías ($stockAverias).');
-      return;
+    if (cantidad > stockAverias) {
+      final s = stockAverias == stockAverias.roundToDouble()
+          ? stockAverias.toInt().toString()
+          : stockAverias.toString();
+      return 'No hay suficiente stock en averías ($s).';
     }
-
-    setState(() { _procesando = true; _errAccion = null; });
 
     final r = await _service.recuperarAveria(
       productoId: item['producto'] as int,
       tiendaId:   item['tienda']   as int,
-      accion:     _accionSeleccionada,
-      cantidad:   cantRaw,
+      accion:     accion,
+      cantidad:   cantidad,
     );
-
-    if (!mounted) return;
+    if (!mounted) return null;
 
     if (r['success'] == true) {
-      _cerrarAccion();
-      _mostrarSnack(
-        _accionSeleccionada == 'recuperar'
-            ? '✓ Unidades recuperadas al stock normal'
-            : '✓ Unidades dadas de baja definitivamente',
-        isError: false,
-      );
+      if (avisar) {
+        _mostrarSnack(
+          accion == 'recuperar'
+              ? '✓ Unidades recuperadas al stock normal'
+              : '✓ Unidades dadas de baja definitivamente',
+          isError: false,
+        );
+      }
       await _cargar();
-    } else {
-      setState(() {
-        _errAccion  = r['error'] as String? ?? 'Error al procesar';
-        _procesando = false;
-      });
+      return null;
     }
+    return r['error'] as String? ?? 'Error al procesar';
+  }
+
+  /// Historial de una avería, para la hoja del celular.
+  Future<List<HistorialAveriaMovil>> _historialMovil(
+      Map<String, dynamic> item) async {
+    final r = await _service.getMovimientosProducto(
+      productoId: item['producto'] as int,
+      tiendaId:   item['tienda']   as int,
+    );
+    if (r['success'] != true) {
+      throw Exception(r['error'] ?? 'No se pudo cargar el historial');
+    }
+    final todos = List<Map<String, dynamic>>.from(r['data'] as List);
+    return todos
+        .where((m) => m['tipo'] == 'averia')
+        .map((m) => HistorialAveriaMovil(
+              cantidad:    _toDouble(m['cantidad']),
+              fecha: DateTime.tryParse(m['created_at']?.toString() ?? '')
+                  ?.toLocal(),
+              empleado:    m['empleado_nombre']?.toString() ?? '',
+              observacion: m['observacion']?.toString() ?? '',
+            ))
+        .toList();
   }
 
   void _mostrarSnack(String msg, {required bool isError}) {
@@ -164,6 +205,31 @@ class _AveriasDialogState extends State<AveriasDialog> {
   // ── Build ──────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    // En celular la fila de cada producto no cabía: la categoría salía letra
+    // por letra en vertical y los botones se salían de la pantalla.
+    if (MediaQuery.sizeOf(context).width < 600) {
+      return Dialog.fullscreen(
+        backgroundColor: const Color(0xFFF0FDF4),
+        child: AveriasMovil(
+          tienda:       widget.nombreTienda,
+          cargando:     _cargando,
+          error:        _error,
+          onReintentar: _cargar,
+          items: _items.map((it) => AveriaMovil(
+                nombre:    (it['producto_nombre'] ?? '').toString(),
+                categoria: (it['categoria_nombre'] ?? '').toString(),
+                unidades:  _toDouble(it['stock_averias']),
+                ref:       it,
+              )).toList(),
+          onAccion: (a, accion, cantidad) => _ejecutarAccion(
+              a.ref! as Map<String, dynamic>, accion, cantidad,
+              avisar: false),
+          onHistorial: (a) =>
+              _historialMovil(a.ref! as Map<String, dynamic>),
+        ),
+      );
+    }
+
     return Dialog(
       backgroundColor: _surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),

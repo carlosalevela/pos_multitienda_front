@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../models/cuenta_bancaria.dart';
+import '../../../models/pago_abono.dart';
 import '../../../models/separado.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/cliente_provider.dart';
@@ -60,6 +61,11 @@ class _AbonarSheetState extends State<AbonarSheet> {
   String _metodoPago        = 'efectivo';
   int?   _cuentaSeleccionadaId;
 
+  // ── Pago mixto ───────────────────────────────────────
+  bool _mixto = false;
+  final List<PagoAbono>             _lineas     = [];
+  final List<TextEditingController> _lineaCtrls = [];
+
   static const _metodos = [
     ('efectivo',      'Efectivo',      Icons.payments_outlined),
     ('transferencia', 'Transferencia', Icons.swap_horiz_rounded),
@@ -68,11 +74,119 @@ class _AbonarSheetState extends State<AbonarSheet> {
 
   double get _saldo => widget.separado.saldoPendiente;
 
+  // ── Cuenta destino ────────────────────────────────────
+
+  /// Cuentas que aplican a un metodo de pago. Efectivo no lleva cuenta.
+  List<CuentaBancaria> _cuentasDe(String metodo) {
+    if (metodo == 'efectivo') return const [];
+    return context
+        .read<ConfigProvider>()
+        .cuentas
+        .where((c) => metodo == 'tarjeta'
+            ? c.tipo == 'tarjeta'
+            : c.tipo != 'tarjeta')
+        .toList();
+  }
+
+  /// Si para ese metodo hay UNA sola cuenta, se elige sola: el cajero no
+  /// tiene que tocar nada y el movimiento nunca queda sin cuenta.
+  int? _cuentaPorDefecto(String metodo) {
+    final cs = _cuentasDe(metodo);
+    return cs.length == 1 ? cs.first.id : null;
+  }
+
+  /// Falta elegir cuenta en el modo simple (habiendo cuentas disponibles).
+  bool get _faltaCuentaSimple =>
+      _metodoPago != 'efectivo' &&
+      _cuentaSeleccionadaId == null &&
+      _cuentasDe(_metodoPago).isNotEmpty;
+
   @override
   void dispose() {
     _montoCtrl.dispose();
+    for (final c in _lineaCtrls) {
+      c.dispose();
+    }
     super.dispose();
   }
+
+  // ── Helpers de pago mixto ─────────────────────────────
+
+  double get _totalMixto    => _lineas.fold(0.0, (t, l) => t + l.monto);
+  double get _efectivoMixto =>
+      _lineas.where((l) => l.esEfectivo).fold(0.0, (t, l) => t + l.monto);
+
+  /// Solo el efectivo puede exceder el saldo: ese sobrante es el cambio.
+  /// Pasarse con transferencia o tarjeta no tiene sentido, asi que no se deja.
+  bool get _excesoInvalido => (_totalMixto - _saldo) > _efectivoMixto + 0.001;
+  bool get _faltaCuenta    => _lineas.any((l) => l.faltaCuenta);
+  bool get _mixtoValido =>
+      _totalMixto > 0 && !_excesoInvalido && !_faltaCuenta;
+
+  /// Al prender el switch arranca con lo que ya se haya escrito arriba.
+  void _activarMixto() {
+    final actual = double.tryParse(_montoCtrl.text.trim()) ?? 0;
+    for (final c in _lineaCtrls) {
+      c.dispose();
+    }
+    _lineaCtrls.clear();
+    _lineas
+      ..clear()
+      ..add(PagoAbono(
+        metodoPago: _metodoPago,
+        monto:      actual,
+        cuentaId: _metodoPago == 'efectivo'
+            ? null
+            : (_cuentaSeleccionadaId ?? _cuentaPorDefecto(_metodoPago)),
+      ));
+    _lineaCtrls.add(TextEditingController(
+        text: actual > 0 ? actual.toStringAsFixed(0) : ''));
+  }
+
+  void _agregarLinea() {
+    final usados = _lineas.map((l) => l.metodoPago).toSet();
+    final libre  = _metodos.map((m) => m.$1)
+        .firstWhere((m) => !usados.contains(m), orElse: () => 'efectivo');
+    final falta  = (_saldo - _totalMixto).clamp(0.0, double.infinity);
+    setState(() {
+      _lineas.add(PagoAbono(
+          metodoPago: libre,
+          monto: falta,
+          cuentaId: _cuentaPorDefecto(libre)));
+      _lineaCtrls.add(TextEditingController(
+          text: falta > 0 ? falta.toStringAsFixed(0) : ''));
+    });
+  }
+
+  void _quitarLinea(int i) {
+    setState(() {
+      _lineas.removeAt(i);
+      _lineaCtrls.removeAt(i).dispose();
+    });
+  }
+
+  /// Descuenta el cambio de las lineas de efectivo, para que lo que se manda
+  /// al backend sume exactamente el monto abonado al separado.
+  List<PagoAbono> _recortarExcedente(double cambio) {
+    if (cambio <= 0) return List.of(_lineas);
+    var resta = cambio;
+    final out = <PagoAbono>[];
+    for (final l in _lineas) {
+      if (!l.esEfectivo || resta <= 0) {
+        out.add(l);
+        continue;
+      }
+      final quita = l.monto < resta ? l.monto : resta;
+      resta -= quita;
+      if (l.monto - quita > 0) out.add(l.copyWith(monto: l.monto - quita));
+    }
+    return out;
+  }
+
+  String _etiquetaMixta() => _lineas
+      .map((l) => _metodos.firstWhere((m) => m.$1 == l.metodoPago).$2)
+      .toSet()
+      .join(' + ');
 
   void _pagarTodo() {
     _montoCtrl.text = _saldo.toStringAsFixed(0);
@@ -80,21 +194,41 @@ class _AbonarSheetState extends State<AbonarSheet> {
   }
 
   Future<void> _abonar() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (_mixto) {
+      if (!_mixtoValido) return;
+    } else if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    // Un pago que no es efectivo tiene que decir a que cuenta entro, o el
+    // formato diario no puede separarlo (Nequi, DaviPlata, Bancolombia).
+    if (!_mixto && _faltaCuentaSimple) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Elige la cuenta destino del pago'),
+        backgroundColor: Color(0xFFBA1A1A),
+      ));
+      return;
+    }
     FocusScope.of(context).unfocus();
 
-    final ingresado = double.tryParse(_montoCtrl.text.trim()) ?? 0;
+    final ingresado = _mixto
+        ? _totalMixto
+        : (double.tryParse(_montoCtrl.text.trim()) ?? 0);
     // Si el cliente paga de más, registramos solo el saldo pendiente
     final monto = ingresado > _saldo ? _saldo : ingresado;
     final cambio = ingresado > _saldo ? ingresado - _saldo : 0.0;
     final prov  = context.read<ClienteProvider>();
 
+    // En mixto el excedente sale de la línea de efectivo (es el cambio).
+    final pagos        = _mixto ? _recortarExcedente(cambio) : null;
+    final metodoRecibo = _mixto ? _etiquetaMixta() : _metodoPago;
+    final hayEfectivo  = _mixto ? _efectivoMixto > 0 : _metodoPago == 'efectivo';
+
     final ok = await prov.abonarSeparado(widget.separado.id, monto, _metodoPago,
-        cuentaDestinoId: _cuentaSeleccionadaId);
+        cuentaDestinoId: _cuentaSeleccionadaId, pagos: pagos);
     if (!mounted) return;
 
     if (ok) {
-      if (_metodoPago == 'efectivo') unawaited(_kickCajon());
+      if (hayEfectivo) unawaited(_kickCajon());
       final copias = await showDialog<int>(
         context:            context,
         barrierDismissible: true,
@@ -233,10 +367,10 @@ class _AbonarSheetState extends State<AbonarSheet> {
 
       if (!mounted) return;
       if (copias != null && copias > 0) {
-        await _imprimirReciboAbono(monto, _metodoPago);
+        await _imprimirReciboAbono(monto, metodoRecibo);
         if (!mounted) return;
         if (copias == 2) {
-          await _imprimirReciboAbono(monto, _metodoPago);
+          await _imprimirReciboAbono(monto, metodoRecibo);
           if (!mounted) return;
         }
       }
@@ -282,6 +416,22 @@ class _AbonarSheetState extends State<AbonarSheet> {
         ? auth.empresaNombre
         : widget.separado.tiendaNombre;
 
+    // Deja el respaldo en PDF (local + servidor) sin abrir nada.
+    // Se hace siempre, haya o no impresora térmica: antes el PDF solo se
+    // generaba cuando NO había impresora, así que los recibos impresos en
+    // térmica quedaban sin respaldo y el detalle en Reportes salía vacío.
+    Future<void> guardarRespaldo() async {
+      try {
+        await ReciboPdfService.imprimirReciboAbono(
+          separado: widget.separado, monto: monto,
+          metodoPago: metodo, empresaNombre: empresaNombre,
+          nit: config.nit, direccion: config.direccion,
+          telefono: config.telefono,
+          abrir: false,
+        );
+      } catch (_) {}
+    }
+
     if (ThermalPrinterService.isWebUsbSupported) {
       try {
         final dev = await ThermalPrinterService.getAutoDevice();
@@ -292,6 +442,7 @@ class _AbonarSheetState extends State<AbonarSheet> {
             nit: config.nit, direccion: config.direccion, telefono: config.telefono,
           );
           await ThermalPrinterService.printBytes(dev, bytes);
+          unawaited(guardarRespaldo());
           return;
         }
       } catch (_) {}
@@ -303,6 +454,7 @@ class _AbonarSheetState extends State<AbonarSheet> {
           nit: config.nit, direccion: config.direccion, telefono: config.telefono,
         );
         await WindowsPrinterService.printRaw(bytes);
+        unawaited(guardarRespaldo());
         return;
       } catch (_) {}
     }
@@ -319,7 +471,9 @@ class _AbonarSheetState extends State<AbonarSheet> {
   Widget build(BuildContext context) {
     final bottom    = MediaQuery.of(context).viewInsets.bottom;
     final sep       = widget.separado;
-    final ingresado = double.tryParse(_montoCtrl.text.trim()) ?? 0;
+    final ingresado = _mixto
+        ? _totalMixto
+        : (double.tryParse(_montoCtrl.text.trim()) ?? 0);
     final nuevoSaldo = (_saldo - ingresado).clamp(0.0, double.infinity);
     final saldado    = ingresado > 0 && nuevoSaldo == 0;
     final excede     = ingresado > _saldo;
@@ -385,7 +539,31 @@ class _AbonarSheetState extends State<AbonarSheet> {
                             Text('Registrar pago',
                                 style: GoogleFonts.inter(fontSize: 14,
                                     fontWeight: FontWeight.w700, color: _kText)),
+                            const Spacer(),
+                            Text('Pago mixto',
+                                style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: _mixto ? _kTeal : _kMuted)),
+                            Transform.scale(
+                              scale: 0.75,
+                              child: Switch(
+                                value: _mixto,
+                                activeTrackColor: _kTeal,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                onChanged: (v) => setState(() {
+                                  _mixto = v;
+                                  if (v) _activarMixto();
+                                }),
+                              ),
+                            ),
                           ]),
+
+                          // Modo mixto: una línea por método de pago
+                          if (_mixto)
+                            ..._seccionMixta(fmtInt)
+                          else ...[
 
                           const SizedBox(height: 16),
 
@@ -404,7 +582,8 @@ class _AbonarSheetState extends State<AbonarSheet> {
                                   child: GestureDetector(
                                     onTap: () => setState(() {
                                       _metodoPago = m.$1;
-                                      _cuentaSeleccionadaId = null;
+                                      _cuentaSeleccionadaId =
+                                          _cuentaPorDefecto(m.$1);
                                     }),
                                     child: AnimatedContainer(
                                       duration: const Duration(milliseconds: 130),
@@ -517,6 +696,20 @@ class _AbonarSheetState extends State<AbonarSheet> {
                               ],
                             );
                           }),
+
+                          if (_faltaCuentaSimple) ...[
+                            const SizedBox(height: 10),
+                            Row(children: [
+                              const Icon(Icons.error_outline_rounded,
+                                  size: 14, color: Color(0xFFBA1A1A)),
+                              const SizedBox(width: 6),
+                              Text('Elige la cuenta destino',
+                                  style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFFBA1A1A))),
+                            ]),
+                          ],
 
                           const SizedBox(height: 16),
                           const Divider(height: 1, color: _kBorder),
@@ -677,6 +870,7 @@ class _AbonarSheetState extends State<AbonarSheet> {
                               ]),
                             ),
                           ],
+                          ],
                         ],
                       ),
                     ),
@@ -687,14 +881,19 @@ class _AbonarSheetState extends State<AbonarSheet> {
                     Selector<ClienteProvider, bool>(
                       selector: (_, p) => p.guardando,
                       builder: (_, guardando, __) {
+                        // Al separado solo se le abona hasta el saldo.
                         final montoDisplay = ingresado > 0
-                            ? widget.fmt.format(ingresado)
+                            ? widget.fmt.format(
+                                ingresado > _saldo ? _saldo : ingresado)
                             : null;
+                        final bloqueado = guardando ||
+                            (_mixto && !_mixtoValido) ||
+                            (!_mixto && _faltaCuentaSimple);
                         return SizedBox(
                           width: double.infinity,
                           height: 52,
                           child: ElevatedButton(
-                            onPressed: guardando ? null : _abonar,
+                            onPressed: bloqueado ? null : _abonar,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: _kTeal,
                               foregroundColor: Colors.white,
@@ -736,6 +935,324 @@ class _AbonarSheetState extends State<AbonarSheet> {
           ),
         ),
       ),
+    );
+  }
+
+  // ── Modo mixto: desglose del pago ─────────────────────────
+  List<Widget> _seccionMixta(NumberFormat fmtInt) {
+    final total = _totalMixto;
+    final resto = _saldo - total;
+
+    String? alerta;
+    if (_excesoInvalido) {
+      alerta = 'Solo el efectivo puede exceder el saldo.';
+    } else if (_faltaCuenta) {
+      alerta = 'Falta elegir la cuenta de un método.';
+    }
+
+    return [
+      const SizedBox(height: 16),
+      Row(children: [
+        Text('Desglose del pago',
+            style: GoogleFonts.inter(
+                fontSize: 11, fontWeight: FontWeight.w600, color: _kMuted)),
+        const Spacer(),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: _kBorder),
+          ),
+          child: Text(
+              '${_lineas.length} ${_lineas.length == 1 ? "método" : "métodos"}',
+              style: GoogleFonts.inter(
+                  fontSize: 10, fontWeight: FontWeight.w700, color: _kMuted)),
+        ),
+      ]),
+      const SizedBox(height: 8),
+
+      for (var i = 0; i < _lineas.length; i++) ...[
+        if (i > 0) const SizedBox(height: 8),
+        _lineaPago(i),
+      ],
+
+      const SizedBox(height: 8),
+
+      // Agregar método
+      GestureDetector(
+        onTap: _agregarLinea,
+        child: Container(
+          height: 40,
+          decoration: BoxDecoration(
+            color: _kTeal.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _kTeal.withValues(alpha: 0.4)),
+          ),
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            const Icon(Icons.add_rounded, size: 17, color: _kTeal),
+            const SizedBox(width: 6),
+            Text('Agregar método',
+                style: GoogleFonts.inter(
+                    fontSize: 12, fontWeight: FontWeight.w700, color: _kTeal)),
+          ]),
+        ),
+      ),
+
+      const SizedBox(height: 12),
+
+      // Resumen
+      Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _kBorder),
+        ),
+        child: Column(children: [
+          Row(children: [
+            Text('Total a abonar',
+                style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w500,
+                    color: _kMuted)),
+            const Spacer(),
+            Text('\$${fmtInt.format(total)}',
+                style: GoogleFonts.inter(
+                    fontSize: 17, fontWeight: FontWeight.w800, color: _kText)),
+          ]),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 10),
+            child: Divider(height: 1, color: _kBorder),
+          ),
+          Row(children: [
+            Text(
+                resto < 0
+                    ? 'Cambio al cliente'
+                    : resto == 0
+                        ? '¡Queda saldado!'
+                        : 'Queda pendiente',
+                style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w500,
+                    color: _kMuted)),
+            const Spacer(),
+            Text('\$${fmtInt.format(resto < 0 ? -resto : resto)}',
+                style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: resto < 0
+                        ? (_excesoInvalido ? const Color(0xFFDC2626) : _kTeal)
+                        : resto == 0
+                            ? _kTeal
+                            : _kAmber)),
+          ]),
+          if (alerta != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFFECACA)),
+              ),
+              child: Row(children: [
+                const Icon(Icons.error_outline_rounded,
+                    size: 14, color: Color(0xFFDC2626)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(alerta,
+                      style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFFDC2626))),
+                ),
+              ]),
+            ),
+          ],
+        ]),
+      ),
+    ];
+  }
+
+  /// Pastilla de método dentro de una línea. La activa se expande y muestra
+  /// el texto; las otras quedan en ícono, para que "Transferencia" quepa.
+  Widget _chipMetodo(int i, (String, String, IconData) m, bool sel) {
+    final l = _lineas[i];
+    return GestureDetector(
+      onTap: sel
+          ? null
+          : () => setState(() => _lineas[i] = PagoAbono(
+                metodoPago: m.$1,
+                monto: l.monto,
+                cuentaId: _cuentaPorDefecto(m.$1),
+              )),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 130),
+        height: 32,
+        decoration: BoxDecoration(
+          color: sel ? _kTeal : _kSurface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: sel ? _kTeal : _kBorder),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(m.$3, size: 15, color: sel ? Colors.white : _kMuted),
+            if (sel) ...[
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(m.$2,
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                    style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white)),
+              ),
+              const SizedBox(width: 8),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Una línea de pago del modo mixto ──────────────────────
+  Widget _lineaPago(int i) {
+    final l = _lineas[i];
+    final cuentas = context
+        .watch<ConfigProvider>()
+        .cuentas
+        .where((c) =>
+            l.metodoPago == 'tarjeta' ? c.tipo == 'tarjeta' : c.tipo != 'tarjeta')
+        .toList();
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _kBorder),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Selector de método + quitar línea
+        Row(children: [
+          Expanded(
+            child: Row(children: [
+              for (final m in _metodos)
+                if (l.metodoPago == m.$1)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: _chipMetodo(i, m, true),
+                    ),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: SizedBox(
+                        width: 40, child: _chipMetodo(i, m, false)),
+                  ),
+            ]),
+          ),
+          if (_lineas.length > 1)
+            GestureDetector(
+              onTap: () => _quitarLinea(i),
+              child: const SizedBox(
+                width: 28,
+                height: 28,
+                child: Icon(Icons.close_rounded, size: 17, color: _kMuted),
+              ),
+            ),
+        ]),
+
+        const SizedBox(height: 8),
+
+        // Monto de la línea
+        TextField(
+          controller: _lineaCtrls[i],
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+          ],
+          onChanged: (v) => setState(() => _lineas[i] = PagoAbono(
+                metodoPago: l.metodoPago,
+                monto: double.tryParse(v.trim()) ?? 0,
+                cuentaId: l.cuentaId,
+              )),
+          style: GoogleFonts.inter(
+              fontSize: 15, fontWeight: FontWeight.w700, color: _kText),
+          decoration: InputDecoration(
+            prefixText: '\$ ',
+            prefixStyle: GoogleFonts.inter(
+                fontSize: 15, fontWeight: FontWeight.w800, color: _kTeal),
+            hintText: '0',
+            hintStyle: GoogleFonts.inter(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: Colors.grey.shade300),
+            isDense: true,
+            filled: true,
+            fillColor: _kSurface,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: _kBorder)),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: _kBorder)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: _kTeal, width: 1.5)),
+          ),
+        ),
+
+        // Cuenta destino de esta línea
+        if (!l.esEfectivo && cuentas.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: cuentas.map((c) {
+              final sel = l.cuentaId == c.id;
+              return GestureDetector(
+                onTap: () => setState(() => _lineas[i] = PagoAbono(
+                      metodoPago: l.metodoPago,
+                      monto: l.monto,
+                      cuentaId: sel ? null : c.id,
+                    )),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: sel ? _kTealLight : _kSurface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: sel ? _kTeal : _kBorder),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text(c.nombre,
+                        style: GoogleFonts.inter(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: sel ? _kTeal : _kText)),
+                    const SizedBox(width: 4),
+                    Text('· ${c.tipoDisplay}',
+                        style: GoogleFonts.inter(
+                            fontSize: 9.5, color: sel ? _kTeal : _kMuted)),
+                    if (sel) ...[
+                      const SizedBox(width: 4),
+                      const Icon(Icons.check_circle, size: 12, color: _kTeal),
+                    ],
+                  ]),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ]),
     );
   }
 

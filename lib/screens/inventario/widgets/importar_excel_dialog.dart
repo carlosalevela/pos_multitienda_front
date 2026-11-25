@@ -7,6 +7,9 @@ import 'package:excel/excel.dart' hide Border, BorderStyle;
 import 'package:google_fonts/google_fonts.dart';
 import '../../../providers/inventario_provider.dart';
 import '../../../utils/file_downloader.dart';
+import 'inventario_movil.dart';
+import '../../../utils/xlsx_normalizar.dart';
+import '../../../utils/numero_excel.dart';
 
 // ── Design tokens (consistentes con inventario_screen) ────
 const _text    = Color(0xFF191C1E);
@@ -64,6 +67,10 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
 
   List<int>? _bytesArchivo;
   String     _nombreArchivoRaw = '';
+
+  // En celular el diálogo va a pantalla completa y la barra inferior de
+  // errores quedaría escondida detrás: el error se muestra dentro.
+  String? _errorMovil;
 
   // Debug: qué detectó el parser
   List<String>    _dbgHeaders = [];
@@ -194,26 +201,9 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
   // ══════════════════════════════════════════════════════
   // PARSEO DE NÚMEROS
   // ══════════════════════════════════════════════════════
-  double _parseNum(String s) {
-    if (s.isEmpty) return 0;
-    String clean = s.replaceAll(RegExp(r'[^\d.,]'), '');
-    if (clean.isEmpty) return 0;
-    if (clean.contains(',') && clean.contains('.')) {
-      if (clean.lastIndexOf(',') > clean.lastIndexOf('.')) {
-        clean = clean.replaceAll('.', '').replaceAll(',', '.');
-      } else {
-        clean = clean.replaceAll(',', '');
-      }
-    } else if (clean.contains(',')) {
-      final parts = clean.split(',');
-      if (parts.length == 2 && parts.last.length <= 2) {
-        clean = clean.replaceAll(',', '.');
-      } else {
-        clean = clean.replaceAll(',', '');
-      }
-    }
-    return double.tryParse(clean) ?? 0;
-  }
+  // Respeta el signo: un precio de -6.000 debe llegar negativo para que la
+  // revisión lo marque como error (ver utils/numero_excel.dart).
+  double _parseNum(String s) => leerNumeroExcel(s);
 
   // ══════════════════════════════════════════════════════
   // LIFECYCLE
@@ -252,7 +242,9 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
     _nombreArchivoRaw = result.files.single.name;
 
     try {
-      final bytes = result.files.single.bytes!;
+      // Corrige archivos exportados por otros programas (ruta absoluta de
+      // la hoja, celdas de texto vacías) que el paquete `excel` no lee.
+      final bytes = normalizarXlsx(result.files.single.bytes!);
       final excel = Excel.decodeBytes(bytes);
 
       if (excel.tables.isEmpty) { _mostrarError('El archivo no tiene hojas de datos.'); return; }
@@ -325,6 +317,17 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
         return _readCell(row[idx]);
       }
 
+      // Si la celda ya es número en Excel se usa tal cual, con su signo.
+      // Solo el texto escrito a mano ("$ 12.500", "-6.000") se interpreta.
+      double cellNum(List<Data?> row, String campo) {
+        final idx = colMap[campo];
+        if (idx == null || idx >= row.length) return 0;
+        final v = row[idx]?.value;
+        if (v is IntCellValue)    return v.value.toDouble();
+        if (v is DoubleCellValue) return v.value;
+        return _parseNum(_readCell(row[idx]));
+      }
+
       final filas   = <Map<String, dynamic>>[];
       final errores = <Map<String, dynamic>>[];
 
@@ -334,12 +337,13 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
         final nombre = cellStr(row, 'nombre');
         if (nombre.isEmpty) continue;
 
-        final precioVenta   = _parseNum(cellStr(row, 'precio_venta'));
-        final precioCompra  = _parseNum(cellStr(row, 'precio_compra'));
-        final stockActual   = _parseNum(cellStr(row, 'stock_actual'));
-        final stockMinimo   = _parseNum(cellStr(row, 'stock_minimo'));
+        final precioVenta   = cellNum(row, 'precio_venta');
+        final precioCompra  = cellNum(row, 'precio_compra');
+        final stockActual   = cellNum(row, 'stock_actual');
+        final stockMinimo   = cellNum(row, 'stock_minimo');
         final rawMayoreo    = cellStr(row, 'precio_mayoreo');
-        final precioMayoreo = rawMayoreo.isNotEmpty ? _parseNum(rawMayoreo) : null;
+        final precioMayoreo =
+            rawMayoreo.isNotEmpty ? cellNum(row, 'precio_mayoreo') : null;
 
         final item = <String, dynamic>{
           'fila':             i + 1,
@@ -382,8 +386,39 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
       });
 
     } catch (e) {
-      debugPrint('⚠️ Parseo local fallido, enviando al servidor: $e');
-      await _importarDirecto();
+      // Antes aquí se importaba directo al servidor sin avisar, y la persona
+      // se quedaba sin ver la revisión. Ahora se le pregunta.
+      debugPrint('⚠️ No se pudo leer el archivo para revisarlo: $e');
+      setState(() => _cargando = false);
+      if (!mounted) return;
+      final esXls = _nombreArchivoRaw.toLowerCase().endsWith('.xls');
+      final seguir = await showDialog<bool>(
+        context: context,
+        builder: (dCtx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: const Text('No se puede revisar este archivo'),
+          content: Text(esXls
+              ? 'Los archivos .xls (Excel antiguo) no se pueden revisar antes '
+                'de importar. Puedes guardarlo como .xlsx desde Excel, o '
+                'importarlo sin revisar: el servidor valida cada fila y te '
+                'muestra cuáles no entraron.'
+              : 'No pudimos leer el archivo para mostrarte la revisión. '
+                'Puedes abrirlo en Excel y guardarlo de nuevo como .xlsx, o '
+                'importarlo sin revisar: el servidor valida cada fila y te '
+                'muestra cuáles no entraron.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dCtx, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dCtx, true),
+              child: const Text('Importar sin revisar'),
+            ),
+          ],
+        ),
+      );
+      if (seguir == true) await _importarDirecto();
     }
   }
 
@@ -446,7 +481,10 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
   }
 
   void _mostrarError(String msg) {
-    setState(() => _cargando = false);
+    setState(() {
+      _cargando   = false;
+      _errorMovil = msg;
+    });
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg, style: _inter(color: Colors.white, size: 12)),
@@ -473,6 +511,13 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
   // ══════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
+    if (MediaQuery.sizeOf(context).width < 600) {
+      return Dialog.fullscreen(
+        backgroundColor: const Color(0xFFF0FDF4),
+        child: FadeTransition(opacity: _fadeAnim, child: _buildMovil()),
+      );
+    }
+
     return Dialog(
       backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -500,6 +545,75 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
           ),
         ),
       ),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════
+  // MÓVIL — misma lógica, otra presentación
+  // ══════════════════════════════════════════════════════
+  Widget _buildMovil() {
+    FilaImportMovil fila(Map<String, dynamic> f) => FilaImportMovil(
+          fila:      (f['fila'] as num?)?.toInt() ?? 0,
+          nombre:    (f['nombre'] ?? '').toString(),
+          codigo:    (f['codigo_barras'] ?? '').toString(),
+          categoria: (f['categoria_nombre'] ?? '').toString(),
+          precio:    (f['precio_venta'] as num?)?.toDouble() ?? 0,
+          stock:     (f['stock_actual'] as num?)?.toDouble() ?? 0,
+          error:     f['_error'] as String?,
+        );
+
+    final data = _resultado;
+    final resultado = data == null
+        ? null
+        : ResultadoImportMovil(
+            creados:  (data['creados']  as num?)?.toInt() ?? 0,
+            fallidos: (data['fallidos'] as num?)?.toInt() ?? 0,
+            total:    (data['total']    as num?)?.toInt() ?? 0,
+            noImportadas: ((data['resultados'] as List?)
+                        ?.cast<Map<String, dynamic>>() ?? const [])
+                .where((r) => r['success'] != true)
+                .map((r) => FilaImportMovil(
+                      fila:   (r['fila'] as num?)?.toInt() ?? 0,
+                      nombre: (r['nombre'] ?? '').toString(),
+                      error:  (r['error'] ?? 'No se pudo importar').toString(),
+                      conDetalle: false,
+                    ))
+                .toList(),
+          );
+
+    return ImportarExcelMovil(
+      tienda:        widget.nombreTienda,
+      paso: switch (_paso) {
+        _Paso.seleccionar   => PasoImportacion.archivo,
+        _Paso.previsualizar => PasoImportacion.revisar,
+        _Paso.resultado     => PasoImportacion.resultado,
+      },
+      cargando:      _cargando,
+      mensajeCarga:  _msgCarga,
+      nombreArchivo: _nombreArchivoRaw,
+      listas:        _filas.map(fila).toList(),
+      conError:      _filasError.map(fila).toList(),
+      resultado:     resultado,
+      error:         _errorMovil,
+      onCerrarError: () => setState(() => _errorMovil = null),
+      onElegirArchivo: () {
+        setState(() => _errorMovil = null);
+        _seleccionarArchivo();
+      },
+      onPlantilla: _descargarPlantilla,
+      onImportar: () {
+        setState(() => _errorMovil = null);
+        _importar();
+      },
+      onVolver: () => _cambiarPaso(() {
+        _paso = _Paso.seleccionar;
+        _filas.clear();
+        _filasError.clear();
+        _busqueda   = '';
+        _busCtrl.clear();
+        _errorMovil = null;
+      }),
+      onCerrar: () => Navigator.pop(context),
     );
   }
 
@@ -745,7 +859,14 @@ class _ImportarExcelDialogState extends State<ImportarExcelDialog>
     final bytes = excel.save();
     if (bytes == null) return;
 
-    await guardarArchivoExcel(bytes, 'plantilla_inventario.xlsx');
+    final ruta = await guardarArchivoExcel(bytes, 'plantilla_inventario.xlsx');
+
+    // En el celular la plantilla queda dentro de la app: se abre de una
+    // para que se pueda llenar o compartir.
+    if (excelQuedaDentroDeLaApp) {
+      final motivo = await abrirArchivo(ruta);
+      if (motivo != null && mounted) _mostrarError(motivo);
+    }
   }
 
   Widget _vistaSeleccionar() => SingleChildScrollView(

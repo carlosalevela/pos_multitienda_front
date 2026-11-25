@@ -26,6 +26,7 @@ import '../../../services/contabilidad_service.dart';
 import '../../../services/cuenta_bancaria_service.dart';
 import '../../../services/documento_service.dart';
 import '../../../services/formato_pdf_service.dart';
+import '../../../services/registro_diario_builder.dart';
 import 'pdf/cierre_pdf.dart';
 
 // ── Enterprise palette ─────────────────────────────────────────
@@ -1371,10 +1372,9 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
               }
             } else {
               // Paso 4: registro completado → cerrar y enviar PDF/WhatsApp
-              // Capturamos el resumen antes de cerrar el widget
-              final resumenParaFormato = _p4Resumen;
-              final montoParaFormato   = _p4MontoFinal ?? 0;
-              final sesionParaFormato  = _p4SesionId;
+              // Capturamos los datos antes de cerrar el widget
+              final montoParaFormato  = _p4MontoFinal ?? 0;
+              final sesionParaFormato = _p4SesionId;
               Navigator.pop(context);
               if (sesionParaFormato != null) {
                 unawaited(_imprimirCierreFinalizado(
@@ -1389,11 +1389,6 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
                   tiendaId:   _p4TiendaId,
                   messenger:  _p4Msgr,
                 ));
-              }
-              // Auto-guardar PDF del formato diario en la carpeta local
-              if (resumenParaFormato != null) {
-                unawaited(_guardarFormatoPdf(
-                    resumenParaFormato, montoParaFormato, sesionParaFormato));
               }
             }
           },
@@ -1515,6 +1510,10 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
     }
 
     if (sesion == null) return;
+
+    // Formato de Movimiento Diario: mismo constructor que Formatos Diarios,
+    // armado sobre el detalle real de la sesion ya cerrada.
+    unawaited(_guardarFormatoPdf(sesion, sesionId));
 
     // PDF + WhatsApp + DocumentoService (sin imprimir térmica aquí)
     try {
@@ -1718,127 +1717,37 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
     }
   }
 
-  Future<void> _guardarFormatoPdf(
-      ResumenCierre r, double montoFinalReal, int? sesionId) async {
+  // Genera, guarda y envia el Registro de Movimiento Diario del turno.
+  //
+  // Usa el MISMO constructor que la pantalla de Formatos Diarios
+  // (construirRegistroDiario), por lo que el PDF que sale al cerrar caja
+  // es identico al que se envia manualmente desde alli.
+  Future<void> _guardarFormatoPdf(SesionHistorial full, int sesionId) async {
     try {
-      final fecha      = DateTime.now();
-      final diferencia = montoFinalReal - r.montoEsperadoCaja;
-      final sobrante   = diferencia > 0 ? diferencia : 0.0;
-      final faltante   = diferencia < 0 ? -diferencia : 0.0;
-
-      final pdfCb       = r.compraBonos;
-      final efVentas  = r.ventas.efectivo + r.ventas.mixtoEfectivo - pdfCb.efectivo;
-      final devEfNeto = r.devoluciones.cambiosCobrar - r.devoluciones.cambiosDevolver - r.devoluciones.efectivo;
-      final pdfDtTotal  = r.ventas.tarjeta  + r.abonos.tarjeta + r.abonos.ingresosSepTarjeta - pdfCb.tarjeta;
-      final pdfTrTotal  = r.ventas.transferencia + r.abonos.transferencia + r.abonos.ingresosSepTransferencia - pdfCb.transferencia;
-      final pdfNVentas  = r.ventas.numTransacciones - pdfCb.cantidad;
-      final pdfDtCount  = r.ventasDetalle.where((v) => v['metodo_pago'] == 'tarjeta').length - (pdfCb.tarjeta > 0 ? 1 : 0);
-      final pdfTrCount  = r.ventasDetalle.where((v) => v['metodo_pago'] == 'transferencia').length - (pdfCb.transferencia > 0 ? 1 : 0);
-      final pdfBonoCount = r.ventasDetalle.where((v) =>
-          (v['metodo_pago'] as String? ?? '').contains('bono')).length;
-
-      final data = RegistroMovimientoData(
-        almacen:      r.tiendaNombre.toUpperCase(),
-        fecha:        fecha,
-        encargado:    r.empleadoNombre.toUpperCase(),
-        // Header: todo lo que generó dinero real este turno (excluye bonos redimidos puros)
-        numeroVentas: (r.ventas.numTransacciones - r.ventas.bonoNum)
-            + r.abonos.numIngresosSep + r.abonos.cantidad,
-        totalVentas: (r.ventas.total - r.ventas.bono)
-            + r.abonos.ingresosSepEfectivo + r.abonos.ingresosSepTarjeta + r.abonos.ingresosSepTransferencia
-            + r.abonos.efectivo + r.abonos.creditoEfectivo + r.abonos.tarjeta + r.abonos.transferencia,
-        realizo:      r.empleadoNombre,
-        observaciones: _p4Obs,
-        filas: [
-          FilaRegistro(signo: '+', concepto: 'VENTAS EN CAJA',
-              cantidad: pdfNVentas,
-              montos: efVentas > 0 ? {MedioPago.efectivo: efVentas} : {}),
-          FilaRegistro(signo: '+', concepto: 'INGRESOS SEPARADOS',
-              cantidad: r.abonos.numIngresosSep,
-              montos: {
-                if (r.abonos.ingresosSepEfectivo > 0)      MedioPago.efectivo:    r.abonos.ingresosSepEfectivo,
-                if (r.abonos.ingresosSepTarjeta > 0)       MedioPago.datafono:    r.abonos.ingresosSepTarjeta,
-                if (r.abonos.ingresosSepTransferencia > 0) MedioPago.bancolombia: r.abonos.ingresosSepTransferencia,
-              }),
-          FilaRegistro(signo: '+', concepto: 'ABONOS PAGOS CLIENTES',
-              cantidad: r.abonos.cantidad,
-              montos: {
-                if ((r.abonos.efectivo + r.abonos.creditoEfectivo) > 0) MedioPago.efectivo: r.abonos.efectivo + r.abonos.creditoEfectivo,
-                if (r.abonos.tarjeta > 0)       MedioPago.datafono:    r.abonos.tarjeta,
-                if (r.abonos.transferencia > 0) MedioPago.bancolombia: r.abonos.transferencia,
-              }),
-          FilaRegistro(signo: '+', concepto: 'DEVOLUCIONES',
-              cantidad: r.devoluciones.cantidad,
-              montos: {
-                if (devEfNeto != 0)                                MedioPago.efectivo:    devEfNeto,
-                if (r.devoluciones.netoCambiosTarjeta != 0)        MedioPago.datafono:    r.devoluciones.netoCambiosTarjeta,
-                if (r.devoluciones.netoCambiosTransferencia != 0)  MedioPago.bancolombia: r.devoluciones.netoCambiosTransferencia,
-              }),
-          FilaRegistro(signo: '+', concepto: 'COMPRA DE BONOS',
-              cantidad: pdfCb.cantidad,
-              montos: {
-                if (pdfCb.efectivo > 0)      MedioPago.efectivo:    pdfCb.efectivo,
-                if (pdfCb.tarjeta > 0)       MedioPago.datafono:    pdfCb.tarjeta,
-                if (pdfCb.transferencia > 0) MedioPago.bancolombia: pdfCb.transferencia,
-              }),
-          FilaRegistro(signo: '+', concepto: 'DATÁFONO',
-              cantidad: pdfDtCount,
-              montos: pdfDtTotal > 0 ? {MedioPago.datafono: pdfDtTotal} : {}),
-          FilaRegistro(signo: '+', concepto: 'TRANSFERENCIAS',
-              cantidad: pdfTrCount,
-              montos: pdfTrTotal > 0 ? {MedioPago.bancolombia: pdfTrTotal} : {}),
-          FilaRegistro(signo: '+', concepto: 'BONOS REDIMIDOS',
-              cantidad: r.ventas.bonoNum,
-              montos: r.ventas.bono > 0 ? {MedioPago.bono: r.ventas.bono} : {}),
-          FilaRegistro(signo: '+', concepto: 'BONOS + DIFERENCIA',
-              cantidad: r.ventas.bonoDifNum,
-              montos: {
-                if (r.ventas.bonoEfectivo > 0)        MedioPago.efectivo:    r.ventas.bonoEfectivo,
-                if (r.ventas.bonoTarjeta > 0)          MedioPago.datafono:    r.ventas.bonoTarjeta,
-                if (r.ventas.bonoTransferencia > 0)    MedioPago.bancolombia: r.ventas.bonoTransferencia,
-                if (r.ventas.bonoDifBonoParte > 0)     MedioPago.bono:        r.ventas.bonoDifBonoParte,
-              }),
-          FilaRegistro(signo: '+', concepto: 'TOTAL EFECTIVO',
-              cantidad: r.ventas.numTransacciones,
-              montos: {MedioPago.efectivo: r.montoEsperadoCaja + r.gastos.efectivo - r.montoInicial}),
-          FilaRegistro(signo: '−', concepto: 'GASTOS',
-              cantidad: r.gastos.cantidad,
-              montos: r.gastos.efectivo > 0
-                  ? {MedioPago.efectivo: r.gastos.efectivo} : {}),
-          if (sobrante > 0)
-            FilaRegistro(signo: '+', concepto: 'SOBRANTES',
-                cantidad: 1,
-                montos: {MedioPago.efectivo: sobrante}),
-          if (faltante > 0)
-            FilaRegistro(signo: '−', concepto: 'FALTANTE',
-                cantidad: 1,
-                montos: {MedioPago.efectivo: faltante}),
-        ],
-        totalEntregado: FilaRegistro(
-          signo: '+',
-          concepto: 'TOTAL EFECTIVO ENTREGADO',
-          cantidad: r.ventas.numTransacciones,
-          montos: {MedioPago.efectivo: montoFinalReal - r.montoInicial},
-        ),
+      final data = construirRegistroDiario(
+        full,
+        observaciones: _p4Obs.isNotEmpty ? _p4Obs : null,
       );
 
       final bytes = await _capturarRegistroComoPdf(data);
-      final d  = fecha;
-      final ts = '${d.year}${d.month.toString().padLeft(2,'0')}${d.day.toString().padLeft(2,'0')}';
-      final ref = sesionId != null ? '${sesionId}_$ts' : ts;
-      await DocumentoService.instance.guardarFormato(
-          bytes: bytes, referencia: ref);
 
-      // Enviar por WhatsApp si hay sesionId
-      if (sesionId != null) {
-        final filename = 'REGISTRO_${sesionId}_${ts}_${data.almacen.replaceAll(' ', '_')}.pdf';
-        CajaService().enviarFormatoDiarioWhatsApp(
-          sesionId, Uint8List.fromList(bytes), filename,
-        ).then((res) {
-          final ok = res['success'] == true;
-          debugPrint('FormatoDiarioWA: ${ok ? "enviado" : res['error']}');
-        });
-      }
+      final d = data.fecha;
+      final ts = '${d.year}${d.month.toString().padLeft(2, '0')}'
+          '${d.day.toString().padLeft(2, '0')}';
+
+      await DocumentoService.instance
+          .guardarFormato(bytes: bytes, referencia: '${sesionId}_$ts');
+
+      final filename =
+          'REGISTRO_${sesionId}_${ts}_${data.almacen.replaceAll(' ', '_')}.pdf';
+      CajaService().enviarFormatoDiarioWhatsApp(
+        sesionId,
+        Uint8List.fromList(bytes),
+        filename,
+      ).then((res) {
+        final ok = res['success'] == true;
+        debugPrint('FormatoDiarioWA: ${ok ? "enviado" : res['error']}');
+      });
     } catch (e) {
       debugPrint('FormatoPdf: error al guardar: $e');
     }

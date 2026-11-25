@@ -11,6 +11,9 @@ import '../../providers/caja_provider.dart';
 import '../../models/sesion_caja.dart';
 import '../../services/caja_service.dart';
 import '../../services/documento_service.dart';
+import '../../services/cliente_service.dart';
+import '../../services/recibo_pdf_service.dart';
+import '../../models/separado.dart';
 import '../../services/venta_service.dart';
 import 'widgets/reporte_detalle_dialog.dart';
 import 'widgets/reporte_turno_card.dart';
@@ -288,6 +291,8 @@ class _ReportesScreenState extends State<ReportesScreen> {
                               _buildStatsChips(rep),
                               const SizedBox(height: 16),
                               _buildMetodosPago(rep),
+                              const SizedBox(height: 14),
+                              _buildCuentasBreakdown(rep),
                               const SizedBox(height: 24),
                               _buildMainGrid(rep, contab, contentW),
                               const SizedBox(height: 24),
@@ -455,6 +460,115 @@ class _ReportesScreenState extends State<ReportesScreen> {
       const SizedBox(width: 24),
       Expanded(child: cards[3]),
     ]);
+  }
+
+  // ── Desglose por cuenta bancaria ──────────────────────────
+  //
+  // "Por método de pago" junta todas las transferencias en un solo balde,
+  // así que no deja ver cuánto entró específicamente a Nequi. Esto lo
+  // separa cuenta por cuenta. El efectivo no tiene cuenta y no aparece.
+  Widget _buildCuentasBreakdown(ReportesProvider rep) {
+    final cuentas = rep.totalPorCuenta;
+    if (cuentas.isEmpty) return const SizedBox.shrink();
+
+    final total =
+        cuentas.fold<double>(0, (t, c) => t + (c['total'] as double));
+
+    Color colorTipo(String tipo) => switch (tipo) {
+          'nequi' => const Color(0xFF7C3AED),
+          'daviplata' => const Color(0xFFDC2626),
+          'tarjeta' => const Color(0xFF0EA5E9),
+          _ => _kSecondary,
+        };
+
+    IconData iconTipo(String tipo) => switch (tipo) {
+          'tarjeta' => Icons.credit_card_rounded,
+          'nequi' || 'daviplata' => Icons.phone_android_rounded,
+          _ => Icons.account_balance_rounded,
+        };
+
+    String labelTipo(String tipo) => switch (tipo) {
+          'nequi' => 'Nequi',
+          'daviplata' => 'DaviPlata',
+          'tarjeta' => 'Datáfono',
+          'transferencia' => 'Transferencia',
+          _ => 'Cuenta',
+        };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          const Icon(Icons.account_balance_wallet_outlined,
+              size: 14, color: _kOnSurfVar),
+          const SizedBox(width: 6),
+          Text('Por cuenta',
+              style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: _kOnSurfVar)),
+          const SizedBox(width: 8),
+          Text('el efectivo no entra aquí',
+              style: GoogleFonts.inter(
+                  fontSize: 10, color: Colors.grey.shade400)),
+        ]),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: cuentas.map((c) {
+            final nombre = c['nombre'] as String;
+            final tipo = c['tipo'] as String;
+            final monto = c['total'] as double;
+            final movs = c['movimientos'] as int;
+            final pct = total == 0 ? 0.0 : monto / total * 100;
+            final col = colorTipo(tipo);
+
+            return Container(
+              width: 196,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: col.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: col.withValues(alpha: 0.25)),
+              ),
+              child: Row(children: [
+                Icon(iconTipo(tipo), size: 18, color: col),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(nombre,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: col)),
+                      Text('\$${fmtNum(monto)}',
+                          style: GoogleFonts.inter(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: col)),
+                      Text('${labelTipo(tipo)} · $movs mov.',
+                          style: GoogleFonts.inter(
+                              fontSize: 9.5,
+                              color: col.withValues(alpha: 0.7))),
+                    ],
+                  ),
+                ),
+                Text('${pct.toStringAsFixed(0)}%',
+                    style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: col.withValues(alpha: 0.6))),
+              ]),
+            );
+          }).toList(),
+        ),
+      ],
+    );
   }
 
   Widget _buildMetodosPago(ReportesProvider rep) {
@@ -1322,12 +1436,14 @@ class _ReportesScreenState extends State<ReportesScreen> {
                   valueText:  '+\$${fmtNum(monto)}',
                   valueColor: _kSecondary,
                   onTap: () => _verDetalleAbono(
-                    cliente:   cliente,
-                    sepId:     sepId,
-                    monto:     monto,
-                    metodo:    metodo,
-                    empNombre: emp,
-                    createdAt: createdAt,
+                    cliente:      cliente,
+                    sepId:        sepId,
+                    monto:        monto,
+                    metodo:       metodo,
+                    empNombre:    emp,
+                    createdAt:    createdAt,
+                    cuentaNombre: a['cuenta_nombre']?.toString(),
+                    cuentaTipo:   a['cuenta_tipo']?.toString(),
                   ),
                 );
               }).toList(),
@@ -1335,6 +1451,11 @@ class _ReportesScreenState extends State<ReportesScreen> {
     );
   }
 
+  // ── Detalle de abono: datos + recibo ──────────────────────
+  //
+  // Dos columnas: a la izquierda los datos del abono y el estado del
+  // separado, a la derecha una vista del recibo que se arma con los datos
+  // (no depende de que exista un PDF guardado).
   Future<void> _verDetalleAbono({
     required String  cliente,
     required int?    sepId,
@@ -1342,14 +1463,47 @@ class _ReportesScreenState extends State<ReportesScreen> {
     required String  metodo,
     required String  empNombre,
     required String? createdAt,
+    String?          cuentaNombre,
+    String?          cuentaTipo,
   }) async {
+    // Recibos ya guardados para este separado.
     List<File> recibos = [];
     if (sepId != null) {
       final todos = await DocumentoService.instance.listar(TipoDocumento.abono);
       recibos = todos.where((f) => f.path.contains('abono_${sepId}_')).toList();
     }
 
+    // Estado actual del separado (para la barra de progreso).
+    Separado? sep;
+    if (sepId != null) {
+      try {
+        sep = await ClienteService().getSeparado(sepId);
+      } catch (_) {}
+    }
+
     if (!mounted) return;
+
+    String fechaStr = '—';
+    String horaStr  = '—';
+    String fechaCorta = '—';
+    if (createdAt != null) {
+      try {
+        final dt = DateTime.parse(createdAt).toLocal();
+        final h  = dt.hour.toString().padLeft(2, '0');
+        final m  = dt.minute.toString().padLeft(2, '0');
+        final dd = dt.day.toString().padLeft(2, '0');
+        final mm = dt.month.toString().padLeft(2, '0');
+        const meses = ['', 'Ene','Feb','Mar','Abr','May','Jun',
+                           'Jul','Ago','Sep','Oct','Nov','Dic'];
+        fechaStr   = '${dt.day} ${meses[dt.month]} ${dt.year}, $h:$m';
+        horaStr    = '$h:$m';
+        fechaCorta = '$dd/$mm/${dt.year}';
+      } catch (_) {}
+    }
+
+    final fmtR = RegExp(r'(\d)(?=(\d{3})+(?!\d))');
+    String fmtM(double v) =>
+        v.toStringAsFixed(0).replaceAllMapped(fmtR, (m) => '${m[1]}.');
 
     final metodoLabel = switch (metodo) {
       'tarjeta'       => 'Tarjeta',
@@ -1357,150 +1511,521 @@ class _ReportesScreenState extends State<ReportesScreen> {
       _               => 'Efectivo',
     };
 
-    String fechaStr = '—';
-    if (createdAt != null) {
-      try {
-        final dt = DateTime.parse(createdAt).toLocal();
-        final h  = dt.hour.toString().padLeft(2, '0');
-        final m  = dt.minute.toString().padLeft(2, '0');
-        final meses = ['', 'Ene','Feb','Mar','Abr','May','Jun',
-                            'Jul','Ago','Sep','Oct','Nov','Dic'];
-        fechaStr = '${dt.day} ${meses[dt.month]} ${dt.year}, $h:$m';
-      } catch (_) {}
-    }
+    final tipoLabel = switch (cuentaTipo) {
+      'nequi'     => 'Nequi',
+      'daviplata' => 'DaviPlata',
+      'tarjeta'   => 'Datáfono',
+      _           => 'Cuenta',
+    };
+    final tipoColor = switch (cuentaTipo) {
+      'nequi'     => const Color(0xFF7C3AED),
+      'daviplata' => const Color(0xFFDC2626),
+      'tarjeta'   => const Color(0xFF0EA5E9),
+      _           => _kSecondary,
+    };
 
-    final fmt = RegExp(r'(\d)(?=(\d{3})+(?!\d))');
-    String fmtM(double v) =>
-        v.toStringAsFixed(0).replaceAllMapped(fmt, (m) => '${m[1]},');
+    final total    = sep?.total ?? 0;
+    final abonado  = sep?.abonoAcumulado ?? 0;
+    final saldo    = sep?.saldoPendiente ?? 0;
+    final progreso = total > 0 ? (abonado / total).clamp(0.0, 1.0) : 0.0;
 
     await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        contentPadding: EdgeInsets.zero,
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          // Header
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-            decoration: const BoxDecoration(
-              color: Color(0xFFE8FFF4),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-            ),
-            child: Row(children: [
-              Container(
-                width: 44, height: 44,
-                decoration: BoxDecoration(
-                  color: _kSecondary,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.payments_rounded,
-                    color: Colors.white, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Detalle de abono',
+      builder: (ctx) {
+        final ancho = MediaQuery.of(ctx).size.width;
+        final compacto = ancho < 760;
+
+        Widget fila(IconData ic, String label, Widget valor) => Padding(
+              padding: const EdgeInsets.only(bottom: 11),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Icon(ic, size: 16, color: _kOutline),
+                const SizedBox(width: 9),
+                SizedBox(
+                  width: 68,
+                  child: Text(label,
                       style: GoogleFonts.inter(
-                          fontSize: 15, fontWeight: FontWeight.w700,
-                          color: _kSecondary)),
-                  if (sepId != null)
-                    Text('SEP-$sepId',
-                        style: GoogleFonts.inter(
-                            fontSize: 12, color: _kSecondary)),
-                ],
-              )),
-              Text('\$${fmtM(monto)}',
+                          fontSize: 11.5, color: _kOutline)),
+                ),
+                Expanded(child: valor),
+              ]),
+            );
+
+        Widget texto(String v) => Text(v,
+            style: GoogleFonts.inter(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: _kOnSurface));
+
+        // ── Columna izquierda ──────────────────────────
+        final panelDatos = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: _kSecondary.withValues(alpha: 0.12),
+                child: Text(
+                  cliente.trim().isEmpty ? '?' : cliente.trim()[0].toUpperCase(),
                   style: GoogleFonts.inter(
-                      fontSize: 20, fontWeight: FontWeight.w800,
-                      color: _kSecondary)),
-            ]),
-          ),
-          // Cuerpo
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-            child: Column(children: [
-              _detalleAbonoRow(Icons.person_outline_rounded,  'Cliente',  cliente),
-              _detalleAbonoRow(Icons.credit_card_outlined,   'Método',   metodoLabel),
-              _detalleAbonoRow(Icons.schedule_rounded,       'Fecha',    fechaStr),
-              if (empNombre.isNotEmpty)
-                _detalleAbonoRow(Icons.badge_outlined,       'Empleado', empNombre),
-            ]),
-          ),
-          // Botón PDF
-          if (recibos.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-              child: SizedBox(
-                width: double.infinity, height: 44,
-                child: ElevatedButton.icon(
-                  icon:  const Icon(Icons.picture_as_pdf_rounded, size: 17),
-                  label: Text(
-                    recibos.length == 1
-                        ? 'Ver recibo PDF'
-                        : 'Ver ${recibos.length} recibos PDF',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: _kSecondary),
+                ),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Text(cliente,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.inter(
-                        fontWeight: FontWeight.w700, fontSize: 13)),
-                  onPressed: () async {
-                    Navigator.pop(ctx);
-                    if (recibos.length == 1) {
-                      await Process.run('cmd', ['/c', 'start', '', recibos.first.path]);
-                    } else {
-                      await _abrirListaRecibos(recibos, sepId!);
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: _kOnSurface)),
+              ),
+            ]),
+            const SizedBox(height: 14),
+            const Divider(height: 1),
+            const SizedBox(height: 14),
+
+            fila(Icons.payments_outlined, 'Método',
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Flexible(child: texto(metodoLabel)),
+                      if (cuentaTipo != null && cuentaTipo.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: tipoColor.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                                color: tipoColor.withValues(alpha: 0.3)),
+                          ),
+                          child: Text(tipoLabel,
+                              style: GoogleFonts.inter(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: tipoColor)),
+                        ),
+                      ],
+                    ]),
+                    if (cuentaNombre != null && cuentaNombre.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(cuentaNombre,
+                            style: GoogleFonts.inter(
+                                fontSize: 11, color: _kOutline)),
+                      ),
+                  ],
+                )),
+            fila(Icons.schedule_rounded, 'Fecha', texto(fechaStr)),
+            if (empNombre.isNotEmpty)
+              fila(Icons.badge_outlined, 'Atendió', texto(empNombre)),
+
+            if (sep != null) ...[
+              const SizedBox(height: 4),
+              const Divider(height: 1),
+              const SizedBox(height: 14),
+              Row(children: [
+                Text('ESTADO DEL SEPARADO',
+                    style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                        color: _kOutline)),
+                const Spacer(),
+                Text('${(progreso * 100).toStringAsFixed(0)}%',
+                    style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: _kSecondary)),
+              ]),
+              const SizedBox(height: 7),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: progreso.toDouble(),
+                  minHeight: 7,
+                  backgroundColor: _kSurfCont,
+                  valueColor:
+                      const AlwaysStoppedAnimation<Color>(_kSecondary),
+                ),
+              ),
+              const SizedBox(height: 11),
+              Row(children: [
+                Expanded(
+                    child: _miniDato('Total', '\$${fmtM(total)}',
+                        _kOnSurface, _kSurfLow, _kOutlineVar)),
+                const SizedBox(width: 7),
+                Expanded(
+                    child: _miniDato('Abonado', '\$${fmtM(abonado)}',
+                        _kSecondary, const Color(0xFFE8FFF4),
+                        _kSecondary.withValues(alpha: 0.25))),
+                const SizedBox(width: 7),
+                Expanded(
+                    child: _miniDato('Saldo', '\$${fmtM(saldo)}',
+                        const Color(0xFFB45309), const Color(0xFFFFFBEB),
+                        const Color(0xFFFDE68A))),
+              ]),
+            ],
+          ],
+        );
+
+        // ── Columna derecha: el recibo ─────────────────
+        TextStyle mono(double size, {bool bold = false, Color? color}) =>
+            GoogleFonts.robotoMono(
+                fontSize: size,
+                fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
+                color: color ?? _kOnSurface,
+                height: 1.6);
+
+        Widget lineaRecibo(String izq, String der, {bool bold = false}) => Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(izq, style: mono(10, bold: bold)),
+                Text(der, style: mono(10, bold: bold)),
+              ],
+            );
+
+        Widget sep2() => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 5),
+              child: Text('--------------------------------',
+                  style: mono(9.5, color: _kOutline), maxLines: 1),
+            );
+
+        final panelRecibo = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: [
+              Text('RECIBO',
+                  style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                      color: _kOutline)),
+              const Spacer(),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: _kOutlineVar),
+                ),
+                child: Text('80 mm',
+                    style: GoogleFonts.inter(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w600,
+                        color: _kOutline)),
+              ),
+            ]),
+            const SizedBox(height: 9),
+            Container(
+              width: double.infinity,
+              constraints: const BoxConstraints(maxHeight: 268),
+              padding: const EdgeInsets.fromLTRB(16, 13, 16, 13),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: _kOutlineVar),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Text('RECIBO DE ABONO',
+                          style: mono(11, bold: true)),
+                    ),
+                    sep2(),
+                    lineaRecibo('Separado:',
+                        sepId != null ? 'SEP-$sepId' : '—', bold: true),
+                    lineaRecibo('Fecha:', fechaCorta),
+                    lineaRecibo('Hora:', horaStr),
+                    lineaRecibo('Metodo:', metodoLabel),
+                    if (cuentaNombre != null && cuentaNombre.isNotEmpty)
+                      lineaRecibo('Cuenta:', cuentaNombre),
+                    sep2(),
+                    Text('CLIENTE', style: mono(10, bold: true)),
+                    Text(cliente.toUpperCase(), style: mono(10)),
+                    sep2(),
+                    lineaRecibo('ESTE ABONO:', '\$${fmtM(monto)}',
+                        bold: true),
+                    if (sep != null) ...[
+                      sep2(),
+                      Text('Estado actual del separado',
+                          style: mono(8.5, color: _kOutline)),
+                      lineaRecibo('Total:', '\$${fmtM(total)}'),
+                      lineaRecibo('Abonado:', '\$${fmtM(abonado)}'),
+                      lineaRecibo('Saldo:', '\$${fmtM(saldo)}', bold: true),
+                    ],
+                    sep2(),
+                    Center(
+                      child: Text(
+                          empNombre.isEmpty
+                              ? 'Gracias por su compra'
+                              : 'Atendio: $empNombre\nGracias por su compra',
+                          textAlign: TextAlign.center,
+                          style: mono(8.5, color: _kOutline)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(children: [
+              Icon(recibos.isEmpty ? Icons.info_outline : Icons.cloud_done,
+                  size: 15,
+                  color: recibos.isEmpty ? _kOutline : _kSecondary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  recibos.isEmpty
+                      ? 'Sin PDF guardado · se puede generar ahora'
+                      : 'Guardado en esta PC y en el servidor',
+                  style: GoogleFonts.inter(
+                      fontSize: 10.5, color: _kOutline, height: 1.3),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: sep == null
+                      ? null
+                      : () async {
+                          Navigator.pop(ctx);
+                          await _generarPdfAbono(sep!, monto, metodo);
+                        },
+                  icon: Icon(
+                      recibos.isEmpty
+                          ? Icons.picture_as_pdf_outlined
+                          : Icons.open_in_new_rounded,
+                      size: 16),
+                  label: Text(recibos.isEmpty ? 'Generar PDF' : 'Abrir PDF',
+                      style: GoogleFonts.inter(
+                          fontSize: 12, fontWeight: FontWeight.w700)),
+                  style: FilledButton.styleFrom(
                     backgroundColor: _kSecondary,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
+                    minimumSize: const Size(0, 40),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
               ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-              child: Text('Sin recibo PDF guardado',
-                  style: GoogleFonts.inter(
-                      fontSize: 11, color: _kOutline,
-                      fontStyle: FontStyle.italic),
-                  textAlign: TextAlign.center),
+              if (recibos.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    if (recibos.length == 1) {
+                      await Process.run(
+                          'cmd', ['/c', 'start', '', recibos.first.path]);
+                    } else {
+                      await _abrirListaRecibos(recibos, sepId!);
+                    }
+                  },
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 40),
+                    side: const BorderSide(color: _kOutlineVar),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: Text('${recibos.length}',
+                      style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: _kOnSurface)),
+                ),
+              ],
+            ]),
+          ],
+        );
+
+        return AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          contentPadding: EdgeInsets.zero,
+          content: SizedBox(
+            width: compacto ? 400 : 780,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                // Header
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFE8FFF4),
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(18)),
+                  ),
+                  child: Row(children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: _kSecondary,
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: const Icon(Icons.receipt_long_rounded,
+                          color: Colors.white, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Detalle de abono',
+                              style: GoogleFonts.inter(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: _kSecondary)),
+                          Text(
+                              sepId != null
+                                  ? 'SEP-$sepId'
+                                  : 'Abono directo',
+                              style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  color: _kOnSecCont.withValues(alpha: 0.75))),
+                        ],
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text('ESTE ABONO',
+                            style: GoogleFonts.inter(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                                color: _kOnSecCont.withValues(alpha: 0.6))),
+                        Text('\$${fmtM(monto)}',
+                            style: GoogleFonts.inter(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                                color: _kSecondary)),
+                      ],
+                    ),
+                  ]),
+                ),
+
+                // Cuerpo
+                if (compacto)
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(children: [
+                      panelDatos,
+                      const SizedBox(height: 20),
+                      const Divider(height: 1),
+                      const SizedBox(height: 20),
+                      panelRecibo,
+                    ]),
+                  )
+                else
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          flex: 105,
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: panelDatos,
+                          ),
+                        ),
+                        const VerticalDivider(width: 1),
+                        Expanded(
+                          flex: 95,
+                          child: Container(
+                            color: _kSurface,
+                            padding: const EdgeInsets.all(20),
+                            child: panelRecibo,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ]),
             ),
-        ]),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Cerrar',
-                style: GoogleFonts.inter(color: _kOutline)),
           ),
-        ],
-      ),
+          actionsPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('Cerrar',
+                  style: GoogleFonts.inter(color: _kOutline)),
+            ),
+          ],
+        );
+      },
     );
   }
 
-  Widget _detalleAbonoRow(IconData icon, String label, String valor) =>
-      Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Row(children: [
-          Icon(icon, size: 15, color: _kOutline),
-          const SizedBox(width: 8),
-          Text('$label:',
-              style: GoogleFonts.inter(
-                  fontSize: 12, color: _kOutline,
-                  fontWeight: FontWeight.w600)),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(valor,
+  Widget _miniDato(String label, String valor, Color fg, Color bg, Color bd) =>
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: bd),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label.toUpperCase(),
                 style: GoogleFonts.inter(
-                    fontSize: 12, color: _kOnSurface,
-                    fontWeight: FontWeight.w600),
-                overflow: TextOverflow.ellipsis),
-          ),
-        ]),
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
+                    color: fg.withValues(alpha: 0.75))),
+            const SizedBox(height: 2),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(valor,
+                  style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: fg)),
+            ),
+          ],
+        ),
       );
+
+  /// Genera (o regenera) el PDF del recibo y lo abre. Queda guardado en
+  /// esta PC y subido al servidor, asi que un abono viejo sin respaldo
+  /// deja de serlo en cuanto se consulta.
+  Future<void> _generarPdfAbono(
+      Separado sep, double monto, String metodo) async {
+    final auth   = context.read<AuthProvider>();
+    final config = context.read<ConfigProvider>();
+    try {
+      await ReciboPdfService.imprimirReciboAbono(
+        separado: sep,
+        monto: monto,
+        metodoPago: metodo,
+        empresaNombre: auth.empresaNombre.isNotEmpty
+            ? auth.empresaNombre
+            : sep.tiendaNombre,
+        nit: config.nit,
+        direccion: config.direccion,
+        telefono: config.telefono,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('No se pudo generar el PDF: $e'),
+        backgroundColor: const Color(0xFFBA1A1A),
+      ));
+    }
+  }
 
   Future<void> _abrirListaRecibos(List<File> recibos, int sepId) async {
     if (!mounted) return;

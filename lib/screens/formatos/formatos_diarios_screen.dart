@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../../models/sesion_historial.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/caja_service.dart';
+import '../../services/registro_diario_builder.dart';
 import '../caja/widgets/registro_movimiento_diario.dart';
 
 const _cGreen   = Color(0xFF006C49);
@@ -117,103 +118,7 @@ class _FormatosDiariosScreenState extends State<FormatosDiariosScreen> {
 
     if (!mounted) return;
 
-    DateTime fecha;
-    try { fecha = DateTime.parse(full.fechaApertura.replaceAll(' ', 'T')).toLocal(); }
-    catch (_) { fecha = DateTime.now(); }
-
-    final diferencia = full.montoFinalReal - full.montoFinalSistema;
-    final sobrante   = diferencia > 0 ? diferencia : 0.0;
-    final faltante   = diferencia < 0 ? diferencia.abs() : 0.0;
-    final efVentas   = full.ventasEfectivo + full.ventasMixtoEfectivo - full.compraBonasEfectivo;
-    // neto devoluciones: cobros − devolvers − devoluciones_puras = -netoEfectivo (positivo = entró dinero)
-    final devEfNeto  = full.cambiosCobrarEf - full.cambiosDevEf - full.devolucionesDirectasEf;
-    final dtTotal    = full.ventasTarjeta + full.abonosTarjeta + full.ingresosSepTarjeta - full.compraBonaTarjeta;
-    final trTotal    = full.ventasTransferencia + full.abonosTransferencia + full.ingresosSepTransferencia - full.compraBonasTransferencia;
-    final nVentas    = full.numTransacciones - full.numCompraBonos;
-    final dtCount    = full.ventasDetalle.where((v) => v['metodo_pago'] == 'tarjeta').length - (full.compraBonaTarjeta > 0 ? 1 : 0);
-    final trCount    = full.ventasDetalle.where((v) => v['metodo_pago'] == 'transferencia').length - (full.compraBonasTransferencia > 0 ? 1 : 0);
-    final bonoCount  = full.ventasDetalle.where((v) =>
-        (v['metodo_pago'] as String? ?? '').contains('bono')).length;
-
-    final data = RegistroMovimientoData(
-      almacen:      full.tiendaNombre.toUpperCase(),
-      fecha:        fecha,
-      encargado:    full.empleadoNombre.toUpperCase(),
-      numeroVentas: (full.numTransacciones - full.ventasBonoNum) + full.numIngresosSep + full.numAbonos,
-      totalVentas:  (full.ventasTotal - full.ventasBono) + full.ingresosSepEfectivo + full.ingresosSepTarjeta + full.ingresosSepTransferencia + full.abonosEfectivo + full.abonosCreditoEfectivo + full.abonosTarjeta + full.abonosTransferencia,
-      realizo:      full.empleadoNombre,
-      observaciones: full.observaciones,
-      filas: [
-        FilaRegistro(signo: '+', concepto: 'VENTAS EN CAJA',
-            cantidad: nVentas,
-            montos: efVentas > 0 ? {MedioPago.efectivo: efVentas} : {}),
-        FilaRegistro(signo: '+', concepto: 'INGRESOS SEPARADOS',
-            cantidad: full.numIngresosSep,
-            montos: {
-              if (full.ingresosSepEfectivo > 0)      MedioPago.efectivo:    full.ingresosSepEfectivo,
-              if (full.ingresosSepTarjeta > 0)       MedioPago.datafono:    full.ingresosSepTarjeta,
-              if (full.ingresosSepTransferencia > 0) MedioPago.bancolombia: full.ingresosSepTransferencia,
-            }),
-        FilaRegistro(signo: '+', concepto: 'ABONOS PAGOS CLIENTES',
-            cantidad: full.numAbonos,
-            montos: {
-              if ((full.abonosEfectivo + full.abonosCreditoEfectivo) > 0) MedioPago.efectivo: full.abonosEfectivo + full.abonosCreditoEfectivo,
-              if (full.abonosTarjeta > 0)       MedioPago.datafono:    full.abonosTarjeta,
-              if (full.abonosTransferencia > 0) MedioPago.bancolombia: full.abonosTransferencia,
-            }),
-        FilaRegistro(signo: '+', concepto: 'DEVOLUCIONES',
-            cantidad: full.numDevoluciones,
-            montos: {
-              if (devEfNeto != 0)                            MedioPago.efectivo:    devEfNeto,
-              if (full.netoCambiosTarjeta != 0)              MedioPago.datafono:    full.netoCambiosTarjeta,
-              if (full.netoCambiosTransferencia != 0)        MedioPago.bancolombia: full.netoCambiosTransferencia,
-            }),
-        FilaRegistro(signo: '+', concepto: 'COMPRA DE BONOS',
-            cantidad: full.numCompraBonos,
-            montos: {
-              if (full.compraBonasEfectivo > 0)      MedioPago.efectivo:    full.compraBonasEfectivo,
-              if (full.compraBonaTarjeta > 0)          MedioPago.datafono:    full.compraBonaTarjeta,
-              if (full.compraBonasTransferencia > 0)   MedioPago.bancolombia: full.compraBonasTransferencia,
-            }),
-        FilaRegistro(signo: '+', concepto: 'DATÁFONO',
-            cantidad: dtCount,
-            montos: dtTotal > 0 ? {MedioPago.datafono: dtTotal} : {}),
-        FilaRegistro(signo: '+', concepto: 'TRANSFERENCIAS',
-            cantidad: trCount,
-            montos: trTotal > 0 ? {MedioPago.bancolombia: trTotal} : {}),
-        FilaRegistro(signo: '+', concepto: 'BONOS REDIMIDOS',
-            cantidad: full.ventasBonoNum,
-            montos: full.ventasBono > 0
-                ? {MedioPago.bono: full.ventasBono} : {}),
-        FilaRegistro(signo: '+', concepto: 'BONOS + DIFERENCIA',
-            cantidad: full.ventasBonoDifNum,
-            montos: {
-              if (full.ventasBonoEfectivo > 0)        MedioPago.efectivo:    full.ventasBonoEfectivo,
-              if (full.ventasBonoTarjeta > 0)          MedioPago.datafono:    full.ventasBonoTarjeta,
-              if (full.ventasBonoTransferencia > 0)    MedioPago.bancolombia: full.ventasBonoTransferencia,
-              if (full.ventasBonoDifBonoParte > 0)     MedioPago.bono:        full.ventasBonoDifBonoParte,
-            }),
-        FilaRegistro(signo: '+', concepto: 'TOTAL EFECTIVO',
-            cantidad: full.numTransacciones,
-            montos: {MedioPago.efectivo: full.montoFinalSistema + full.gastosTotal - full.saldoInicial}),
-        FilaRegistro(signo: '−', concepto: 'GASTOS',
-            cantidad: full.numGastos,
-            montos: full.gastosTotal > 0
-                ? {MedioPago.efectivo: full.gastosTotal} : {}),
-        FilaRegistro(signo: '+', concepto: 'SOBRANTES',
-            cantidad: sobrante > 0 ? 1 : 0,
-            montos: sobrante > 0 ? {MedioPago.efectivo: sobrante} : {}),
-        FilaRegistro(signo: '−', concepto: 'FALTANTE',
-            cantidad: faltante > 0 ? 1 : 0,
-            montos: faltante > 0 ? {MedioPago.efectivo: faltante} : {}),
-      ],
-      totalEntregado: FilaRegistro(
-        signo: '+',
-        concepto: 'TOTAL EFECTIVO ENTREGADO',
-        cantidad: full.numTransacciones,
-        montos: {MedioPago.efectivo: full.montoFinalReal - full.saldoInicial},
-      ),
-    );
+    final data = construirRegistroDiario(full);
 
     final captureKey = GlobalKey();
 

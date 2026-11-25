@@ -1,8 +1,11 @@
 // lib/screens/inventario/widgets/producto_form_dialog.dart
 
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'camera_scanner_sheet.dart';
+import 'inventario_movil.dart' show InventarioMovil;
 import '../../../core/constants.dart';
 import '../../../models/producto.dart';
 
@@ -126,6 +129,15 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
   Widget build(BuildContext context) {
     final esEdicion = widget.producto != null;
 
+    // En celular, dos columnas de campos quedaban a media pantalla y se
+    // cortaban (nombre, precios, categoría y el botón de guardar).
+    if (MediaQuery.sizeOf(context).width < 600) {
+      return Dialog.fullscreen(
+        backgroundColor: _mFondo,
+        child: _buildMovil(esEdicion),
+      );
+    }
+
     return Dialog(
       backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -156,6 +168,388 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
           ),
         ),
       ),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════
+  // MÓVIL — misma lógica, una sola columna
+  // ══════════════════════════════════════════════════════
+  static const _mFondo = Color(0xFFF0FDF4);
+  static const _mBorde = Color(0xFFDCF0E4);
+  static const _mVerde = Color(0xFF059669);
+  static const _mTurq  = Color(0xFF0D9488);
+  static const _mTinta = Color(0xFF0F172A);
+  static const _mGris  = Color(0xFF6B7280);
+
+  TextStyle _tm({
+    double size = 14,
+    FontWeight w = FontWeight.w400,
+    Color color = _mTinta,
+    double? ls,
+  }) {
+    final prueba = InventarioMovil.fuenteDePrueba;
+    if (prueba != null) {
+      return TextStyle(fontFamily: prueba, fontSize: size, fontWeight: w,
+          color: color, letterSpacing: ls);
+    }
+    return GoogleFonts.inter(fontSize: size, fontWeight: w, color: color,
+        letterSpacing: ls);
+  }
+
+  Future<void> _escanearCodigo() async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CameraScannerSheet(
+        onDetect: (codigo) => setState(() => _codigoCtrl.text = codigo),
+      ),
+    );
+  }
+
+  Widget _buildMovil(bool esEdicion) {
+    return Form(
+      key: _formKey,
+      child: Column(children: [
+        // Encabezado
+        Container(
+          color: Colors.white,
+          child: SafeArea(
+            bottom: false,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(6, 6, 16, 10),
+              decoration: const BoxDecoration(
+                border: Border(bottom: BorderSide(color: _mBorde)),
+              ),
+              child: Row(children: [
+                IconButton(
+                  onPressed: _guardando ? null : () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded, color: _mTinta),
+                  tooltip: 'Cerrar',
+                ),
+                const SizedBox(width: 2),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(esEdicion ? 'Editar producto' : 'Nuevo producto',
+                          style: _tm(size: 18, w: FontWeight.w800)),
+                      Text(
+                          esEdicion
+                              ? widget.producto!.nombre
+                              : 'Completa los datos del producto',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: _tm(size: 12, color: _mGris)),
+                    ],
+                  ),
+                ),
+              ]),
+            ),
+          ),
+        ),
+
+        // Campos
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            child: Column(children: [
+              _seccionMovil('DATOS DEL PRODUCTO', Icons.inventory_2_rounded, [
+                _campoMovil(
+                  label: 'Nombre del producto *',
+                  ctrl: _nombreCtrl,
+                  hint: 'Ej. Aretes corazón plata',
+                  validator: (v) => v == null || v.trim().isEmpty
+                      ? 'Escribe el nombre'
+                      : null,
+                ),
+                _campoMovil(
+                  label: 'Código de barras',
+                  ctrl: _codigoCtrl,
+                  hint: Platform.isAndroid
+                      ? 'Escanéalo o escríbelo'
+                      : 'Escríbelo',
+                  sufijo: Platform.isAndroid
+                      ? IconButton(
+                          onPressed: _escanearCodigo,
+                          tooltip: 'Escanear código',
+                          icon: const Icon(Icons.qr_code_scanner_rounded,
+                              color: _mTurq),
+                        )
+                      : null,
+                ),
+                _campoMovil(
+                  label: 'Categoría',
+                  ctrl: _catCtrl,
+                  hint: 'Ej. Bisutería',
+                ),
+                _campoMovil(
+                  label: 'Descripción',
+                  ctrl: _descripcionCtrl,
+                  hint: 'Opcional',
+                  maxLines: 3,
+                ),
+              ]),
+              const SizedBox(height: 12),
+              _seccionMovil('PRECIOS', Icons.sell_rounded, [
+                _campoMovil(
+                  label: 'Precio de costo',
+                  ctrl: _precioCompraCtrl,
+                  hint: '0',
+                  numero: true,
+                  prefijo: '${Constants.moneda} ',
+                ),
+                _campoMovil(
+                  label: 'Precio de venta *',
+                  ctrl: _precioVentaCtrl,
+                  hint: '0',
+                  numero: true,
+                  prefijo: '${Constants.moneda} ',
+                  validator: (v) => v == null || v.trim().isEmpty
+                      ? 'Escribe el precio de venta'
+                      : null,
+                ),
+                _campoMovil(
+                  label: 'Precio mayorista',
+                  ctrl: _precioMayoreoCtrl,
+                  hint: 'Opcional',
+                  numero: true,
+                  prefijo: '${Constants.moneda} ',
+                ),
+                if (_costo > 0 && _venta > 0) _margenMovil(),
+              ]),
+              const SizedBox(height: 12),
+              _seccionMovil('INVENTARIO', Icons.warehouse_rounded, [
+                _campoMovil(
+                  label: esEdicion ? 'Stock actual' : 'Stock inicial',
+                  ctrl: _stockCtrl,
+                  hint: '0',
+                  numero: true,
+                ),
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(
+                    child: _campoMovil(
+                      label: 'Stock mínimo',
+                      ctrl: _minStockCtrl,
+                      hint: '0',
+                      numero: true,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _campoMovil(
+                      label: 'Stock máximo',
+                      ctrl: _maxStockCtrl,
+                      hint: 'Opcional',
+                      numero: true,
+                    ),
+                  ),
+                ]),
+              ]),
+            ]),
+          ),
+        ),
+
+        // Pie fijo
+        Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(top: BorderSide(color: _mBorde)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+              child: Row(children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 48,
+                    child: OutlinedButton(
+                      onPressed:
+                          _guardando ? null : () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: _mBorde),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: Text('Cancelar',
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          style: _tm(
+                              size: 14, w: FontWeight.w700, color: _mGris)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: SizedBox(
+                    height: 48,
+                    child: FilledButton(
+                      onPressed: _guardando ? null : _validarYGuardar,
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        backgroundColor: _mVerde,
+                        disabledBackgroundColor:
+                            _mVerde.withValues(alpha: 0.5),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: _guardando
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2.5, color: Colors.white),
+                            )
+                          : Row(mainAxisSize: MainAxisSize.min, children: [
+                              const Icon(Icons.check_rounded,
+                                  size: 19, color: Colors.white),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                    esEdicion
+                                        ? 'Guardar cambios'
+                                        : 'Guardar producto',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: _tm(
+                                        size: 14,
+                                        w: FontWeight.w700,
+                                        color: Colors.white)),
+                              ),
+                            ]),
+                    ),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _seccionMovil(String titulo, IconData icono, List<Widget> campos) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 2),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _mBorde),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(icono, size: 16, color: _mTurq),
+          const SizedBox(width: 6),
+          Text(titulo,
+              style: _tm(size: 11.5, w: FontWeight.w800, color: _mTurq, ls: 1)),
+        ]),
+        const SizedBox(height: 12),
+        ...campos,
+      ]),
+    );
+  }
+
+  Widget _campoMovil({
+    required String label,
+    required TextEditingController ctrl,
+    String? hint,
+    String? prefijo,
+    bool numero = false,
+    int maxLines = 1,
+    Widget? sufijo,
+    String? Function(String?)? validator,
+  }) {
+    final borde = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: _mBorde),
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label,
+            style: _tm(size: 12, w: FontWeight.w600, color: _mGris)),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: ctrl,
+          keyboardType: numero
+              ? TextInputType.number
+              : (maxLines > 1 ? TextInputType.multiline : TextInputType.text),
+          textCapitalization: numero
+              ? TextCapitalization.none
+              : TextCapitalization.sentences,
+          inputFormatters:
+              numero ? [FilteringTextInputFormatter.digitsOnly] : null,
+          maxLines: maxLines,
+          validator: validator,
+          style: _tm(size: 15),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: _tm(size: 14, color: const Color(0xFFA3AAB5)),
+            prefixIcon: prefijo == null
+                ? null
+                : Padding(
+                    padding: const EdgeInsets.only(left: 14, right: 4),
+                    child: Text(prefijo.trim(),
+                        style: _tm(size: 15, w: FontWeight.w600, color: _mGris)),
+                  ),
+            prefixIconConstraints:
+                const BoxConstraints(minWidth: 0, minHeight: 0),
+            suffixIcon: sufijo,
+            filled: true,
+            fillColor: _mFondo,
+            isDense: true,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            border: borde,
+            enabledBorder: borde,
+            focusedBorder: borde.copyWith(
+                borderSide: const BorderSide(color: _mVerde, width: 1.5)),
+            errorBorder: borde.copyWith(
+                borderSide: const BorderSide(color: _danger)),
+            focusedErrorBorder: borde.copyWith(
+                borderSide: const BorderSide(color: _danger, width: 1.5)),
+            errorStyle: _tm(size: 11.5, color: _danger),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _margenMovil() {
+    final aviso = _margen < 0
+        ? 'Precio bajo el costo'
+        : _margen < 10
+            ? 'Margen muy bajo'
+            : 'Margen sano';
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: _margenColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _margenColor.withValues(alpha: 0.25)),
+      ),
+      child: Row(children: [
+        Icon(_margen >= 0 ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+            size: 18, color: _margenColor),
+        const SizedBox(width: 8),
+        Text('Margen ${_margen.toStringAsFixed(1)}%',
+            style: _tm(size: 13, w: FontWeight.w800, color: _margenColor)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(aviso,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: _tm(size: 12, color: _margenColor)),
+        ),
+      ]),
     );
   }
 
@@ -225,7 +619,7 @@ class _ProductoFormDialogState extends State<ProductoFormDialog> {
       Row(children: [
         Expanded(
           child: _campo(
-            label: 'SKU / BARCODE',
+            label: 'Código de barras',
             ctrl:  _codigoCtrl,
             hint:  'ZWH-99201',
           ),
