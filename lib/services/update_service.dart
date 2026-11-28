@@ -5,7 +5,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import '../core/api_client.dart';
 
-const _currentVersion = '1.5.9';
+const _currentVersion = '1.6.0';
 
 /// Versión actual expuesta para mostrar en UI.
 const currentVersion = _currentVersion;

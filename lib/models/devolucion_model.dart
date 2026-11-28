@@ -29,6 +29,12 @@ class DevolucionModel {
 
   final String motivoCambio;
 
+  /// Parte de lo devuelto que abonó a la deuda (venta a crédito).
+  final double abonadoCredito;
+
+  /// Plata que de verdad se le entregó al cliente.
+  double get reembolsado => (totalDevuelto - abonadoCredito).clamp(0, double.infinity).toDouble();
+
   final List<DetalleDevolucionModel> detalles;
   final List<DetalleReemplazoModel> reemplazos;
 
@@ -68,6 +74,7 @@ class DevolucionModel {
     this.montoRecibido,
     this.cambioEntregado,
     this.motivoCambio = '',
+    this.abonadoCredito = 0,
     required this.detalles,
     this.reemplazos = const [],
   });
@@ -117,6 +124,7 @@ class DevolucionModel {
           : null,
 
       motivoCambio: j['motivo_cambio'] as String? ?? '',
+      abonadoCredito: double.tryParse(j['abonado_credito']?.toString() ?? '') ?? 0,
 
       detalles: (j['detalles'] as List? ?? [])
           .map((d) => DetalleDevolucionModel.fromJson(
@@ -190,6 +198,7 @@ class DevolucionModel {
       montoRecibido: montoRecibido ?? this.montoRecibido,
       cambioEntregado: cambioEntregado ?? this.cambioEntregado,
       motivoCambio: motivoCambio ?? this.motivoCambio,
+      abonadoCredito: abonadoCredito,
       detalles: detalles ?? this.detalles,
       reemplazos: reemplazos ?? this.reemplazos,
     );
@@ -234,6 +243,8 @@ class DetalleDevolucionModel {
   final double precioUnitario;
   final double subtotal;
   final String motivo;
+  /// true: se fue a averías. false: volvió al stock para vender.
+  final bool aAverias;
 
   const DetalleDevolucionModel({
     required this.id,
@@ -243,6 +254,7 @@ class DetalleDevolucionModel {
     required this.precioUnitario,
     required this.subtotal,
     required this.motivo,
+    this.aAverias = true,
   });
 
   factory DetalleDevolucionModel.fromJson(Map<String, dynamic> j) {
@@ -255,6 +267,7 @@ class DetalleDevolucionModel {
           double.tryParse(j['precio_unitario']?.toString() ?? '') ?? 0,
       subtotal: double.tryParse(j['subtotal']?.toString() ?? '') ?? 0,
       motivo: j['motivo'] as String? ?? '',
+      aAverias: j['a_averias'] as bool? ?? true,
     );
   }
 

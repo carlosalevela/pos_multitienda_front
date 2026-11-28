@@ -8,6 +8,11 @@ class TiendaProvider extends ChangeNotifier {
   List<Tienda> tiendas = [];
   Map<String, dynamic>? empleadosTienda;
 
+  /// Las tiendas de cada empresa ya cargadas: al volver a una pantalla se
+  /// muestran de una vez mientras se actualizan por detrás.
+  final Map<int, List<Tienda>> _porEmpresa = {};
+  List<Tienda>? tiendasGuardadas(int empresaId) => _porEmpresa[empresaId];
+
   bool _cargando = false;
   bool _cargandoEmpleados = false;
   bool _guardando = false;
@@ -60,6 +65,7 @@ class TiendaProvider extends ChangeNotifier {
 
     try {
       tiendas = await _service.getTiendas(empresaId: empresaId);
+      _porEmpresa[empresaId] = tiendas;
     } catch (_) {
       _errorMsg = 'Error al cargar sucursales';
       tiendas = [];

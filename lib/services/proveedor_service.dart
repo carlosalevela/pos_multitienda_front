@@ -21,12 +21,14 @@ class ProveedorService {
 
   // ── Lista + búsqueda ───────────────────────────────────
 
-  Future<List<Map<String, dynamic>>> listar({String? q}) async {
+  /// [estado]: 'activos' (por defecto), 'inactivos' o 'todos'.
+  Future<List<Map<String, dynamic>>> listar({String? q, String? estado}) async {
     try {
       final res = await ApiClient.instance.get(
         '/proveedores/',
         queryParameters: {
           if (q != null && q.isNotEmpty) 'q': q,
+          if (estado != null) 'estado': estado,
         },
       );
       final List data = res.data is List

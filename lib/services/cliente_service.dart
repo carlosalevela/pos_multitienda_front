@@ -31,18 +31,19 @@ class ClienteService {
   // CLIENTES
   // ══════════════════════════════════════════════════════════
 
-  Future<List<Cliente>> getClientes({String? q, int? tiendaId}) async {
+  /// [estado]: 'activos' (por defecto en el servidor), 'inactivos' o 'todos'.
+  Future<List<Cliente>> getClientes({String? q, int? tiendaId, String? estado}) async {
   try {
     final params = {
       if (q        != null && q.isNotEmpty) 'q':         q,
       if (tiendaId != null)                 'tienda_id': tiendaId,
+      if (estado   != null)                 'estado':    estado,
     };
     debugPrint('🔍 getClientes params: $params');
     final r = await ApiClient.instance.get(
       '/clientes/',
       queryParameters: params,
     );
-    debugPrint('🔍 getClientes response: ${r.data}');
     return _parseList(r.data)
         .map((e) => Cliente.fromJson(e as Map<String, dynamic>))
         .toList();
@@ -240,16 +241,32 @@ class ClienteService {
     }
   }
 
-  Future<Map<String, dynamic>> cancelarSeparado(int id) async {
+  Future<Map<String, dynamic>> cancelarSeparado(int id, {String? motivo}) async {
     try {
       final r = await ApiClient.instance.post(
-          '/clientes/separados/$id/cancelar/');
+          '/clientes/separados/$id/cancelar/',
+          data: {if (motivo != null && motivo.trim().isNotEmpty) 'motivo': motivo.trim()});
       return {
         'success': true,
         'detail': r.data?['detail'] ?? 'Separado cancelado',
+        'bono_codigo': r.data?['bono_codigo'],
+        'bono_saldo':  r.data?['bono_saldo'],
+        'bono_vence':  r.data?['bono_vence'],
       };
     } on DioException catch (e) {
       return {'success': false, 'error': _extractError(e, 'Error al cancelar separado')};
+    } catch (_) {
+      return {'success': false, 'error': 'Error inesperado'};
+    }
+  }
+
+  /// El cliente recogió lo que ya pagó.
+  Future<Map<String, dynamic>> entregarSeparado(int id) async {
+    try {
+      final r = await ApiClient.instance.post('/clientes/separados/$id/entregar/');
+      return {'success': true, 'data': Separado.fromJson(r.data as Map<String, dynamic>)};
+    } on DioException catch (e) {
+      return {'success': false, 'error': _extractError(e, 'No se pudo marcar como entregado')};
     } catch (_) {
       return {'success': false, 'error': 'Error inesperado'};
     }
@@ -316,9 +333,12 @@ class ClienteService {
     }
   }
 
+  /// Con [separadoIds] se envía solo a esos (vencidos incluidos); sin
+  /// ellos, a los que vencen en los próximos [dias].
   Future<Map<String, dynamic>> enviarRecordatoriosSeparados({
     int dias = 3,
     int? tiendaId,
+    List<int>? separadoIds,
   }) async {
     try {
       final r = await ApiClient.instance.post(
@@ -327,6 +347,7 @@ class ClienteService {
           'dias': dias,
           if (tiendaId != null) 'tienda_id': tiendaId,
         },
+        data: {if (separadoIds != null) 'separado_ids': separadoIds},
       );
       return {'success': true, 'data': r.data};
     } on DioException catch (e) {

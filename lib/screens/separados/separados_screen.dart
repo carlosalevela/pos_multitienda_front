@@ -18,6 +18,7 @@ import '../../services/cliente_service.dart';
 import '../../services/documento_service.dart';
 import '../clientes/widgets/abonar_sheet.dart';
 import '../clientes/widgets/separado_detalle_sheet.dart';
+import 'movil/separados_movil_screen.dart';
 
 // ── Paleta (verde+blanco como los dashboards) ─────────────────
 const _kGreen      = Color(0xFF61DDAA);   // mint — igual que dashboard
@@ -39,14 +40,25 @@ final _fmt = NumberFormat.currency(
 
 enum _SepTab { activos, historial, abonos, vencimientos }
 
-class SeparadosScreen extends StatefulWidget {
+/// En el celular (menos de 600 de ancho) usa el diseño móvil; si no, el de
+/// escritorio de siempre.
+class SeparadosScreen extends StatelessWidget {
   const SeparadosScreen({super.key});
 
   @override
-  State<SeparadosScreen> createState() => _SeparadosScreenState();
+  Widget build(BuildContext context) => MediaQuery.sizeOf(context).width < 600
+      ? const SeparadosMovilScreen()
+      : const SeparadosEscritorio();
 }
 
-class _SeparadosScreenState extends State<SeparadosScreen> {
+class SeparadosEscritorio extends StatefulWidget {
+  const SeparadosEscritorio({super.key});
+
+  @override
+  State<SeparadosEscritorio> createState() => _SeparadosScreenState();
+}
+
+class _SeparadosScreenState extends State<SeparadosEscritorio> {
   _SepTab _tab         = _SepTab.activos;
   String  _busqueda    = '';
   String  _filtroEstado = 'todos';
@@ -1302,9 +1314,53 @@ class _SeparadosScreenState extends State<SeparadosScreen> {
   // ════════════════════════════════════════════════════════════
 
   void _verDetalle(Separado s) {
+    final puedeCancelar = context.read<AuthProvider>().esAdminOSupervisor;
     SeparadoDetalleSheet.mostrar(context, separado: s, fmt: _fmt,
         mostrarAcciones: s.esActivo,
-        onAbonar: s.esActivo ? () => _abrirAbono(s) : null);
+        onAbonar: s.esActivo ? () => _abrirAbono(s) : null,
+        // Antes no se pasaba: el botón Cancelar cerraba y no hacía nada.
+        onCancelar: s.esActivo && puedeCancelar ? () => _cancelar(s) : null);
+  }
+
+  Future<void> _cancelar(Separado s) async {
+    final f = NumberFormat('#,##0', 'es_CO');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('¿Cancelar SEP-${s.id}?',
+            style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
+        content: Text(
+            'Los productos vuelven al stock. '
+            '${s.abonoAcumulado > 0 ? 'No se le devuelve plata: lo abonado (\$${f.format(s.abonoAcumulado)}) '
+                'le queda en un bono a su nombre para otra compra. ' : ''}'
+            'No se puede deshacer.',
+            style: GoogleFonts.inter(fontSize: 13, color: _kTextMuted)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false),
+              child: Text('Volver', style: GoogleFonts.inter(color: _kTextMuted))),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(c, true),
+            style: ElevatedButton.styleFrom(backgroundColor: _kRed, elevation: 0),
+            child: Text('Cancelar separado',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final prov = context.read<ClienteProvider>();
+    final hecho = await prov.cancelarSeparado(s.id);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(hecho
+          ? (prov.mensajeCancelacion ?? 'Separado cancelado.')
+          : (prov.error ?? 'No se pudo cancelar.')),
+      backgroundColor: hecho ? _kGreenDark : _kRed,
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 8),
+    ));
+    if (hecho) await _cargarTab();
   }
 
   void _abrirAbono(Separado s) {

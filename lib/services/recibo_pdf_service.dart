@@ -25,6 +25,15 @@ class ReciboPdfService {
       );
       return;
     }
+    // Celular: diálogo de impresión/compartir del sistema. Antes caía en
+    // xdg-open, que no existe en Android, y el recibo no salía.
+    if (Platform.isAndroid || Platform.isIOS) {
+      await Printing.layoutPdf(
+        onLayout: (_) async => Uint8List.fromList(bytes),
+        name: nombre,
+      );
+      return;
+    }
     // Exe nativo: intentar imprimir directo a la impresora configurada
     final printed = await WindowsPrinterService.printPdf(bytes, nombre);
     if (printed) return;
@@ -994,6 +1003,75 @@ class ReciboPdfService {
     await _abrirPdf(bytes, 'Separado_$sepId.pdf');
   }
 
+
+  // ─────────────────────────────────────────────────────────────────────
+  //  BONO DE SALDO A FAVOR (separado cancelado)
+  // ─────────────────────────────────────────────────────────────────────
+
+  static Future<void> imprimirBonoSaldoFavor({
+    required Separado separado,
+    required String   empresaNombre,
+    String            nit       = '',
+    String            direccion = '',
+    String            telefono  = '',
+  }) async {
+    final codigo = separado.bonoCodigo;
+    if (codigo == null) return;
+    final fontReg  = await PdfGoogleFonts.interRegular();
+    final fontBold = await PdfGoogleFonts.interBold();
+    final fontMono = await PdfGoogleFonts.sourceCodeProBold();
+    final saldo    = separado.bonoSaldo ?? separado.abonoAcumulado;
+    final vence    = DateTime.tryParse(separado.bonoVence ?? '');
+    final doc = pw.Document();
+    doc.addPage(pw.MultiPage(
+      pageFormat: _pageFormat,
+      build: (ctx) => [
+        _encabezado(fontBold, fontReg, separado.tiendaNombre.isNotEmpty
+            ? separado.tiendaNombre : empresaNombre, nit, direccion, telefono),
+        _divider(),
+        pw.Center(child: pw.Text('BONO · SALDO A FAVOR',
+            style: pw.TextStyle(font: fontBold, fontSize: 12, color: _dark, letterSpacing: 0.6))),
+        pw.SizedBox(height: 8),
+        pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.symmetric(vertical: 10),
+          decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: _green, width: 1.2),
+              borderRadius: pw.BorderRadius.circular(6)),
+          child: pw.Column(children: [
+            pw.Text(codigo, style: pw.TextStyle(font: fontMono, fontSize: 18, letterSpacing: 2)),
+            pw.SizedBox(height: 4),
+            pw.Text('\$${_fmt.format(saldo)}',
+                style: pw.TextStyle(font: fontBold, fontSize: 20, color: _green)),
+          ]),
+        ),
+        pw.SizedBox(height: 8),
+        _filaPar('Cliente', separado.clienteNombre, fontReg, fontBold),
+        _filaPar('Origen', 'Separado SEP-${separado.id} cancelado', fontReg, fontBold),
+        if (vence != null)
+          _filaPar('Válido hasta', DateFormat('dd/MM/yyyy').format(vence), fontReg, fontBold),
+        pw.SizedBox(height: 6),
+        _divider(),
+        pw.Text(
+          'Presente este código al pagar su próxima compra. Si compra algo de '
+          'mayor valor paga la diferencia; si es de menor valor, el resto '
+          'queda en el bono. No se cambia por dinero.',
+          textAlign: pw.TextAlign.center,
+          style: pw.TextStyle(font: fontReg, fontSize: 7.5, color: _grey700)),
+        pw.SizedBox(height: 8),
+      ],
+    ));
+    await _abrirPdf(await doc.save(), 'Bono_$codigo.pdf');
+  }
+
+  static pw.Widget _filaPar(String k, String v, pw.Font reg, pw.Font bold) => pw.Padding(
+        padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
+        child: pw.Row(children: [
+          pw.Text(k, style: pw.TextStyle(font: reg, fontSize: 8, color: _grey700)),
+          pw.Spacer(),
+          pw.Text(v, style: pw.TextStyle(font: bold, fontSize: 8)),
+        ]),
+      );
 
   // ─────────────────────────────────────────────────────────────────────
   //  RECIBO DE ABONO (compacto)

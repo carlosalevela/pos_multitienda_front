@@ -95,6 +95,82 @@ class _SeparadoDetalleSheetState extends State<SeparadoDetalleSheet> {
     _           => Icons.bookmark_rounded,
   };
 
+  // ── Entregar ────────────────────────────────────────────
+  bool _entregando = false;
+
+  Future<void> _entregar() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('¿Ya se lo llevó?',
+            style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 16)),
+        content: Text(
+            'Marca SEP-${_separado.id} como entregado a ${_separado.clienteNombre}.',
+            style: GoogleFonts.inter(fontSize: 13, color: _kMuted)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false),
+              child: Text('Todavía no', style: GoogleFonts.inter(color: _kMuted))),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(c, true),
+            style: ElevatedButton.styleFrom(backgroundColor: _kTeal, elevation: 0),
+            child: Text('Sí, entregado',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w700, color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _entregando = true);
+    final prov  = context.read<ClienteProvider>();
+    final nuevo = await prov.entregarSeparado(_separado.id);
+    if (!mounted) return;
+    setState(() {
+      _entregando = false;
+      if (nuevo != null) _separado = nuevo;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(nuevo != null
+          ? 'SEP-${_separado.id} entregado.'
+          : (prov.error ?? 'No se pudo marcar como entregado.')),
+      backgroundColor: nuevo != null ? _kTeal : _kRed,
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
+
+  /// Entregado, por entregar, o el bono que le quedó al cancelar.
+  Widget? _avisoEstado() {
+    final f = NumberFormat('#,##0', 'es_CO');
+    final (IconData icono, Color color, String texto)? a = _separado.esCancelado &&
+            _separado.bonoCodigo != null
+        ? (Icons.card_giftcard_rounded, const Color(0xFF6D28D9),
+            'Lo abonado le quedó a favor en el bono ${_separado.bonoCodigo}'
+            '${_separado.bonoSaldo != null ? ' (saldo \$${f.format(_separado.bonoSaldo)})' : ''}. '
+            'Lo usa en el POS para otra compra.')
+        : _separado.entregado
+            ? (Icons.inventory_2_outlined, _kTeal,
+                'Entregado el ${DateFormat('d MMM yyyy · h:mm a', 'es').format(_separado.entregadoAt!)}'
+                '${_separado.entregadoPorNombre != null ? ' por ${_separado.entregadoPorNombre}' : ''}.')
+            : _separado.porEntregar
+                ? (Icons.schedule_rounded, _kAmber, 'Pagado completo. Falta que lo recoja.')
+                : null;
+    if (a == null) return null;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: a.$2.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: a.$2.withValues(alpha: 0.35)),
+      ),
+      child: Row(children: [
+        Icon(a.$1, size: 18, color: a.$2),
+        const SizedBox(width: 10),
+        Expanded(child: Text(a.$3,
+            style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w600, color: _kText))),
+      ]),
+    );
+  }
+
   // ── Cambiar producto ────────────────────────────────────
   Future<void> _onCambiarDetalle(DetalleSeparado detalle) async {
     final result = await showModalBottomSheet<Map<String, dynamic>?>(
@@ -182,6 +258,10 @@ class _SeparadoDetalleSheetState extends State<SeparadoDetalleSheet> {
 
                   // ── Info general ──────────────────────────
                   _infoCard(),
+                  if (_avisoEstado() != null) ...[
+                    const SizedBox(height: 12),
+                    _avisoEstado()!,
+                  ],
 
                   const SizedBox(height: 16),
 
@@ -219,12 +299,34 @@ class _SeparadoDetalleSheetState extends State<SeparadoDetalleSheet> {
             const Divider(height: 1, color: _kBorder),
             _bottomActions(context),
           ] else ...[
-            // Solo botón imprimir
+            // Imprimir (y entregar si ya está pagado y no lo ha recogido)
             Padding(
               padding: EdgeInsets.fromLTRB(
                   20, 12, 20, 12 + MediaQuery.of(context).padding.bottom),
-              child: SizedBox(
-                width: double.infinity,
+              child: Row(children: [
+                if (_separado.porEntregar) ...[
+                  Expanded(
+                    child: SizedBox(
+                      height: 48,
+                      child: ElevatedButton.icon(
+                        onPressed: _entregando ? null : _entregar,
+                        icon: _entregando
+                            ? const SizedBox(width: 16, height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.inventory_2_outlined, size: 17, color: Colors.white),
+                        label: Text('Marcar entregado',
+                            style: GoogleFonts.inter(fontWeight: FontWeight.w700,
+                                fontSize: 14, color: Colors.white)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _kTeal, elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                Expanded(child: SizedBox(
                 height: 48,
                 child: OutlinedButton.icon(
                   onPressed: () => _imprimir(context),
@@ -239,7 +341,8 @@ class _SeparadoDetalleSheetState extends State<SeparadoDetalleSheet> {
                         borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
-              ),
+              )),
+              ]),
             ),
           ],
         ],

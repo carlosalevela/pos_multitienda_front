@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -12,7 +10,11 @@ import '../../../providers/cliente_provider.dart';
 import '../../../services/documento_service.dart';
 import '../../../services/tier_service.dart';
 import '../../../services/venta_service.dart';
+import '../../../utils/file_downloader.dart' show abrirArchivo;
 import 'abonar_sheet.dart';
+import 'cliente_contacto.dart';
+import 'cliente_detalle_movil.dart';
+import 'clientes_movil.dart' show CM, cf, compactoPesos, iniciales;
 import 'separado_detalle_sheet.dart';
 
 // ─────────────────────────────────────────────────────────────
@@ -49,23 +51,41 @@ List<Color> _avatarGradient(String nombre) {
 // ENTRY POINT — llamar desde clientes_screen.dart
 // ─────────────────────────────────────────────────────────────
 class ClienteDetalleSheet {
+  /// En el celular abre una pantalla completa (cabecera con llamar,
+  /// WhatsApp y editar, y 4 pestañas); en pantallas medianas, la hoja.
   static void mostrar(
     BuildContext context, {
     required Cliente      cliente,
     required bool         esAdminOSupervisor,
     required VoidCallback onEditar,
     required VoidCallback onDesactivar,
+    VoidCallback?         onReactivar,
+    String                tiendaNombre = '',
   }) {
+    final movil = MediaQuery.sizeOf(context).width < 600;
+    final contenido = _ClienteDetalleSheetContent(
+      cliente:             cliente,
+      esAdminOSupervisor:  esAdminOSupervisor,
+      onEditar:            onEditar,
+      onDesactivar:        onDesactivar,
+      onReactivar:         onReactivar,
+      tiendaNombre:        tiendaNombre,
+      movil:               movil,
+    );
+    if (movil) {
+      Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          backgroundColor: CM.fondo,
+          body: SafeArea(child: contenido),
+        ),
+      ));
+      return;
+    }
     showModalBottomSheet(
       context:           context,
       isScrollControlled: true,
       backgroundColor:   Colors.transparent,
-      builder: (_) => _ClienteDetalleSheetContent(
-        cliente:             cliente,
-        esAdminOSupervisor:  esAdminOSupervisor,
-        onEditar:            onEditar,
-        onDesactivar:        onDesactivar,
-      ),
+      builder: (_) => contenido,
     );
   }
 }
@@ -78,12 +98,18 @@ class _ClienteDetalleSheetContent extends StatefulWidget {
   final bool         esAdminOSupervisor;
   final VoidCallback onEditar;
   final VoidCallback onDesactivar;
+  final VoidCallback? onReactivar;
+  final String       tiendaNombre;
+  final bool         movil;
 
   const _ClienteDetalleSheetContent({
     required this.cliente,
     required this.esAdminOSupervisor,
     required this.onEditar,
     required this.onDesactivar,
+    this.onReactivar,
+    this.tiendaNombre = '',
+    this.movil = false,
   });
 
   @override
@@ -105,7 +131,7 @@ class _ClienteDetalleSheetContentState
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 6, vsync: this);
+    _tabCtrl = TabController(length: widget.movil ? 4 : 6, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ClienteProvider>().cargarDetalleCliente(widget.cliente.id);
       _cargarTiers();
@@ -185,7 +211,8 @@ class _ClienteDetalleSheetContentState
     }
 
     if (filtrados.length == 1) {
-      await Process.run('cmd', ['/c', 'start', '', filtrados.first.path]);
+      final err = await abrirArchivo(filtrados.first.path);
+      if (err != null) _showSnack(err, _Pal.danger);
       return;
     }
 
@@ -221,7 +248,8 @@ class _ClienteDetalleSheetContentState
                     style: GoogleFonts.plusJakartaSans(fontSize: 11)),
                 onTap: () async {
                   Navigator.pop(ctx);
-                  await Process.run('cmd', ['/c', 'start', '', f.path]);
+                  final err = await abrirArchivo(f.path);
+                  if (err != null) _showSnack(err, _Pal.danger);
                 },
               );
             },
@@ -263,8 +291,11 @@ class _ClienteDetalleSheetContentState
       context: context,
       builder: (_) => _ConfirmDialog(
         titulo:  '¿Cancelar separado?',
-        mensaje: 'Se revertirá el stock de ${sep.detalles.length} '
-                 'producto${sep.detalles.length != 1 ? 's' : ''}. '
+        mensaje: 'Los ${sep.detalles.length} '
+                 'producto${sep.detalles.length != 1 ? 's' : ''} vuelven al stock. '
+                 '${sep.abonoAcumulado > 0 ? 'No se le devuelve plata: lo abonado '
+                     '(\$${NumberFormat('#,##0', 'es_CO').format(sep.abonoAcumulado)}) '
+                     'le queda en un bono a su nombre para otra compra. ' : ''}'
                  'Esta acción no se puede deshacer.',
         accion:  'Cancelar separado',
         color:   _Pal.danger,
@@ -275,7 +306,7 @@ class _ClienteDetalleSheetContentState
     final result = await prov.cancelarSeparado(sep.id);
     if (!mounted) return;
     _showSnack(
-      result ? 'Separado cancelado'
+      result ? (prov.mensajeCancelacion ?? 'Separado cancelado')
              : (prov.error ?? 'Error al cancelar'),
       result ? _Pal.success : _Pal.danger,
     );
@@ -294,6 +325,7 @@ class _ClienteDetalleSheetContentState
 
   @override
   Widget build(BuildContext context) {
+    if (widget.movil) return _buildMovil(context);
     final gradient  = _avatarGradient(widget.cliente.nombre);
     final iniciales = [
       widget.cliente.nombre.isNotEmpty   ? widget.cliente.nombre[0]   : '',
@@ -428,6 +460,245 @@ class _ClienteDetalleSheetContentState
           ),
         ]),
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// CELULAR: cabecera y 4 pestañas
+// ─────────────────────────────────────────────────────────────
+
+extension _Movil on _ClienteDetalleSheetContentState {
+  Widget _buildMovil(BuildContext context) {
+    final c = widget.cliente;
+    return Consumer<ClienteProvider>(builder: (_, prov, _) {
+      final deudaCredito = (_creditosData?['deuda_total'] as num?)?.toDouble()
+          ?? c.saldos?.credito ?? 0;
+      final deudaSeparados = prov.cargandoDetalle
+          ? (c.saldos?.separados ?? 0)
+          : prov.separadosActivos.fold<double>(0, (a, s) => a + s.saldoPendiente);
+      final debe = deudaSeparados + deudaCredito;
+      final activos = prov.separadosActivos;
+      final historial = prov.historialCliente;
+      return Column(children: [
+        _CabeceraMovil(
+          cliente: c,
+          debe: debe,
+          puedeEditar: widget.esAdminOSupervisor,
+          onVolver: () => Navigator.of(context).maybePop(),
+          onLlamar: () => llamarCliente(context, c),
+          onWhatsApp: () => escribirWhatsApp(context,
+              c.copyWith(saldos: SaldosCliente(
+                separados: deudaSeparados,
+                separadosActivos: activos.length,
+                proximoVencimiento: c.saldos?.proximoVencimiento,
+                credito: deudaCredito,
+              )), widget.tiendaNombre),
+          onEditar: widget.onEditar,
+        ),
+        Container(
+          color: Colors.white,
+          child: TabBar(
+            controller: _tabCtrl,
+            labelColor: CM.verdeOs,
+            unselectedLabelColor: CM.gris,
+            indicatorColor: CM.verde,
+            indicatorWeight: 2.5,
+            labelPadding: EdgeInsets.zero,
+            labelStyle: cf(size: 12.5, w: FontWeight.w800),
+            unselectedLabelStyle: cf(size: 12.5, w: FontWeight.w600),
+            tabs: [
+              _tab('Separados', activos.length),
+              _tab('Crédito', deudaCredito > 0 ? 1 : 0),
+              _tab('Compras', _ventasCliente.length),
+              const Tab(text: 'Datos'),
+            ],
+          ),
+        ),
+        const Divider(height: 1, color: CM.borde),
+        Expanded(
+          child: prov.cargandoDetalle
+              ? const Center(child: CircularProgressIndicator(color: CM.verde))
+              : TabBarView(controller: _tabCtrl, children: [
+                  SeparadosMovil(
+                    activos: activos,
+                    historial: historial,
+                    hoy: DateTime.now(),
+                    esAdmin: widget.esAdminOSupervisor,
+                    onAbonar: _mostrarAbonar,
+                    onRecibos: _verRecibosAbono,
+                    onDetalle: _verDetalle,
+                    onCancelar: _confirmarCancelar,
+                  ),
+                  CreditoMovil(
+                    cliente: c,
+                    datos: _creditosData,
+                    cargando: _cargandoCreditos,
+                    onAbonar: _abonarCreditoMovil,
+                    onRefrescar: _cargarCreditos,
+                  ),
+                  ComprasMovil(
+                    ventas: _ventasCliente,
+                    cargando: _cargandoVentas,
+                    onRefrescar: _cargarVentasCliente,
+                  ),
+                  DatosMovil(
+                    cliente: c,
+                    tiers: _tiers,
+                    puedeEditar: widget.esAdminOSupervisor,
+                    onEditar: widget.onEditar,
+                    onDesactivar: widget.onDesactivar,
+                    onReactivar: widget.onReactivar,
+                  ),
+                ]),
+        ),
+      ]);
+    });
+  }
+
+  void _abonarCreditoMovil(Map<String, dynamic> venta) {
+    final saldo = (venta['saldo_pendiente'] as num?)?.toDouble() ?? 0;
+    if (saldo <= 0) return;
+    showModalBottomSheet(
+      context:            context,
+      isScrollControlled: true,
+      backgroundColor:    Colors.transparent,
+      builder: (ctx) => _AbonarCreditoSheet(
+        ventaId:        venta['id'] as int,
+        numeroFactura:  '${venta['numero_factura'] ?? 'Venta ${venta['id']}'}',
+        saldoPendiente: saldo,
+        onAbonar: (monto, metodo) async {
+          final res = await VentaService().abonarCredito(
+              ventaId: venta['id'] as int, monto: monto, metodo: metodo);
+          if (!ctx.mounted) return;
+          Navigator.pop(ctx);
+          _showSnack(
+            res['success'] == true
+                ? 'Abono registrado correctamente'
+                : (res['error'] ?? 'Error al registrar abono'),
+            res['success'] == true ? _Pal.success : _Pal.danger,
+          );
+          if (res['success'] == true) _cargarCreditos();
+        },
+      ),
+    );
+  }
+
+  Tab _tab(String t, int n) => Tab(
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text(t),
+          if (n > 0) ...[
+            const SizedBox(width: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(color: CM.borde, borderRadius: BorderRadius.circular(8)),
+              child: Text('$n', style: cf(size: 10, w: FontWeight.w800, color: CM.verdeOs)),
+            ),
+          ],
+        ]),
+      );
+}
+
+class _CabeceraMovil extends StatelessWidget {
+  final Cliente cliente;
+  final double debe;
+  final bool puedeEditar;
+  final VoidCallback onVolver, onLlamar, onWhatsApp, onEditar;
+
+  const _CabeceraMovil({required this.cliente, required this.debe, required this.puedeEditar,
+      required this.onVolver, required this.onLlamar, required this.onWhatsApp, required this.onEditar});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = cliente;
+    final tier = c.tierInfo;
+    Widget accion(String t, IconData i, Color col, VoidCallback f) => Expanded(
+          child: OutlinedButton.icon(
+            onPressed: f,
+            icon: Icon(i, size: 17, color: col),
+            label: Text(t, maxLines: 1, style: cf(size: 12.5, w: FontWeight.w800, color: col)),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 42),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              side: const BorderSide(color: CM.borde2, width: 1.5),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        );
+    Widget dato(String t, String v, {Color col = CM.oscuro, Color bg = Colors.white, Color borde = CM.borde}) =>
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+            decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: borde, width: 1.5)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(t, style: cf(size: 10.5, w: FontWeight.w600, color: CM.gris2)),
+              const SizedBox(height: 2),
+              FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft,
+                  child: Text(v, style: cf(size: 16, w: FontWeight.w800, color: col))),
+            ]),
+          ),
+        );
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(6, 4, 16, 14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          IconButton(tooltip: 'Volver', onPressed: onVolver,
+              icon: const Icon(Icons.arrow_back_rounded, color: CM.verdeOs)),
+          Text('Cliente', style: cf(size: 15, w: FontWeight.w800, color: CM.oscuro)),
+        ]),
+        Padding(
+          padding: const EdgeInsets.only(left: 10),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Row(children: [
+              Container(
+                width: 54, height: 54,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(color: c.activo ? CM.borde : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(16)),
+                child: Text(iniciales(c), style: cf(size: 19, w: FontWeight.w800,
+                    color: c.activo ? CM.verdeOs : CM.gris2)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(c.nombreCompleto, maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: cf(size: 18, w: FontWeight.w800)),
+                  const SizedBox(height: 2),
+                  Text([
+                    if (c.telefono.isNotEmpty) telefonoBonito(c.telefono),
+                    if ((c.cedulaNit ?? '').isNotEmpty) 'C.C. ${c.cedulaNit}',
+                    if (!c.activo) 'Inactivo',
+                  ].join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: cf(size: 12, color: CM.gris)),
+                ]),
+              ),
+            ]),
+            const SizedBox(height: 12),
+            Row(children: [
+              accion('Llamar', Icons.phone_outlined, CM.verdeOs, onLlamar),
+              const SizedBox(width: 8),
+              accion('WhatsApp', Icons.chat_outlined, const Color(0xFF15803D), onWhatsApp),
+              if (puedeEditar) ...[
+                const SizedBox(width: 8),
+                accion('Editar', Icons.edit_outlined, CM.verdeOs, onEditar),
+              ],
+            ]),
+            const SizedBox(height: 10),
+            Row(children: [
+              debe > 0
+                  ? dato('Debe', pesosCO(debe), col: CM.rojo, bg: const Color(0xFFFFF1F2),
+                      borde: const Color(0xFFFECDD3))
+                  : dato('Debe', 'Al día', col: CM.verdeOs),
+              const SizedBox(width: 8),
+              dato('Compró', compactoPesos(c.totalAcumulado)),
+              const SizedBox(width: 8),
+              dato('Nivel', tier?.nombre ?? '—', col: const Color(0xFF334155)),
+            ]),
+          ]),
+        ),
+      ]),
     );
   }
 }
@@ -1387,11 +1658,16 @@ class _TabFidelizacion extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (cargandoTiers) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(40),
-          child: CircularProgressIndicator(color: _Pal.teal, strokeWidth: 2.5),
-        ),
+      return SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(40),
+              child: CircularProgressIndicator(color: _Pal.teal, strokeWidth: 2.5),
+            ),
+          ),
+        ]),
       );
     }
 

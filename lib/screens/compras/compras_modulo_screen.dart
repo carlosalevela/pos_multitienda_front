@@ -18,6 +18,7 @@ import 'widgets/detalle_compra_dialog.dart';
 import 'widgets/modal_precios_recibir.dart';
 import 'widgets/recepcion_resultado_dialog.dart';
 import '../proveedores/widgets/proveedor_form_dialog.dart';
+import 'movil/compras_movil_screen.dart';
 
 class ComprasModuloScreen extends StatefulWidget {
   const ComprasModuloScreen({super.key});
@@ -306,6 +307,8 @@ class _ComprasModuloScreenState extends State<ComprasModuloScreen>
 
   @override
   Widget build(BuildContext context) {
+    // En el celular, su propia vista (órdenes, proveedores y por pagar).
+    if (MediaQuery.sizeOf(context).width < 600) return const ComprasMovilScreen();
     final prov = context.watch<ProveedoresProvider>();
     return Scaffold(
       backgroundColor: AppColors.surface,

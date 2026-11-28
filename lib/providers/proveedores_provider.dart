@@ -60,12 +60,12 @@ class ProveedoresProvider extends ChangeNotifier {
 
   // ── Proveedores ───────────────────────────────────────
 
-  Future<void> cargarProveedores({String? q}) async {
+  Future<void> cargarProveedores({String? q, String? estado}) async {
     cargandoProveedores = true;
     errorProveedores    = null;
     notifyListeners();
     try {
-      proveedores = await _proveedorService.listar(q: q);
+      proveedores = await _proveedorService.listar(q: q, estado: estado);
     } catch (e) {
       errorProveedores = 'Error al cargar proveedores';
     } finally {
@@ -204,6 +204,7 @@ class ProveedoresProvider extends ChangeNotifier {
     int id, {
     required Map<String, double> precios,
     Map<String, double>?         preciosMayoreo,
+    Map<String, dynamic>?        pago,
   }) async {
     if (guardando) return null;
     guardando = true;
@@ -214,11 +215,13 @@ class ProveedoresProvider extends ChangeNotifier {
         id,
         precios:        precios,
         preciosMayoreo: preciosMayoreo,
+        pago:           pago,
       );
       if (res['success'] == true) {
         final idx = compras.indexWhere((c) => c['id'] == id);
         if (idx != -1) {
-          compras[idx] = {...compras[idx], 'estado': 'recibida'};
+          compras[idx] = {...compras[idx], 'estado': 'recibida',
+              if (compras[idx]['a_credito'] != true) 'pagado': true};
         }
         successMsg = '✅ Compra recibida correctamente';
         notifyListeners();

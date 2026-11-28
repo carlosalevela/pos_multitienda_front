@@ -13,6 +13,7 @@ import 'widgets/devolucion_card.dart';
 import 'widgets/devolucion_detalle_sheet.dart';
 import 'widgets/devolucion_form_sheet.dart';
 import 'widgets/filtros_bar.dart';
+import 'movil/devoluciones_movil_screen.dart';
 
 const _kGreen     = Color(0xFF006C49);
 const _kMintLight = Color(0xFFE8FFF4);
@@ -25,14 +26,25 @@ const _kOrangeBg  = Color(0xFFFEF3C7);
 const _kError     = Color(0xFFBA1A1A);
 const _kErrorBg   = Color(0xFFFFDAD6);
 
-class DevolucionesScreen extends StatefulWidget {
+/// En el celular (menos de 600 de ancho) usa el diseño móvil; si no, el de
+/// escritorio de siempre.
+class DevolucionesScreen extends StatelessWidget {
   const DevolucionesScreen({super.key});
 
   @override
-  State<DevolucionesScreen> createState() => _DevolucionesScreenState();
+  Widget build(BuildContext context) => MediaQuery.sizeOf(context).width < 600
+      ? const DevolucionesMovilScreen()
+      : const DevolucionesEscritorio();
 }
 
-class _DevolucionesScreenState extends State<DevolucionesScreen> {
+class DevolucionesEscritorio extends StatefulWidget {
+  const DevolucionesEscritorio({super.key});
+
+  @override
+  State<DevolucionesEscritorio> createState() => _DevolucionesScreenState();
+}
+
+class _DevolucionesScreenState extends State<DevolucionesEscritorio> {
   final _fmt = NumberFormat.currency(locale: 'es_CO', symbol: '\$');
 
   String?          _fechaActual;

@@ -35,6 +35,10 @@ class VentaDisponibleModel {
   final double                     total;
   final bool                       todosDevueltos;
   final List<ProductoDisponibleModel> productos;
+  /// Venta a crédito: lo devuelto abona primero a lo que debe.
+  final bool                       aCredito;
+  final double                     saldoPendiente;
+  final String                     clienteNombre;
 
   const VentaDisponibleModel({
     required this.ventaId,
@@ -42,6 +46,9 @@ class VentaDisponibleModel {
     required this.total,
     required this.todosDevueltos,
     required this.productos,
+    this.aCredito = false,
+    this.saldoPendiente = 0,
+    this.clienteNombre = 'Consumidor Final',
   });
 
   factory VentaDisponibleModel.fromJson(Map<String, dynamic> j) =>
@@ -50,6 +57,9 @@ class VentaDisponibleModel {
         numeroFactura:  j['numero_factura']  as String? ?? '',
         total:          double.tryParse(j['total'].toString()) ?? 0,
         todosDevueltos: j['todos_devueltos'] as bool? ?? false,
+        aCredito:       j['a_credito'] as bool? ?? false,
+        saldoPendiente: double.tryParse(j['saldo_pendiente']?.toString() ?? '') ?? 0,
+        clienteNombre:  j['cliente_nombre'] as String? ?? 'Consumidor Final',
         productos: (j['productos'] as List? ?? [])
             .map((p) => ProductoDisponibleModel.fromJson(p))
             .toList(),

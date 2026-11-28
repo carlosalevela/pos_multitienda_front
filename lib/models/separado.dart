@@ -60,6 +60,7 @@ class AbonoSeparado {
   final double  monto;
   final String  metodoPago;
   final DateTime createdAt;   // ✅ DateTime en lugar de String
+  final String? cuentaNombre;
 
   AbonoSeparado({
     required this.id,
@@ -68,6 +69,7 @@ class AbonoSeparado {
     required this.monto,
     required this.metodoPago,
     required this.createdAt,
+    this.cuentaNombre,
   });
 
   factory AbonoSeparado.fromJson(Map<String, dynamic> j) => AbonoSeparado(
@@ -79,6 +81,7 @@ class AbonoSeparado {
     createdAt:      j['created_at'] != null        // ✅ parseo seguro
         ? DateTime.parse(j['created_at'] as String).toLocal()
         : DateTime.now(),
+    cuentaNombre:   j['cuenta_nombre'] as String?,
   );
 
   Map<String, dynamic> toJsonFull() => {
@@ -110,6 +113,15 @@ class Separado {
   final DateTime              createdAt;
   final List<DetalleSeparado> detalles;
   final List<AbonoSeparado>   abonos;
+  /// Cuándo recogió el producto (solo pagados).
+  final DateTime?             entregadoAt;
+  final String?               entregadoPorNombre;
+  /// Al cancelar, lo abonado queda en un bono a nombre del cliente.
+  final String?               bonoCodigo;
+  final double?               bonoSaldo;
+  final String?               bonoEstado;
+  final String?               bonoVence;
+  final String                motivoCancelacion;
 
   Separado({
     required this.id,
@@ -128,6 +140,13 @@ class Separado {
     required this.createdAt,
     required this.detalles,
     required this.abonos,
+    this.entregadoAt,
+    this.entregadoPorNombre,
+    this.bonoCodigo,
+    this.bonoSaldo,
+    this.bonoEstado,
+    this.bonoVence,
+    this.motivoCancelacion = '',
   });
 
   factory Separado.fromJson(Map<String, dynamic> j) => Separado(
@@ -153,6 +172,15 @@ class Separado {
     abonos: (j['abonos'] as List? ?? [])
         .map((e) => AbonoSeparado.fromJson(e as Map<String, dynamic>))
         .toList(),
+    entregadoAt: j['entregado_at'] != null
+        ? DateTime.tryParse(j['entregado_at'].toString())?.toLocal()
+        : null,
+    entregadoPorNombre: j['entregado_por_nombre'] as String?,
+    bonoCodigo: j['bono_codigo'] as String?,
+    bonoSaldo:  j['bono_saldo'] == null ? null : _toDouble(j['bono_saldo']),
+    bonoEstado: j['bono_estado'] as String?,
+    bonoVence:  j['bono_vence'] as String?,
+    motivoCancelacion: j['motivo_cancelacion'] as String? ?? '',
   );
 
   // ✅ copyWith — resuelve el error del provider
@@ -173,6 +201,13 @@ class Separado {
     DateTime?              createdAt,
     List<DetalleSeparado>? detalles,
     List<AbonoSeparado>?   abonos,
+    DateTime?              entregadoAt,
+    String?                entregadoPorNombre,
+    String?                bonoCodigo,
+    double?                bonoSaldo,
+    String?                bonoEstado,
+    String?                bonoVence,
+    String?                motivoCancelacion,
   }) =>
       Separado(
         id:               id               ?? this.id,
@@ -191,12 +226,22 @@ class Separado {
         createdAt:      createdAt      ?? this.createdAt,
         detalles:       detalles       ?? this.detalles,
         abonos:         abonos         ?? this.abonos,
+        entregadoAt:        entregadoAt        ?? this.entregadoAt,
+        entregadoPorNombre: entregadoPorNombre ?? this.entregadoPorNombre,
+        bonoCodigo:         bonoCodigo         ?? this.bonoCodigo,
+        bonoSaldo:          bonoSaldo          ?? this.bonoSaldo,
+        bonoEstado:         bonoEstado         ?? this.bonoEstado,
+        bonoVence:          bonoVence          ?? this.bonoVence,
+        motivoCancelacion:  motivoCancelacion  ?? this.motivoCancelacion,
       );
 
   // ── Getters de estado ──────────────────────────────────────
   bool   get esActivo    => estado == 'activo';
   bool   get esPagado    => estado == 'pagado';
   bool   get esCancelado => estado == 'cancelado';
+  bool   get entregado   => entregadoAt != null;
+  /// Pagado completo pero el cliente todavía no lo recoge.
+  bool   get porEntregar => esPagado && entregadoAt == null;
   double get progreso    => total > 0 ? (abonoAcumulado / total).clamp(0.0, 1.0) : 0.0; // ✅ clamp
 
   // ── Para actualización local ───────────────────────────────

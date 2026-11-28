@@ -58,6 +58,9 @@ class CorteCajaDialog extends StatefulWidget {
 
 class _CorteCajaDialogState extends State<CorteCajaDialog>
     with SingleTickerProviderStateMixin {
+  // Overlay de la app (no el del diálogo): el formato se dibuja ahí para
+  // tomarle la foto aunque el diálogo ya se haya cerrado.
+  OverlayState? _overlayApp;
   int    _paso           = 1;
   double _montoIngresado = 0;
   final  _montoCtrl      = TextEditingController();
@@ -1375,6 +1378,7 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
               // Capturamos los datos antes de cerrar el widget
               final montoParaFormato  = _p4MontoFinal ?? 0;
               final sesionParaFormato = _p4SesionId;
+              _overlayApp = Overlay.of(context, rootOverlay: true);
               Navigator.pop(context);
               if (sesionParaFormato != null) {
                 unawaited(_imprimirCierreFinalizado(
@@ -1672,9 +1676,15 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
     }).toList();
   }
 
+  /// El mismo formato de Formatos Diarios, dibujado fuera de la pantalla y
+  /// pasado a PDF como imagen. Al cerrar caja el diálogo ya se cerró, por eso
+  /// se usa el overlay de la app guardado antes de cerrarlo; el PDF dibujado
+  /// a mano (generarFormatoDiarioPdf) queda solo si no hay dónde dibujarlo.
   Future<List<int>> _capturarRegistroComoPdf(RegistroMovimientoData data) async {
-    if (!mounted) return generarFormatoDiarioPdf(data);
-    final ctx = context;
+    final overlay = mounted
+        ? Overlay.of(context, rootOverlay: true)
+        : _overlayApp;
+    if (overlay == null || !overlay.mounted) return generarFormatoDiarioPdf(data);
     final key = GlobalKey();
     late OverlayEntry entry;
     entry = OverlayEntry(
@@ -1694,11 +1704,15 @@ class _CorteCajaDialogState extends State<CorteCajaDialog>
         ),
       ),
     );
-    Overlay.of(ctx).insert(entry);
+    overlay.insert(entry);
+    // Dos cuadros: el primero lo dibuja, el segundo ya tiene las fuentes.
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 150));
     await WidgetsBinding.instance.endOfFrame;
     try {
-      final boundary =
-          key.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      final ro = key.currentContext?.findRenderObject();
+      if (ro is! RenderRepaintBoundary) return generarFormatoDiarioPdf(data);
+      final boundary = ro;
       final img = await boundary.toImage(pixelRatio: 2.0);
       final byteData =
           await img.toByteData(format: ui.ImageByteFormat.png);

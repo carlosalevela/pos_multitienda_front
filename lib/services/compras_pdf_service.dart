@@ -712,6 +712,12 @@ class ComprasPDFService {
           bytes: Uint8List.fromList(bytes), filename: nombre);
       return;
     }
+    // En el celular no hay "xdg-open": se muestra para imprimir o compartir.
+    if (Platform.isAndroid || Platform.isIOS) {
+      await Printing.layoutPdf(
+          onLayout: (_) async => Uint8List.fromList(bytes), name: nombre);
+      return;
+    }
     final dir  = await getTemporaryDirectory();
     final safe = nombre.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
     final file = File('${dir.path}${Platform.pathSeparator}$safe');

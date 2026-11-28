@@ -531,6 +531,7 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
       'cantidad':        double.parse(i.cantidadCtrl.text.trim()),
       'precio_unitario': i.producto.precioUnitario,
       if (i.motivoCtrl.text.trim().isNotEmpty) 'motivo': i.motivoCtrl.text.trim(),
+      if (_tipoOperacion != 'cambio') 'estado': i.danado ? 'danado' : 'bueno',
     }).toList();
 
     Map<String, dynamic> resp;
@@ -584,6 +585,23 @@ class _DevolucionFormSheetState extends State<DevolucionFormSheet> {
           ? _metodoPago == 'efectivo'
           : _metodoPagoDiferencia == 'efectivo';
       if (metodoEfectivo) unawaited(_kickCajonDevolucion());
+
+      // Venta a crédito: lo devuelto abonó a la deuda (y solo sobra plata
+      // si ya había pagado más de lo que debía).
+      final raw = resp['data'];
+      final abonado = raw is Map ? (raw['abonado_credito'] as num?)?.toDouble() ?? 0 : 0.0;
+      if (abonado > 0) {
+        final reemb = raw is Map ? (raw['reembolsado'] as num?)?.toDouble() ?? 0 : 0.0;
+        final f = NumberFormat('#,##0', 'es_CO');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(reemb > 0
+              ? 'Se abonaron \$${f.format(abonado)} a la deuda del cliente y se le devuelven \$${f.format(reemb)}.'
+              : 'Era a crédito: los \$${f.format(abonado)} se abonaron a su deuda. No se le entrega plata.'),
+          backgroundColor: _kGreen,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 6),
+        ));
+      }
 
       Navigator.pop(context);
       widget.onCreada(devCreada);
@@ -1795,6 +1813,8 @@ class _ItemCtrl {
   final TextEditingController cantidadCtrl;
   final TextEditingController motivoCtrl;
   bool seleccionado;
+  /// true: va a averías (como siempre). false: vino bien y vuelve al stock.
+  bool danado = true;
 
   _ItemCtrl.fromProducto(this.producto)
       : cantidadCtrl = TextEditingController(
@@ -1987,11 +2007,49 @@ class _ItemProductoCard extends StatelessWidget {
                 ],
               ]),
             ),
+            if (!esCambio)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: Row(children: [
+                  Expanded(child: _estadoBtn('Está bien · vuelve al stock', Icons.check_circle_outline_rounded,
+                      !item.danado, _kGreen, () {
+                    item.danado = false;
+                    onChanged();
+                  })),
+                  const SizedBox(width: 8),
+                  Expanded(child: _estadoBtn('Dañado · va a averías', Icons.broken_image_outlined,
+                      item.danado, const Color(0xFFB45309), () {
+                    item.danado = true;
+                    onChanged();
+                  })),
+                ]),
+              ),
           ],
         ]),
       ),
     );
   }
+
+  Widget _estadoBtn(String t, IconData i, bool on, Color c, VoidCallback f) => Material(
+    color: on ? c.withValues(alpha: 0.10) : Colors.white,
+    borderRadius: BorderRadius.circular(10),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: f,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: on ? c : _kBorder, width: on ? 1.5 : 1)),
+        child: Row(children: [
+          Icon(i, size: 16, color: on ? c : Colors.grey.shade500),
+          const SizedBox(width: 6),
+          Expanded(child: Text(t, maxLines: 2,
+              style: GoogleFonts.inter(fontSize: 11.5, fontWeight: on ? FontWeight.w700 : FontWeight.w500,
+                  color: on ? c : _kText))),
+        ]),
+      ),
+    ),
+  );
 
   InputDecoration _deco(String label, {String? helper}) => InputDecoration(
     labelText: label,

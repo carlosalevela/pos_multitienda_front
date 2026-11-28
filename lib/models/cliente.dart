@@ -32,6 +32,9 @@ class Cliente {
   final TierInfo? tierInfo;
   final double    totalAcumulado;
   final double    limiteCredito;
+  /// Lo que debe (separados activos + crédito). null si el servidor no lo
+  /// mandó (versiones viejas).
+  final SaldosCliente? saldos;
 
   Cliente({
     required this.id,
@@ -46,7 +49,10 @@ class Cliente {
     this.tierInfo,
     this.totalAcumulado = 0,
     this.limiteCredito  = 0,
+    this.saldos,
   });
+
+  double get debe => saldos?.total ?? 0;
 
   factory Cliente.fromJson(Map<String, dynamic> j) => Cliente(
     id:        j['id']        as int,
@@ -67,6 +73,9 @@ class Cliente {
         (j['total_acumulado'] ?? '0').toString()),
     limiteCredito: double.parse(
         (j['limite_credito'] ?? '0').toString()),
+    saldos: j['saldos'] is Map
+        ? SaldosCliente.fromJson(Map<String, dynamic>.from(j['saldos'] as Map))
+        : null,
   );
 
   // Para crear / editar
@@ -95,6 +104,7 @@ class Cliente {
     TierInfo? tierInfo,
     double?   totalAcumulado,
     double?   limiteCredito,
+    SaldosCliente? saldos,
   }) =>
       Cliente(
         id:             id             ?? this.id,
@@ -109,6 +119,7 @@ class Cliente {
         tierInfo:       tierInfo       ?? this.tierInfo,
         totalAcumulado: totalAcumulado ?? this.totalAcumulado,
         limiteCredito:  limiteCredito  ?? this.limiteCredito,
+        saldos:         saldos         ?? this.saldos,
       );
 
   // ✅ Nombre completo sin espacio doble cuando no hay apellido
@@ -124,4 +135,32 @@ class Cliente {
 
   @override
   int get hashCode => id.hashCode;
+}
+
+/// Lo que debe un cliente: separados activos y ventas a crédito sin pagar.
+class SaldosCliente {
+  final double    separados;
+  final int       separadosActivos;
+  final DateTime? proximoVencimiento;
+  final double    credito;
+
+  const SaldosCliente({
+    this.separados = 0,
+    this.separadosActivos = 0,
+    this.proximoVencimiento,
+    this.credito = 0,
+  });
+
+  double get total => separados + credito;
+
+  factory SaldosCliente.fromJson(Map<String, dynamic> j) {
+    double n(Object? v) => double.tryParse('${v ?? 0}') ?? 0;
+    final v = j['proximo_vencimiento'];
+    return SaldosCliente(
+      separados:          n(j['separados']),
+      separadosActivos:   (j['separados_activos'] as num?)?.toInt() ?? 0,
+      proximoVencimiento: v == null ? null : DateTime.tryParse('$v'),
+      credito:            n(j['credito']),
+    );
+  }
 }

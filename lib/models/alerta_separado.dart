@@ -6,6 +6,7 @@ class AlertaSeparado {
   final double saldoPendiente;
   final String fechaLimite;
   final int    diasRestantes;
+  final String telefono;
 
   AlertaSeparado({
     required this.id,
@@ -14,6 +15,7 @@ class AlertaSeparado {
     required this.saldoPendiente,
     required this.fechaLimite,
     required this.diasRestantes,
+    this.telefono = '',
   });
 
   factory AlertaSeparado.fromJson(Map<String, dynamic> j) => AlertaSeparado(
@@ -23,6 +25,7 @@ class AlertaSeparado {
     saldoPendiente: _toDouble(j['saldo_pendiente']),
     fechaLimite:    j['fecha_limite']     ?? '',
     diasRestantes:  j['dias_restantes']   ?? 0,
+    telefono:       j['telefono']         ?? '',
   );
 
   bool get esVencido => diasRestantes < 0;

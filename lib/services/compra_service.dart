@@ -89,12 +89,16 @@ class CompraService {
     int id, {
     required Map<String, double> precios,
     Map<String, double>?         preciosMayoreo,
+    /// Cómo se pagó (solo compras de contado): metodo_pago, cuenta_bancaria,
+    /// fecha y de_caja.
+    Map<String, dynamic>?        pago,
   }) async {
     try {
       final body = <String, dynamic>{
         'precios': precios,
         if (preciosMayoreo != null && preciosMayoreo.isNotEmpty)
           'precios_mayoreo': preciosMayoreo,
+        ...?pago,
       };
       final res = await ApiClient.instance.post(
         '/proveedores/compras/$id/recibir/',
@@ -147,5 +151,24 @@ class CompraService {
       debugPrint('❌ parsearFactura error: $e');
       return [];
     }
+  }
+
+  /// Registra el pago de una compra a crédito (crea el gasto de Proveedor).
+  Future<String?> pagar(int id, Map<String, dynamic> pago) async {
+    try {
+      await ApiClient.instance.patch('/proveedores/compras/$id/marcar-pagada/', data: pago);
+      return null;
+    } on DioException catch (e) {
+      return _extractError(e, 'No se pudo registrar el pago');
+    } catch (_) {
+      return 'No se pudo registrar el pago';
+    }
+  }
+
+  /// Compras a crédito por pagar (y las que aún no llegan).
+  Future<Map<String, dynamic>> cuentasPorPagar({int? tiendaId}) async {
+    final r = await ApiClient.instance.get('/proveedores/cuentas-pagar/',
+        queryParameters: {if (tiendaId != null) 'tienda_id': tiendaId});
+    return Map<String, dynamic>.from(r.data as Map);
   }
 }

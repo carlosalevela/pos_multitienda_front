@@ -50,21 +50,31 @@ class ClienteProvider extends ChangeNotifier {
   // CLIENTES
   // ══════════════════════════════════════════════════════════
 
-  Future<void> cargarClientes({String? q, int? tiendaId}) async {
+  int _consultaClientes = 0;
+
+  Future<void> cargarClientes({String? q, int? tiendaId, String? estado}) async {
+    final id = ++_consultaClientes;
     _cargando = true;
     error     = null;
     notifyListeners();
 
     try {
-      clientes = await _service.getClientes(q: q, tiendaId: tiendaId);
+      final r = await _service.getClientes(q: q, tiendaId: tiendaId, estado: estado);
+      // Al escribir rápido en el buscador llegan respuestas en desorden:
+      // solo vale la última.
+      if (id != _consultaClientes) return;
+      clientes = r;
       debugPrint('✅ cargarClientes: ${clientes.length} clientes, tiendaId=$tiendaId');
     } catch (e) {
+      if (id != _consultaClientes) return;
       error    = 'Error al cargar clientes';
       clientes = [];
       debugPrint('❌ cargarClientes: $e');
     } finally {
-      _cargando = false;
-      notifyListeners();
+      if (id == _consultaClientes) {
+        _cargando = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -156,7 +166,10 @@ class ClienteProvider extends ChangeNotifier {
     final result = await _service.desactivarCliente(id);
 
     if (result['success'] == true) {
-      clientes = clientes.where((c) => c.id != id).toList();
+      // Queda en la lista como inactivo (se puede reactivar).
+      clientes = clientes
+          .map((c) => c.id == id ? c.copyWith(activo: false) : c)
+          .toList();
       if (clienteSeleccionado?.id == id) clienteSeleccionado = null;
     } else {
       error = result['error'];
@@ -172,7 +185,7 @@ class ClienteProvider extends ChangeNotifier {
     if (result['success'] == true) {
       final actualizado = result['data'] as Cliente;
       clientes = clientes
-          .map((c) => c.id == id ? actualizado : c)
+          .map((c) => c.id == id ? actualizado.copyWith(saldos: c.saldos) : c)
           .toList();
     } else {
       error = result['error'];
@@ -399,18 +412,45 @@ class ClienteProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> cancelarSeparado(int id) async {
+  /// Mensaje del último cancelar (dice el bono que le quedó al cliente).
+  String? mensajeCancelacion;
+
+  Future<Separado?> entregarSeparado(int id) async {
+    error = null;
+    final r = await _service.entregarSeparado(id);
+    if (r['success'] != true) {
+      error = r['error']?.toString();
+      notifyListeners();
+      return null;
+    }
+    final nuevo = r['data'] as Separado;
+    separados = separados.map((s) => s.id == id ? nuevo : s).toList();
+    if (separadoSeleccionado?.id == id) separadoSeleccionado = nuevo;
+    notifyListeners();
+    return nuevo;
+  }
+
+  Future<bool> cancelarSeparado(int id, {String? motivo}) async {
     if (_guardando) return false;
+    mensajeCancelacion = null;
     _guardando = true;
     error      = null;
     notifyListeners();
     bool exito = false;
     try {
-      final result = await _service.cancelarSeparado(id);
+      final result = await _service.cancelarSeparado(id, motivo: motivo);
 
       if (result['success'] == true) {
+        mensajeCancelacion = result['detail']?.toString();
+        final codigo = result['bono_codigo'] as String?;
+        final saldo  = (result['bono_saldo'] as num?)?.toDouble();
+        final vence  = result['bono_vence'] as String?;
         separados = separados
-            .map((s) => s.id == id ? s.copyWith(estado: 'cancelado') : s)
+            .map((s) => s.id == id
+                ? s.copyWith(estado: 'cancelado', bonoCodigo: codigo, bonoSaldo: saldo,
+                    bonoEstado: codigo == null ? null : 'activo', bonoVence: vence,
+                    motivoCancelacion: motivo?.trim())
+                : s)
             .toList();
 
         if (separadoSeleccionado?.id == id) {

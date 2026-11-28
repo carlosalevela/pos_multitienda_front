@@ -110,7 +110,8 @@ Future<List<int>> generarFormatoDiarioPdf(RegistroMovimientoData data) async {
               child: pw.RichText(
                 text: pw.TextSpan(children: [
                   pw.TextSpan(
-                    text: '(${f.signo}) ',
+                    // La fuente del PDF no trae "−": se usa el guion normal.
+                    text: '(${f.signo == '−' ? '-' : f.signo}) ',
                     style: pw.TextStyle(
                         fontSize: 8, fontWeight: bs, color: _ink),
                   ),
@@ -389,7 +390,7 @@ Future<List<int>> generarFormatoDiarioPdf(RegistroMovimientoData data) async {
 
           pw.SizedBox(height: 4),
           pw.Text(
-            'Generado automáticamente — POS Multitienda',
+            'Generado automáticamente - POS Multitienda',
             textAlign: pw.TextAlign.center,
             style: const pw.TextStyle(
                 fontSize: 7, color: PdfColors.grey600),

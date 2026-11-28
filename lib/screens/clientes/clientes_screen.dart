@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -13,6 +15,8 @@ import '../../models/tienda_model.dart';
 import 'widgets/cliente_form.dart';
 import 'widgets/cliente_detalle_sheet.dart';
 import 'widgets/alertas_badge.dart';
+import 'widgets/cliente_contacto.dart';
+import 'widgets/clientes_movil.dart';
 
 const _teal        = Color(0xFF006C49);
 const _tealBg      = Color(0xFFE8FFF4);
@@ -45,6 +49,13 @@ class _ClientesScreenState extends State<ClientesScreen> {
   // ── Detail panel ───────────────────────────────────────
   Cliente? _selectedCliente;
 
+  // ── Celular ────────────────────────────────────────────
+  FiltroClientes _filtroM = FiltroClientes.todos;
+  OrdenClientes  _ordenM  = OrdenClientes.nombre;
+  Timer?         _espera;
+
+  bool get _esMovil => MediaQuery.sizeOf(context).width < 600;
+
   @override
   void initState() {
     super.initState();
@@ -65,13 +76,33 @@ class _ClientesScreenState extends State<ClientesScreen> {
       // Admin/supervisor: empresa fija — cargar sus tiendas directamente
       final empresaId = int.tryParse(auth.empresaId) ?? 0;
       if (empresaId > 0) {
-        setState(() => _cargandoTiendas = true);
+        final tiendasProv = context.read<TiendaProvider>();
+        // Las tiendas ya cargadas antes salen de una vez.
+        final guardadas = tiendasProv.tiendasGuardadas(empresaId);
+        Tienda? elegir(List<Tienda> t) =>
+            t.where((x) => x.id == auth.tiendaId).firstOrNull ?? t.firstOrNull;
+        if (guardadas != null && guardadas.isNotEmpty) {
+          setState(() => _tiendas = guardadas);
+          final inicial = elegir(guardadas);
+          if (inicial != null) unawaited(_onTiendaChanged(inicial));
+        } else {
+          setState(() => _cargandoTiendas = true);
+          // Mientras llegan las tiendas ya se piden los clientes de la suya:
+          // no se espera una respuesta para empezar la otra.
+          if (auth.tiendaId > 0) unawaited(_cargarClientes(auth.tiendaId));
+        }
         try {
-          await context.read<TiendaProvider>().cargarTiendasPorEmpresa(empresaId);
+          await tiendasProv.cargarTiendasPorEmpresa(empresaId);
           if (!mounted) return;
-          final t = context.read<TiendaProvider>().tiendas;
+          final t = tiendasProv.tiendas;
           setState(() { _tiendas = t; _cargandoTiendas = false; });
-          if (t.length == 1) await _onTiendaChanged(t.first);
+          if (_tienda == null) {
+            final inicial = elegir(t);
+            if (inicial != null) {
+              final yaPedida = guardadas == null && inicial.id == auth.tiendaId;
+              await _onTiendaChanged(inicial, recargar: !yaPedida);
+            }
+          }
         } catch (_) {
           if (mounted) setState(() => _cargandoTiendas = false);
         }
@@ -99,8 +130,17 @@ class _ClientesScreenState extends State<ClientesScreen> {
     }
   }
 
-  Future<void> _onTiendaChanged(Tienda t) async {
-    setState(() { _tienda = t; _selectedCliente = null; _filtro = 'todos'; });
+  Future<void> _onTiendaChanged(Tienda t, {bool recargar = true}) async {
+    setState(() {
+      _tienda = t; _selectedCliente = null; _filtro = 'todos';
+      _filtroM = FiltroClientes.todos;
+    });
+    if (!recargar) return;
+    // Fuera la lista de la tienda anterior: mientras llega la nueva se ve
+    // cargando (antes quedaba la vieja y parecía que no había cargado).
+    final prov = context.read<ClienteProvider>();
+    if (prov.clientes.isNotEmpty) prov.limpiarClientes();
+    prov.limpiarAlertas();
     _searchCtrl.clear();
     await _cargarClientes(t.id);
   }
@@ -108,12 +148,70 @@ class _ClientesScreenState extends State<ClientesScreen> {
   Future<void> _cargarClientes(int? tiendaId) async {
     if (tiendaId == null || !mounted) return;
     final prov = context.read<ClienteProvider>();
-    await prov.cargarClientes(tiendaId: tiendaId);
-    await prov.cargarAlertas(tiendaId: tiendaId);
+    // Clientes y alertas a la vez, no uno después del otro.
+    await Future.wait([
+      prov.cargarClientes(tiendaId: tiendaId, estado: 'todos',
+          q: _searchCtrl.text.trim().isEmpty ? null : _searchCtrl.text.trim()),
+      prov.cargarAlertas(tiendaId: tiendaId),
+    ]);
+  }
+
+  /// Espera a que deje de escribir para no pedir una lista por letra.
+  void _buscar(String q) {
+    _espera?.cancel();
+    setState(() {});
+    _espera = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      context.read<ClienteProvider>().cargarClientes(
+          tiendaId: _tiendaActual, estado: 'todos', q: q.trim().isEmpty ? null : q.trim());
+    });
+  }
+
+  String get _nombreTienda {
+    final auth = context.read<AuthProvider>();
+    if (!widget.esAdminOSupervisor) return auth.tiendaNombre;
+    return _tienda?.nombre ?? (_cargandoTiendas ? auth.tiendaNombre : '');
+  }
+
+  Future<void> _elegirTienda() async {
+    final auth = context.read<AuthProvider>();
+    final empresas = auth.esSuperadmin ? context.read<EmpresaProvider>().empresas : <Empresa>[];
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => HojaTienda(
+        empresas: empresas,
+        empresa: _empresa,
+        tiendas: _tiendas,
+        tienda: _tienda,
+        cargarTiendas: (e) async {
+          await context.read<TiendaProvider>().cargarTiendasPorEmpresa(e.id);
+          return context.read<TiendaProvider>().tiendas;
+        },
+        onElegir: (e, t) async {
+          if (e != null && e.id != _empresa?.id) {
+            final tiendas = context.read<TiendaProvider>().tiendas;
+            setState(() { _empresa = e; _tiendas = tiendas; });
+          }
+          await _onTiendaChanged(t);
+        },
+      ),
+    );
+  }
+
+  Future<void> _elegirOrden() async {
+    final o = await elegirOrden(context, _ordenM);
+    if (o != null && mounted) setState(() => _ordenM = o);
   }
 
   int? get _tiendaActual {
-    if (!widget.esAdminOSupervisor) return context.read<AuthProvider>().tiendaId;
+    final auth = context.read<AuthProvider>();
+    if (!widget.esAdminOSupervisor) return auth.tiendaId;
+    // Mientras llegan las tiendas, la del usuario (ya se están pidiendo sus clientes).
+    if (_tienda == null && _cargandoTiendas && !auth.esSuperadmin && auth.tiendaId > 0) {
+      return auth.tiendaId;
+    }
     return _tienda?.id;
   }
 
@@ -128,15 +226,16 @@ class _ClientesScreenState extends State<ClientesScreen> {
 
   void _abrirFormCrear() => ClienteForm.mostrar(
     context,
-    tiendaId:   _tiendaActual,
-    onGuardado: () => context.read<ClienteProvider>().cargarClientes(tiendaId: _tiendaActual),
+    tiendaId:     _tiendaActual,
+    tiendaNombre: _nombreTienda,
+    onGuardado:   () => _cargarClientes(_tiendaActual),
   );
 
   void _abrirFormEditar(Cliente c) => ClienteForm.mostrar(
     context,
     cliente:    c,
     tiendaId:   _tiendaActual,
-    onGuardado: () => context.read<ClienteProvider>().cargarClientes(tiendaId: _tiendaActual),
+    onGuardado: () => _cargarClientes(_tiendaActual),
   );
 
   void _verDetalle(Cliente c) {
@@ -148,8 +247,10 @@ class _ClientesScreenState extends State<ClientesScreen> {
         context,
         cliente:            c,
         esAdminOSupervisor: widget.esAdminOSupervisor,
+        tiendaNombre:       _nombreTienda,
         onEditar:     () { Navigator.pop(context); _abrirFormEditar(c); },
         onDesactivar: () { Navigator.pop(context); _confirmarDesactivar(c); },
+        onReactivar:  () { Navigator.pop(context); _reactivar(c); },
       );
     }
   }
@@ -180,8 +281,21 @@ class _ClientesScreenState extends State<ClientesScreen> {
     ));
   }
 
+  Future<void> _reactivar(Cliente c) async {
+    final prov = context.read<ClienteProvider>();
+    final ok = await prov.activarCliente(c.id);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content:         Text(ok ? '${c.nombreCompleto} está activo otra vez' : (prov.error ?? 'No se pudo reactivar')),
+      backgroundColor: ok ? _teal : _danger,
+      behavior:        SnackBarBehavior.floating,
+      margin:          const EdgeInsets.all(16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ));
+  }
+
   @override
-  void dispose() { _searchCtrl.dispose(); super.dispose(); }
+  void dispose() { _espera?.cancel(); _searchCtrl.dispose(); super.dispose(); }
 
   // ── Build ──────────────────────────────────────────────
 
@@ -191,8 +305,41 @@ class _ClientesScreenState extends State<ClientesScreen> {
     final auth     = context.watch<AuthProvider>();
     final prov     = context.watch<ClienteProvider>();
     final lista    = _filtrados(prov.clientes);
+
+    if (_esMovil) {
+      final puedeCambiar = widget.esAdminOSupervisor &&
+          (auth.esSuperadmin || _tiendas.length > 1);
+      return ClientesMovil(
+        buscador: _searchCtrl,
+        datos: DatosClientesMovil(
+          clientes:     prov.clientes,
+          hoy:          DateTime.now(),
+          tiendaNombre: _tiendaActual == null ? null : _nombreTienda,
+          puedeCambiarTienda: puedeCambiar,
+          filtro:       _filtroM,
+          orden:        _ordenM,
+          cargando:     prov.cargando,
+          error:        prov.error,
+        ),
+        acciones: AccionesClientesMovil(
+          onTienda:    _elegirTienda,
+          onFiltro:    (f) => setState(() {
+            _filtroM = f;
+            if (f == FiltroClientes.alerta || f == FiltroClientes.vencidos) _ordenM = OrdenClientes.vence;
+            if (f == FiltroClientes.deben) _ordenM = OrdenClientes.deuda;
+          }),
+          onOrden:     _elegirOrden,
+          onBuscar:    _buscar,
+          onCliente:   _verDetalle,
+          onLlamar:    (c) => llamarCliente(context, c),
+          onWhatsApp:  (c) => escribirWhatsApp(context, c, _nombreTienda),
+          onNuevo:     _tiendaActual == null ? null : _abrirFormCrear,
+          onRefrescar: () => _cargarClientes(_tiendaActual),
+        ),
+      );
+    }
     final content = Column(children: [
-      _buildHeader(prov, auth.esSuperadmin),
+      _buildHeader(prov, auth.esSuperadmin, lista.length),
       if (prov.error != null)
         Container(
           margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
@@ -248,7 +395,7 @@ class _ClientesScreenState extends State<ClientesScreen> {
 
   // ── Header ─────────────────────────────────────────────
 
-  Widget _buildHeader(ClienteProvider prov, bool isSuperadmin) {
+  Widget _buildHeader(ClienteProvider prov, bool isSuperadmin, int visibles) {
     return Container(
       color: _surface,
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
@@ -280,7 +427,7 @@ class _ClientesScreenState extends State<ClientesScreen> {
         // Búsqueda
         TextField(
           controller: _searchCtrl,
-          onChanged: (q) => context.read<ClienteProvider>().cargarClientes(tiendaId: _tiendaActual, q: q),
+          onChanged: _buscar,
           style: GoogleFonts.inter(fontSize: 13),
           decoration: InputDecoration(
             hintText:       'Buscar cliente por nombre, teléfono…',
@@ -296,7 +443,7 @@ class _ClientesScreenState extends State<ClientesScreen> {
                     onPressed: () {
                       _searchCtrl.clear();
                       setState(() => _filtro = 'todos');
-                      context.read<ClienteProvider>().cargarClientes(tiendaId: _tiendaActual);
+                      _buscar('');
                     },
                   )
                 : null,
@@ -329,7 +476,7 @@ class _ClientesScreenState extends State<ClientesScreen> {
           const Spacer(),
           if (prov.clientes.isNotEmpty)
             Text(
-              '${prov.clientes.length} cliente${prov.clientes.length != 1 ? 's' : ''}',
+              '$visibles cliente${visibles != 1 ? 's' : ''}',
               style: GoogleFonts.inter(fontSize: 11, color: _textMuted, fontWeight: FontWeight.w500),
             ),
         ]),
@@ -385,17 +532,14 @@ class _ClientesScreenState extends State<ClientesScreen> {
         msg:  prov.clientes.isEmpty ? 'Sin clientes registrados' : 'Sin resultados para este filtro',
         accion: prov.clientes.isNotEmpty
             ? TextButton(
-                onPressed: () { _searchCtrl.clear(); setState(() => _filtro = 'todos'); prov.cargarClientes(tiendaId: _tiendaActual); },
+                onPressed: () { _searchCtrl.clear(); setState(() => _filtro = 'todos'); _buscar(''); },
                 child: const Text('Limpiar filtros'),
               )
             : null,
       );
     }
     return RefreshIndicator(
-      onRefresh: () async {
-        await prov.cargarClientes(tiendaId: _tiendaActual, q: _searchCtrl.text);
-        await prov.cargarAlertas(tiendaId: _tiendaActual);
-      },
+      onRefresh: () => _cargarClientes(_tiendaActual),
       color: _teal,
       child: ListView.separated(
         padding:          const EdgeInsets.fromLTRB(16, 12, 16, 100),
@@ -513,12 +657,21 @@ class _ClientesScreenState extends State<ClientesScreen> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: OutlinedButton.icon(
+                    child: c.activo ? OutlinedButton.icon(
                       onPressed: () { setState(() => _selectedCliente = null); _confirmarDesactivar(c); },
                       icon:  const Icon(Icons.person_off_rounded, size: 16, color: _danger),
                       label: Text('Desactivar', style: GoogleFonts.inter(color: _danger, fontWeight: FontWeight.w600)),
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: _danger),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ) : FilledButton.icon(
+                      onPressed: () { setState(() => _selectedCliente = null); _reactivar(c); },
+                      icon:  const Icon(Icons.person_add_alt_1_rounded, size: 16),
+                      label: Text('Reactivar', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _teal,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
